@@ -1,0 +1,23 @@
+# Python
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# Athena runtime state
+.athena/
+*.key
+snapshot.bin
+*.wal
+
+# Rust
+target/
+
+# Node
+node_modules/
+dist/
+
+# Env / secrets
+.env
+*.local

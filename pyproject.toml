@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "athena-agent"
+version = "0.0.1"
+description = "Self-improving multi-agent swarm with cryptographic identity, sandboxed skills, and curated self-improvement"
+requires-python = ">=3.10"
+dependencies = [
+    "cryptography>=42.0",
+    "base58>=2.1",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
