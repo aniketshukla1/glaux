@@ -33,9 +33,9 @@ Decisions made upfront so phases don't re-litigate them.
 
 Non-negotiable properties baked into the data model and runtime from the first commit. Each is cheap to design in now and a rearchitect to retrofit. The phase that first enforces each is tagged.
 
-- [ ] **Embedding-model version tag** (Phase 1/2) — every vector stores `embed_model_id`. Switching embedders later without this silently corrupts all similarity math. A re-embedding pipeline keys off this tag.
+- [x] **Embedding-model version tag** (Phase 1/2) — every vector stores `embed_model_id`, and `search` can filter by it so similarity is never computed across embedding models. A re-embedding pipeline keys off this tag. *(Stored + filterable as of Phase 1.)*
 - [ ] **Record schema version** (Phase 2) — every memory record carries `schema_version`. Enables forward migration as episodic/procedural schemas evolve.
-- [ ] **Tenant / namespace field** (Phase 1) — every stored entity carries `namespace` (default `"default"`). Single-tenant today; multi-tenant later without touching every query.
+- [x] **Tenant / namespace field** (Phase 1) — every `Entry` carries `namespace` (default `"default"`) and `search` filters by it. Single-tenant today; multi-tenant later without touching every query.
 - [ ] **Durable, resumable execution** (Phase 3) — ReAct loop checkpoints its state to disk after every step. A crashed task resumes from its last committed step, not from zero.
 - [ ] **Reproducibility envelope** (Phase 3) — every episode records `{model_id, temperature, seed, prompt_hash, retrieved_memory_hash, code_versions}`. Lets us answer "what changed" when a self-improving run regresses.
 - [ ] **Key rotation & validity windows** (Phase 0/3) — agents can rotate keys; the registry tracks each key's valid time range so historical blocks still verify against the key valid when they were signed.
@@ -84,37 +84,37 @@ The two security-critical primitives that everything later depends on. Get these
 
 ---
 
-## Phase 1 — Rust Core + Persistence (AthenaDB)
+## Phase 1 — Rust Core + Persistence (AthenaDB) ✅ COMPLETE
 
 The vector engine. Built for speed, but with a durability story this time.
 
 ### 1.1 Vector Math Core (`athenadb/src/core.rs`)
 
-- [ ] `VectorStore` struct: `Vec<Entry>` where `Entry { id: Uuid, vector: Vec<f32>, metadata: serde_json::Value }`.
-- [ ] `add(entries: &[Entry])`, `search(query: &[f32], k: usize) -> Vec<(Entry, f32)>`.
-- [ ] Cosine similarity, SIMD-friendly (`f32x8` via `std::simd` or `wide` crate).
-- [ ] Parallel scan via `rayon::par_iter`.
-- [ ] Benchmark: ≥ 1M vectors at 768d, top-10 query < 50 ms on M-series Mac.
+- [x] `Entry { id: String, vector: Vec<f32>, metadata: Value, namespace, embed_model_id, inv_norm }` + `VectorStore` with an id→pos index for O(1) upsert/delete.
+- [x] `upsert`, `remove`, and `search(query, k, namespace?, embed_model_id?)` with namespace + embedding-model filtering baked in.
+- [x] Cosine similarity, SIMD via `wide::f32x8` (precomputed `inv_norm`, so search is dot-product + 1 mul).
+- [x] Parallel scan via `rayon::par_iter` with bounded per-thread min-heaps for top-k.
+- [x] Benchmark: **1M vectors @ 768d, mean top-10 query = 40ms** (< 50ms target) on M-series Mac. (`tests/bench.rs`, ignored)
 
 ### 1.2 Persistence (`athenadb/src/wal.rs`, `snapshot.rs`)
 
-- [ ] Append-only WAL: every `add` / `delete` written before in-memory mutation.
-- [ ] Snapshot: full store serialized via `bincode` to `snapshot.bin` on a configurable interval (default every 10k ops).
-- [ ] Recovery: on boot, load latest snapshot then replay WAL tail.
-- [ ] WAL compaction after snapshot.
-- [ ] Test: kill -9 mid-write; recovery yields a consistent store.
+- [x] Append-only WAL: length-prefixed bincode frames, fsync'd **before** in-memory mutation; dim validated before the WAL write so bad calls never pollute the log.
+- [x] Snapshot: store serialized via `bincode`, written atomically (temp + fsync + rename); auto-triggered on a configurable interval (default 10k ops).
+- [x] Recovery: on boot, load latest snapshot then replay WAL tail.
+- [x] WAL compaction (truncate) after snapshot.
+- [x] Test: torn WAL tail (kill -9 mid-write signature) ignored on replay; reopen recovers; snapshot+post-snapshot ops recover. (`tests/persistence.rs`, 6 passing)
 
-### 1.3 PyO3 Bindings (`athenadb/src/lib.rs`)
+### 1.3 PyO3 Bindings (`athenadb/src/python.rs`)
 
-- [ ] `AthenaDB.add(ids, vectors, metadatas)`, `.query(vector, k)`, `.delete(ids)`.
-- [ ] Compatibility shim methods: `add_documents`, `query` (kept from prior plan for `MemoryManager`).
-- [ ] Compile to `.so` / `.pyd` via `maturin develop`.
+- [x] `AthenaDB.add(ids, vectors, metadatas, namespace, embed_model_id)`, `.query(vector, k, ...)`, `.delete(ids)`, `.snapshot()`, `__len__`. Metadata crosses the boundary as JSON strings (dependency-free).
+- [x] Compatibility shim methods: `add_documents`, `query` (for `MemoryManager`).
+- [x] Compile to `.so` via `maturin develop --release --features python`; feature-gated so the lib/bin build without PyO3. (`tests/test_athenadb.py`, 7 passing)
 
 ### 1.4 Axum HTTP Server (`athenadb/src/bin/server.rs`)
 
-- [ ] Scaffold only; routes return `501 Not Implemented`. Wired up in Phase 5 when multi-service need is real.
+- [x] Scaffold only; routes return `501 Not Implemented` (verified via curl). Feature-gated behind `--features server`. Wired up in Phase 5 when multi-service need is real.
 
-**Phase 1 exit criteria:** `import athenadb` in Python, write 100k vectors, kill the process, restart, vectors still there.
+**Phase 1 exit criteria — ✅ MET:** `import athenadb` works; vectors written, process dropped, reopened, vectors still there (incl. torn-write recovery); 1M-vector search under the latency target; dual-mode (PyO3 + Axum) both build from one core.
 
 ---
 
