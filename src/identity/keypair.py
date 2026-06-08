@@ -131,6 +131,17 @@ class AgentIdentity:
         """Sign ``payload`` with the current key; returns a base58 signature."""
         return base58.b58encode(self._signing_key.sign(payload)).decode("ascii")
 
+    def signing_key_b58(self) -> str:
+        """Base58 of the current 32-byte private key seed.
+
+        Sensitive: intended for in-process trusted components (e.g. the ledger's
+        native signing kernel) that already share this process's trust boundary.
+        Standard Ed25519, so a signature produced from this seed in Rust verifies
+        against :pyattr:`public_key_b58` here, and vice versa.
+        """
+        raw = self._signing_key.private_bytes(*_RAW_PRIV)
+        return base58.b58encode(raw).decode("ascii")
+
     def rotate(self) -> RotationRecord:
         """Generate a new signing key, authorized by the current key.
 

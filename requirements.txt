@@ -2,10 +2,14 @@ cryptography>=42.0
 base58>=2.1
 pytest>=8.0
 
-# AthenaDB (the vector "brain") is a separate project, developed and released
-# independently at ../athenadb. It is not on PyPI yet — for local development,
-# build it into this venv from the sibling repo:
+# --- Native modules (built with maturin; require `pip install maturin`) ---
 #
+# AthenaDB (the vector "brain") is a SEPARATE project at ../athenadb. Build it
+# into this venv from the sibling repo:
 #   cd ../athenadb && VIRTUAL_ENV=../athena-agent/venv maturin develop --release
 #
-# (requires `pip install maturin`). Once published, pin it here, e.g. athenadb>=0.1.
+# athena_ledger is an IN-REPO native kernel (the whole signed/hash-chained ledger
+# lives in Rust). Build it into this venv:
+#   cd native/athena_ledger && VIRTUAL_ENV=../../venv maturin develop --release
+#
+# Once published, pin both here (e.g. athenadb>=0.1, athena_ledger>=0.1).

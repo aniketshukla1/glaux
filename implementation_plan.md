@@ -23,6 +23,7 @@ Decisions made upfront so phases don't re-litigate them.
 | Identity primitive   | Ed25519 keypair per agent; public key = agent_id    | Portable, verifiable, signature-based — turns "ledger" into a real trust system. |
 | Concurrency          | `asyncio` end-to-end; long jobs queued (Phase 5)    | Swarms are inherently async; sync code paints us into a corner.                  |
 | HTTP mode for AthenaDB | Build the Axum server but defer endpoints to Phase 5 | Don't carry dead optionality; only wire it up when a multi-service need is real. |
+| Ledger core          | Native Rust crate `native/athena_ledger` (PyO3); agents stay Python | Hot path is auditing long chains (hashing + signature verification) — native. Agents/orchestration stay Python (runtime skill synthesis, I/O-bound). |
 | LLM access           | All calls behind a single `src/llm/gateway.py` seam | Multi-model routing, fallback, and cost-based selection drop in later without touching agents. |
 | Secrets              | Sandbox-injected via a broker; skill code never sees raw keys | Hardcoded/plaintext credentials are a future incident. Secrets are a capability, not an argument. |
 | Content trust        | Every context string tagged `trusted` / `untrusted` | Retrieved memory + tool/MCP outputs are prompt-injection vectors; the boundary must exist from day one. |
@@ -38,7 +39,7 @@ Non-negotiable properties baked into the data model and runtime from the first c
 - [x] **Tenant / namespace field** (Phase 1) — every `Entry` carries `namespace` (default `"default"`) and `search` filters by it. Single-tenant today; multi-tenant later without touching every query.
 - [ ] **Durable, resumable execution** (Phase 3) — ReAct loop checkpoints its state to disk after every step. A crashed task resumes from its last committed step, not from zero.
 - [ ] **Reproducibility envelope** (Phase 3) — every episode records `{model_id, temperature, seed, prompt_hash, retrieved_memory_hash, code_versions}`. Lets us answer "what changed" when a self-improving run regresses.
-- [ ] **Key rotation & validity windows** (Phase 0/3) — agents can rotate keys; the registry tracks each key's valid time range so historical blocks still verify against the key valid when they were signed.
+- [x] **Key rotation & validity windows** (Phase 0/3) — agents rotate keys; the registry tracks each key's valid time range, and `Ledger.verify(registry=...)` checks every block's signing key against the window valid at its timestamp. So history keeps verifying across rotations, and a key used outside its window is caught.
 - [ ] **Cost/budget guard** (Phase 3) — the agent loop checks a per-task token/USD budget before each LLM call and each skill run; exceeding it halts the task cleanly.
 - [ ] **HITL approval gate** (Phase 3) — `REQUEST_APPROVAL` is a first-class action type alongside `CALL_SKILL` / `CALL_AGENT`. Irreversible or out-of-policy actions block on human approval, logged to the ledger.
 
@@ -180,16 +181,21 @@ The cognitive layer, now built on signed actions instead of hash-chained payload
 - [ ] `EMIT_OBSERVATION { ... }` — gets folded back into the reasoning window.
 - [ ] All four logged to the ledger as signed blocks.
 
-### 3.4 Cryptographic Swarm Ledger (`src/core/ledger.py`)
+### 3.4 Cryptographic Swarm Ledger — ✅ COMPLETE
 
-This is the upgrade from the original plan: signed blocks, not just hash-chained payloads.
+Signed, hash-chained blocks. **The whole ledger core is a native Rust crate
+(`native/athena_ledger`, PyO3)** — block assembly, canonicalization, Ed25519
+signing, SHA-256 hashing, chain verification, and JSONL persistence. The hot
+path (auditing a long chain) runs entirely native; `src/core/ledger.py` is a
+thin Python wrapper adding the agent-facing API + rotation-aware checks.
 
-- [ ] `Block { index, timestamp, agent_id, action_type, payload, prev_hash, signature }`.
-- [ ] `signature` = Ed25519 sign of `(index || timestamp || agent_id || action_type || payload || prev_hash)`.
-- [ ] `verify_chain()` — walks chain, verifies each signature against the agent's public key *and* the hash linkage.
-- [ ] Public key registry (`src/core/registry.py`) — maps known agent_ids to public keys; new keys auto-registered on first observed action.
-- [ ] **Capability grants** logged on the ledger as a distinct action type; revocations also logged.
-- [ ] **External anchoring (optional, behind flag):** every N blocks, post the current Merkle root to an RFC 3161 timestamp service. Stores the response. Anyone can prove the chain existed by that date.
+- [x] `Block { index, timestamp, agent_id, signing_pubkey, action_type, payload, prev_hash, signature, hash }` (native).
+- [x] `signature` = Ed25519 over the canonical bytes of the block content; `hash` = SHA-256 of the same. Canonicalization lives in Rust (no Python↔Rust coupling).
+- [x] `verify()` — native walk of the whole chain: index, content hash, prev-hash linkage, and signature per block. Returns `(ok, first_bad_index, reason)`.
+- [x] Public key registry — reuses `identity.KeyRegistry`; `verify(registry=...)` adds rotation-aware validation that each block's signing key was valid for its agent at the block's timestamp.
+- [x] Cross-language interop verified: a block signed in Rust verifies under Python `cryptography` and vice versa (standard Ed25519). 12 Python + 14 Rust tests.
+- [ ] **Capability grants on the ledger** as a distinct action type (`Action.GRANT/REVOKE` defined; wired into the swarm in 3.2/3.3).
+- [ ] **External anchoring (optional, behind flag):** every N blocks, post the Merkle root to an RFC 3161 timestamp service. *(Deferred — additive.)*
 
 ### 3.5 MCP Integration
 
