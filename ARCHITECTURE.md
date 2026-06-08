@@ -100,6 +100,11 @@ LLM-generated code never executes in the agent process.
 
 A custom Rust vector database optimized for the swarm's memory access patterns.
 
+> **AthenaDB is a separate project**, developed and released independently
+> (sibling repo `../athenadb`). Athena consumes it as a dependency — the native
+> Python module is built into the venv via `maturin`. The design below is
+> summarized here for context; the DB's own repo is the source of truth.
+
 - **`core.rs`** — `VectorStore` with `rayon`-parallel cosine similarity, SIMD-friendly f32 layout. Benchmarked to ≥ 1M vectors at 768d, top-10 < 50 ms on M-series Mac.
 - **`wal.rs` + `snapshot.rs`** — append-only WAL written before every mutation; periodic full snapshots; WAL compaction after snapshot; crash-consistent recovery on boot.
 - **`lib.rs`** — PyO3 bindings expose `add`, `query`, `delete` and the compatibility shim used by `MemoryManager`.

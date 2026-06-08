@@ -1,3 +1,11 @@
 cryptography>=42.0
 base58>=2.1
 pytest>=8.0
+
+# AthenaDB (the vector "brain") is a separate project, developed and released
+# independently at ../athenadb. It is not on PyPI yet — for local development,
+# build it into this venv from the sibling repo:
+#
+#   cd ../athenadb && VIRTUAL_ENV=../athena-agent/venv maturin develop --release
+#
+# (requires `pip install maturin`). Once published, pin it here, e.g. athenadb>=0.1.

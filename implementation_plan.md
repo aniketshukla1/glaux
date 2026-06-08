@@ -88,6 +88,12 @@ The two security-critical primitives that everything later depends on. Get these
 
 The vector engine. Built for speed, but with a durability story this time.
 
+> **Now a standalone project.** AthenaDB has been extracted to its own repo
+> (`../athenadb`) and is developed/released independently. Athena depends on it
+> as an external package (built into the venv via `maturin develop --release`).
+> Further DB enhancements (ANN index, group-commit WAL, HTTP endpoints) happen
+> in that repo, not here.
+
 ### 1.1 Vector Math Core (`athenadb/src/core.rs`)
 
 - [x] `Entry { id: String, vector: Vec<f32>, metadata: Value, namespace, embed_model_id, inv_norm }` + `VectorStore` with an id→pos index for O(1) upsert/delete.
