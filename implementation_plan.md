@@ -37,8 +37,8 @@ Non-negotiable properties baked into the data model and runtime from the first c
 - [x] **Embedding-model version tag** (Phase 1/2) — every vector stores `embed_model_id`, and `search` can filter by it so similarity is never computed across embedding models. A re-embedding pipeline keys off this tag. *(Stored + filterable as of Phase 1.)*
 - [x] **Record schema version** (Phase 2) — every memory record carries `schema_version`. Enables forward migration as episodic/procedural schemas evolve.
 - [x] **Tenant / namespace field** (Phase 1) — every `Entry` carries `namespace` (default `"default"`) and `search` filters by it. Single-tenant today; multi-tenant later without touching every query.
-- [ ] **Durable, resumable execution** (Phase 3) — ReAct loop checkpoints its state to disk after every step. A crashed task resumes from its last committed step, not from zero.
-- [ ] **Reproducibility envelope** (Phase 3) — every episode records `{model_id, temperature, seed, prompt_hash, retrieved_memory_hash, code_versions}`. Lets us answer "what changed" when a self-improving run regresses.
+- [x] **Durable, resumable execution** (Phase 3) — `BaseAgent` checkpoints its state to disk after every step; `run(resume=True)` continues from the last committed step, not from zero.
+- [x] **Reproducibility envelope** (Phase 3) — each run records `{model_id, temperature, seed, prompt_hashes, skills_offered}`. *(retrieved_memory_hash to be added when memory is wired into the loop in 3.2.)*
 - [x] **Key rotation & validity windows** (Phase 0/3) — agents rotate keys; the registry tracks each key's valid time range, and `Ledger.verify(registry=...)` checks every block's signing key against the window valid at its timestamp. So history keeps verifying across rotations, and a key used outside its window is caught.
 - [ ] **Cost/budget guard** (Phase 3) — the agent loop checks a per-task token/USD budget before each LLM call and each skill run; exceeding it halts the task cleanly.
 - [ ] **HITL approval gate** (Phase 3) — `REQUEST_APPROVAL` is a first-class action type alongside `CALL_SKILL` / `CALL_AGENT`. Irreversible or out-of-policy actions block on human approval, logged to the ledger.
@@ -160,12 +160,21 @@ Storage is easy. *Retrieval policy* is what makes the brain smart.
 
 The cognitive layer, now built on signed actions instead of hash-chained payloads.
 
-### 3.1 BaseAgent (`src/agents/base.py`)
+### 3.0 LLM Gateway Seam (`src/llm/gateway.py`) — ✅ COMPLETE
 
-- [ ] Each agent loads its keypair on boot. `agent_id` = base58(public_key).
-- [ ] `sign_action(action: dict) -> SignedAction` — every emitted action is signed.
-- [ ] Agents accept handoffs only if the caller presents a valid capability token issued *to* this agent's public key.
-- [ ] ReAct loop: `think → act → observe → think...` with cap on iterations.
+- [x] `LLMClient` interface; all model access behind it. `Message`/`LLMResponse` types.
+- [x] `ScriptedLLM` — deterministic, offline (responses list or handler) so the whole ReAct loop is testable without API keys.
+- [x] `AnthropicClient` — real backend (lazy-imported `anthropic`), system-prompt caching; never touched by tests. Multi-model routing/fallback slot in here later.
+
+### 3.1 BaseAgent (`src/agents/base.py`) — ✅ COMPLETE
+
+- [x] Each agent loads its keypair on boot; `agent_id` = base58(public_key).
+- [x] Every emitted action (THINK / CALL_SKILL / OBSERVATION / FINISH) is signed onto the ledger via `Ledger.append(identity, ...)`.
+- [x] ReAct loop: `think → act → observe` with a hard iteration cap.
+- [x] Honors the kill switch (halted → short-circuits before any LLM call; dry_run handled by the sandbox).
+- [x] **Durable/resumable execution** — checkpoints state to disk after every step; `resume=True` continues from the last committed step.
+- [x] **Reproducibility envelope** — records model_id, temperature, seed, and per-step prompt hashes.
+- [ ] Accept handoffs only with a valid capability token issued to this agent — *deferred to 3.2 (needs multiple agents).*  Tests: `tests/test_agent.py` (9), `tests/test_llm.py` (6).
 
 ### 3.2 The Swarm
 
@@ -176,10 +185,10 @@ The cognitive layer, now built on signed actions instead of hash-chained payload
 
 ### 3.3 ReAct Protocols
 
-- [ ] `CALL_SKILL { skill_id, args }` — pulls skill from procedural memory, runs in sandbox with declared caps.
-- [ ] `CALL_AGENT { agent_id, capability_token, payload }` — handoff. Receiver verifies token before accepting.
-- [ ] `EMIT_OBSERVATION { ... }` — gets folded back into the reasoning window.
-- [ ] All four logged to the ledger as signed blocks.
+- [x] `CALL_SKILL { skill_id, args }` — pulls skill (from procedural memory or supplied set), runs in the Phase 0 sandbox under declared caps, folds the result back as an observation.
+- [x] `EMIT_OBSERVATION` — observations are appended to the scratchpad and signed to the ledger.
+- [x] Implemented actions are logged to the ledger as signed blocks; `finish` ends the loop.
+- [ ] `CALL_AGENT { agent_id, capability_token, payload }` — protocol defined (parser + ledger action), receiver-side token verification wired in 3.2.
 
 ### 3.4 Cryptographic Swarm Ledger — ✅ COMPLETE
 
