@@ -7,7 +7,16 @@
 """
 
 from .capcheck import static_cap_check
-from .library import DEPRECATED, PROMOTED, QUARANTINED, SkillLibrary, SkillRecord
+from .library import (
+    DEPRECATED,
+    PENDING_APPROVAL,
+    PROMOTED,
+    QUARANTINED,
+    REJECTED,
+    SkillLibrary,
+    SkillRecord,
+    is_sensitive,
+)
 from .synthesize import SkillCandidate, SkillSynthesizer, SynthesisResult
 
 __all__ = [
@@ -17,7 +26,10 @@ __all__ = [
     "SynthesisResult",
     "SkillLibrary",
     "SkillRecord",
+    "is_sensitive",
     "QUARANTINED",
     "PROMOTED",
     "DEPRECATED",
+    "PENDING_APPROVAL",
+    "REJECTED",
 ]

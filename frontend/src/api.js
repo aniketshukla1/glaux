@@ -35,6 +35,12 @@ export const addMemory = (layer, payload) => post(`/api/memory/${layer}`, payloa
 export const getSkills = () => fetch('/api/skills').then(json)
 export const synthesizeSkill = (task) => post('/api/skills/synthesize', { task })
 export const useSkill = (id, success) => post(`/api/skills/${id}/use`, { success })
+export const approveSkill = (id) => post(`/api/skills/${id}/approve`, {})
+export const rejectSkill = (id) => post(`/api/skills/${id}/reject`, {})
+
+// approval mode (HITL gate)
+export const getApproval = () => fetch('/api/approval').then(json)
+export const setApproval = (mode) => post('/api/approval', { mode })
 
 // eval harness
 export const runEval = () => post('/api/eval/run', {})

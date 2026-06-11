@@ -19,14 +19,17 @@ from .protocol import extract_json
 
 REFLECTOR_SYSTEM = """You review whether a specialist agent's result satisfies its
 task. Respond with a single JSON object in a ```json block:
-{"verdict": "accept" | "retry", "reason": "<short justification>"}
-Use "retry" only if the result is wrong, incomplete, or unsafe."""
+{"verdict": "accept" | "retry", "reason": "<short justification>",
+ "synthesize": "<optional: a reusable skill this task would benefit from, or omit>"}
+Use "retry" only if the result is wrong, incomplete, or unsafe. Only include
+"synthesize" when a small, reusable, testable utility would help future tasks."""
 
 
 @dataclass
 class Verdict:
     accept: bool
     reason: str = ""
+    synthesize: Optional[str] = None
     raw: str = ""
 
 
@@ -68,10 +71,12 @@ class Reflector:
         verdict = str(data.get("verdict", "accept")).lower()
         accept = verdict == "accept"
         reason = str(data.get("reason", ""))
+        synthesize = data.get("synthesize")
+        synthesize = str(synthesize).strip() if synthesize else None
         if self.ledger is not None:
             self.ledger.append(
                 self.identity,
                 Action.REFLECT,
-                {"goal": goal, "verdict": verdict, "reason": reason},
+                {"goal": goal, "verdict": verdict, "reason": reason, "synthesize": synthesize},
             )
-        return Verdict(accept=accept, reason=reason, raw=resp.text)
+        return Verdict(accept=accept, reason=reason, synthesize=synthesize, raw=resp.text)

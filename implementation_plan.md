@@ -41,7 +41,7 @@ Non-negotiable properties baked into the data model and runtime from the first c
 - [x] **Reproducibility envelope** (Phase 3) — each run records `{model_id, temperature, seed, prompt_hashes, skills_offered}`. *(retrieved_memory_hash to be added when memory is wired into the loop in 3.2.)*
 - [x] **Key rotation & validity windows** (Phase 0/3) — agents rotate keys; the registry tracks each key's valid time range, and `Ledger.verify(registry=...)` checks every block's signing key against the window valid at its timestamp. So history keeps verifying across rotations, and a key used outside its window is caught.
 - [x] **Cost/budget guard** (Phase 3) — one `BudgetTracker` shared across router/specialists/reflector; the agent loop checks `max_tokens` / `max_usd` / `max_llm_calls` before each LLM call and the swarm stops dispatching when exceeded, halting the task cleanly. Surfaced in the UI (budget inputs + cost meter + halt banner). `src/agents/budget.py`; tests `tests/test_budget.py` (8) + API.
-- [ ] **HITL approval gate** (Phase 3) — `REQUEST_APPROVAL` is a first-class action type alongside `CALL_SKILL` / `CALL_AGENT`. Irreversible or out-of-policy actions block on human approval, logged to the ledger.
+- [x] **HITL approval gate** (Phase 3) — autonomously synthesized skills that are *sensitive* (net / fs_write / secrets) or produced under **gated** approval mode land as `pending_approval` and cannot run until a human approves them (`SkillLibrary.approve`/`reject`); `REQUEST_APPROVAL` is logged to the ledger. UI: approval-mode toggle + Approve/Reject in the Skills tab.
 
 ---
 
@@ -230,7 +230,7 @@ This is what most "agent platforms" never build. Without it, the skill library d
 - [x] **Quarantine** — passing skills enter procedural memory with `status: quarantined`, counters at 0 (`SkillLibrary.add_candidate`).
 - [x] **Promote** — after K successful uses (default 3) via `record_use`, flips to `promoted`.
 - [x] **Deprecate** — once `usage_count ≥ min_uses` and `success_rate < threshold`, flips to `deprecated`.
-- [ ] Reflector-triggered synthesis (wire `SkillSynthesizer` into the swarm's reflect step) — *next; today synthesis is an explicit API/UI action.*
+- [x] **Reflector-triggered synthesis** — the reflector can recommend a reusable skill (`Verdict.synthesize`); the swarm runs the full synthesis pipeline, applies the HITL gate, and logs `SYNTHESIZE_SKILL` (+ `REQUEST_APPROVAL` when gated) to the ledger. The autonomous self-improvement loop is closed: dispatch → reflect → synthesize → (approve) → benchmark lift.
 
 ### 4.2 Skill Curation — ✅ COMPLETE
 

@@ -40,6 +40,7 @@ class Action:
     APPROVAL = "REQUEST_APPROVAL"
     PLAN = "PLAN"
     REFLECT = "REFLECT"
+    SYNTHESIZE = "SYNTHESIZE_SKILL"
 
 
 @dataclass

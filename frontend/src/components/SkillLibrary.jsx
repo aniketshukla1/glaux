@@ -1,10 +1,12 @@
 import React, { useEffect, useState } from 'react'
-import { getSkills, synthesizeSkill, useSkill } from '../api.js'
+import { approveSkill, getSkills, rejectSkill, synthesizeSkill, useSkill } from '../api.js'
 
 const STATUS = {
+  pending_approval: 'text-violet-300 border-violet-500/40 bg-violet-500/10',
   quarantined: 'text-amber-300 border-amber-500/40 bg-amber-500/10',
   promoted: 'text-emerald-300 border-emerald-500/40 bg-emerald-500/10',
   deprecated: 'text-rose-300 border-rose-500/40 bg-rose-500/10',
+  rejected: 'text-slate-400 border-slate-600/40 bg-slate-700/20',
 }
 
 export default function SkillLibrary() {
@@ -39,6 +41,16 @@ export default function SkillLibrary() {
 
   const onUse = async (id, success) => {
     await useSkill(id, success)
+    await load()
+  }
+
+  const onApprove = async (id) => {
+    await approveSkill(id)
+    await load()
+  }
+
+  const onReject = async (id) => {
+    await rejectSkill(id)
     await load()
   }
 
@@ -96,8 +108,13 @@ export default function SkillLibrary() {
           <div key={s.id} className="glass p-3">
             <div className="flex items-center gap-2 flex-wrap">
               <span className={`px-2 py-0.5 rounded text-xs border ${STATUS[s.status] || ''}`}>
-                {s.status}
+                {s.status.replace('_', ' ')}
               </span>
+              {s.sensitive && (
+                <span className="px-2 py-0.5 rounded text-xs border border-amber-500/40 text-amber-300">
+                  ⚠ sensitive
+                </span>
+              )}
               <span className="text-sm text-slate-200">{s.name}</span>
               <span className="text-xs text-slate-500">v{s.version}</span>
               <span className="ml-auto text-xs text-slate-400">
@@ -105,20 +122,39 @@ export default function SkillLibrary() {
               </span>
             </div>
             {s.description && <div className="text-xs text-slate-500 mt-1">{s.description}</div>}
-            <div className="flex gap-2 mt-2">
-              <button
-                onClick={() => onUse(s.id, true)}
-                className="px-2 py-1 rounded text-xs border border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/10"
-              >
-                record success
-              </button>
-              <button
-                onClick={() => onUse(s.id, false)}
-                className="px-2 py-1 rounded text-xs border border-rose-500/40 text-rose-300 hover:bg-rose-500/10"
-              >
-                record failure
-              </button>
-            </div>
+            {s.status === 'pending_approval' ? (
+              <div className="flex gap-2 mt-2">
+                <button
+                  onClick={() => onApprove(s.id)}
+                  className="px-2 py-1 rounded text-xs border border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/10"
+                >
+                  ✓ approve
+                </button>
+                <button
+                  onClick={() => onReject(s.id)}
+                  className="px-2 py-1 rounded text-xs border border-rose-500/40 text-rose-300 hover:bg-rose-500/10"
+                >
+                  ✗ reject
+                </button>
+              </div>
+            ) : (
+              s.status !== 'rejected' && (
+                <div className="flex gap-2 mt-2">
+                  <button
+                    onClick={() => onUse(s.id, true)}
+                    className="px-2 py-1 rounded text-xs border border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/10"
+                  >
+                    record success
+                  </button>
+                  <button
+                    onClick={() => onUse(s.id, false)}
+                    className="px-2 py-1 rounded text-xs border border-rose-500/40 text-rose-300 hover:bg-rose-500/10"
+                  >
+                    record failure
+                  </button>
+                </div>
+              )
+            )}
           </div>
         ))}
       </div>

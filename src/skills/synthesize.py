@@ -14,6 +14,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Optional
 
+from agents.budget import BudgetTracker, charge_for_response
 from agents.protocol import extract_json
 from llm.gateway import LLMClient, Message
 from sandbox import Capabilities, run as sandbox_run
@@ -63,14 +64,17 @@ class SkillSynthesizer:
         self.llm = llm
         self.temperature = temperature
         self.max_tokens = max_tokens
+        self.budget: Optional[BudgetTracker] = None  # set by the Swarm per task
 
     def synthesize(self, task: str) -> SynthesisResult:
+        messages = [Message(role="user", content=f"TASK: {task}")]
         resp = self.llm.complete(
-            [Message(role="user", content=f"TASK: {task}")],
+            messages,
             system=SYNTH_SYSTEM,
             temperature=self.temperature,
             max_tokens=self.max_tokens,
         )
+        charge_for_response(self.budget, resp, SYNTH_SYSTEM, messages)
         data = extract_json(resp.text)
         if not isinstance(data, dict) or "code" not in data:
             return SynthesisResult(False, "LLM did not return a valid skill JSON")

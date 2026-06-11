@@ -56,6 +56,7 @@ class _State:
         self.memory = MemoryManager(self.memory_dir)
         self.skills = SkillLibrary(self.memory.procedural)
         self.eval_runs: list[EvalRun] = []
+        self.approval_mode = "auto"  # auto | gated (gated => human approves synthesized skills)
         self.reset_ledger()
 
     def reset_ledger(self) -> None:
@@ -86,6 +87,9 @@ class _State:
             specialists={"coder": coder, "researcher": researcher},
             reflector=reflector,
             ledger=self.ledger,
+            synthesizer=SkillSynthesizer(self.llm),
+            skill_library=self.skills,
+            require_approval=(self.approval_mode == "gated"),
         )
 
 
@@ -123,6 +127,10 @@ class UseRequest(BaseModel):
     success: bool
 
 
+class ApprovalModeRequest(BaseModel):
+    mode: str  # auto | gated
+
+
 def _skill_dict(r) -> dict:
     return {
         "id": r.id,
@@ -133,6 +141,7 @@ def _skill_dict(r) -> dict:
         "success_rate": round(r.success_rate, 3),
         "usage_count": r.usage_count,
         "caps": r.caps,
+        "sensitive": r.sensitive,
         "parent_skill_id": r.parent_skill_id,
         "code": r.code,
     }
@@ -157,6 +166,7 @@ def health() -> dict:
         "llm": STATE.llm.model_id,
         "live": STATE.llm.model_id != "demo-offline",
         "safety": safety.current_mode().value,
+        "approval": STATE.approval_mode,
         "blocks": len(STATE.ledger),
         "memory": {layer: len(STATE.store(layer).list_all()) for layer in MEMORY_LAYERS},
     }
@@ -211,6 +221,7 @@ async def run_task(req: TaskRequest) -> dict:
         "final": result.final,
         "cost": result.cost,
         "budget_halt": result.budget_halt,
+        "synthesized": result.synthesized,
         "plan": [s.to_dict() for s in result.plan.steps],
         "steps": [
             {
@@ -313,6 +324,38 @@ def use_skill(skill_id: str, req: UseRequest) -> dict:
     if rec is None:
         raise HTTPException(status_code=404, detail="unknown skill")
     return _skill_dict(rec)
+
+
+@app.post("/api/skills/{skill_id}/approve")
+def approve_skill(skill_id: str) -> dict:
+    rec = STATE.skills.approve(skill_id)
+    if rec is None:
+        raise HTTPException(status_code=404, detail="no pending skill with that id")
+    return _skill_dict(rec)
+
+
+@app.post("/api/skills/{skill_id}/reject")
+def reject_skill(skill_id: str) -> dict:
+    rec = STATE.skills.reject(skill_id)
+    if rec is None:
+        raise HTTPException(status_code=404, detail="no pending skill with that id")
+    return _skill_dict(rec)
+
+
+# --- approval mode (HITL gate) -------------------------------------------
+
+
+@app.get("/api/approval")
+def get_approval() -> dict:
+    return {"mode": STATE.approval_mode, "modes": ["auto", "gated"]}
+
+
+@app.post("/api/approval")
+def set_approval(req: ApprovalModeRequest) -> dict:
+    if req.mode not in ("auto", "gated"):
+        raise HTTPException(status_code=400, detail=f"invalid mode {req.mode!r}")
+    STATE.approval_mode = req.mode
+    return {"mode": STATE.approval_mode}
 
 
 # --- evaluation harness --------------------------------------------------

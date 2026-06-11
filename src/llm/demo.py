@@ -50,7 +50,15 @@ class DemoLLM:
         if "router for the athena swarm" in sys:
             text = _PLAN
         elif "you review whether" in sys:
-            text = _ACCEPT
+            low = goal.lower()
+            if any(k in low for k in ("implement", "function", "code", "build", "reverse", "compute", "parse")):
+                text = (
+                    "```json\n"
+                    '{"verdict": "accept", "reason": "meets the task (demo mode)", '
+                    '"synthesize": "a small reusable utility for this kind of task"}\n```'
+                )
+            else:
+                text = _ACCEPT
         elif "synthesize a reusable python skill" in sys:
             text = _SKILL
         else:

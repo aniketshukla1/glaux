@@ -1,16 +1,19 @@
 import React, { useCallback, useEffect, useState } from 'react'
 import {
   dispatchTask,
+  getApproval,
   getHealth,
   getLedger,
   getSafety,
   resetLedger,
+  setApproval,
   setSafety,
 } from './api.js'
 import TaskConsole from './components/TaskConsole.jsx'
 import SwarmFeed from './components/SwarmFeed.jsx'
 import ChainAuditor from './components/ChainAuditor.jsx'
 import SafetyControl from './components/SafetyControl.jsx'
+import ApprovalControl from './components/ApprovalControl.jsx'
 import AgentsPanel from './components/AgentsPanel.jsx'
 import MemoryPanel from './components/MemoryPanel.jsx'
 import SkillLibrary from './components/SkillLibrary.jsx'
@@ -28,6 +31,7 @@ export default function App() {
   const [health, setHealth] = useState(null)
   const [ledger, setLedger] = useState({ count: 0, blocks: [], verification: null })
   const [safety, setSafetyMode] = useState('live')
+  const [approval, setApprovalMode] = useState('auto')
   const [tab, setTab] = useState('feed')
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState(null)
@@ -35,10 +39,11 @@ export default function App() {
 
   const refresh = useCallback(async () => {
     try {
-      const [l, h, s] = [await getLedger(), await getHealth(), await getSafety()]
+      const [l, h, s, a] = [await getLedger(), await getHealth(), await getSafety(), await getApproval()]
       setLedger(l)
       setHealth(h)
       setSafetyMode(s.mode)
+      setApprovalMode(a.mode)
       setError(null)
     } catch {
       setError('Backend unreachable. Start it:  PYTHONPATH=src uvicorn core.api:app --port 8000')
@@ -47,6 +52,10 @@ export default function App() {
 
   useEffect(() => {
     refresh()
+    // light poll keeps the dashboard live and self-heals a stale error banner
+    // (e.g. after a backend restart) without a manual reload.
+    const id = setInterval(refresh, 4000)
+    return () => clearInterval(id)
   }, [refresh])
 
   const onDispatch = async (directive, budget) => {
@@ -84,6 +93,15 @@ export default function App() {
     }
   }
 
+  const onApproval = async (mode) => {
+    try {
+      const r = await setApproval(mode)
+      setApprovalMode(r.mode)
+    } catch {
+      /* ignore */
+    }
+  }
+
   return (
     <div className="min-h-screen p-6 max-w-7xl mx-auto">
       <header className="flex items-center justify-between mb-6 flex-wrap gap-3">
@@ -96,8 +114,9 @@ export default function App() {
             Signed, sandboxed, self-improving multi-agent swarm
           </p>
         </div>
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-4 flex-wrap">
           <SafetyControl mode={safety} onChange={onSafety} />
+          <ApprovalControl mode={approval} onChange={onApproval} />
           {health && (
             <span
               className={`px-2 py-1 rounded text-xs ${
@@ -146,6 +165,14 @@ export default function App() {
           {result.budget_halt && (
             <div className="mt-2 text-xs text-amber-300 border border-amber-500/40 bg-amber-500/10 rounded px-2 py-1">
               ⛔ budget guard: {result.budget_halt}
+            </div>
+          )}
+          {result.synthesized && result.synthesized.length > 0 && (
+            <div className="mt-2 text-xs text-violet-300 border border-violet-500/40 bg-violet-500/10 rounded px-2 py-1">
+              ⚗ synthesized:{' '}
+              {result.synthesized
+                .map((s) => (s.ok ? `${s.name} (${s.status.replace('_', ' ')})` : `rejected (${s.reason})`))
+                .join(', ')}
             </div>
           )}
         </div>

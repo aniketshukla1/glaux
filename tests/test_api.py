@@ -20,8 +20,10 @@ def _fresh_state():
     client.delete("/api/memory")
     STATE.eval_runs.clear()
     client.post("/api/safety", json={"mode": "live"})
+    client.post("/api/approval", json={"mode": "auto"})
     yield
     client.post("/api/safety", json={"mode": "live"})
+    client.post("/api/approval", json={"mode": "auto"})
 
 
 def test_health_reports_demo_mode():
@@ -197,3 +199,35 @@ def test_eval_run_and_lift_from_synthesized_skill():
     # run history is tracked
     runs = client.get("/api/eval/runs").json()["runs"]
     assert len(runs) >= 2
+
+
+# --- autonomous synthesis + HITL gate ------------------------------------
+
+
+def test_dispatch_autonomously_synthesizes_a_skill():
+    data = client.post("/api/task", json={"directive": "build a function that reverses a string"}).json()
+    assert data["synthesized"]  # reflector recommended a skill, swarm synthesized it
+    assert any(s["ok"] for s in data["synthesized"])
+    # in auto mode the non-sensitive skill is usable (quarantined), in the library
+    skills = client.get("/api/skills").json()["skills"]
+    assert any(s["name"] == "reverse_string" for s in skills)
+
+
+def test_gated_mode_requires_approval_then_approve():
+    client.post("/api/approval", json={"mode": "gated"})
+    assert client.get("/api/approval").json()["mode"] == "gated"
+
+    client.post("/api/task", json={"directive": "build a function that reverses a string"})
+    pending = [s for s in client.get("/api/skills").json()["skills"] if s["status"] == "pending_approval"]
+    assert pending  # held for approval
+
+    approved = client.post(f"/api/skills/{pending[0]['id']}/approve").json()
+    assert approved["status"] == "quarantined"
+
+
+def test_invalid_approval_mode_rejected():
+    assert client.post("/api/approval", json={"mode": "bogus"}).status_code == 400
+
+
+def test_approve_nonexistent_skill_404():
+    assert client.post("/api/skills/nope/approve").status_code == 404

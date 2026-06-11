@@ -20,6 +20,14 @@ from .synthesize import SkillCandidate
 QUARANTINED = "quarantined"
 PROMOTED = "promoted"
 DEPRECATED = "deprecated"
+PENDING_APPROVAL = "pending_approval"
+REJECTED = "rejected"
+
+
+def is_sensitive(caps: dict) -> bool:
+    """A skill is sensitive if it can reach the network, write files, or use secrets."""
+    caps = caps or {}
+    return bool(caps.get("net")) or bool(caps.get("fs_write")) or bool(caps.get("secrets"))
 
 
 @dataclass
@@ -36,6 +44,7 @@ class SkillRecord:
     usage_count: int
     success_count: int
     success_rate: float
+    sensitive: bool = False
 
     @classmethod
     def from_metadata(cls, rec_id: str, meta: dict) -> "SkillRecord":
@@ -52,6 +61,7 @@ class SkillRecord:
             usage_count=int(meta.get("usage_count", 0)),
             success_count=int(meta.get("success_count", 0)),
             success_rate=float(meta.get("success_rate", 0.0)),
+            sensitive=bool(meta.get("sensitive", is_sensitive(meta.get("caps", {})))),
         )
 
 
@@ -77,9 +87,12 @@ class SkillLibrary:
         text = f"{meta['name']}: {meta.get('description', '')}"
         return self.procedural.add(text, metadata=meta, id=rec_id, dedup=False)
 
-    def add_candidate(self, candidate: SkillCandidate) -> SkillRecord:
-        """Store a freshly synthesized skill as quarantined; version it if a
-        near-duplicate already exists."""
+    def add_candidate(
+        self, candidate: SkillCandidate, *, require_approval: bool = False
+    ) -> SkillRecord:
+        """Store a freshly synthesized skill; version it if a near-duplicate
+        exists. If ``require_approval`` (gated mode, or sensitive caps), it lands
+        as ``pending_approval`` and cannot run until a human approves it."""
         parent_id = None
         version = 1
         similar = self.procedural.search(f"{candidate.name} {candidate.description}", k=1)
@@ -87,6 +100,7 @@ class SkillLibrary:
             parent_id = similar[0].id
             version = int(similar[0].metadata.get("version", 1)) + 1
 
+        status = PENDING_APPROVAL if require_approval else QUARANTINED
         meta = {
             "kind": "skill",
             "name": candidate.name,
@@ -95,7 +109,8 @@ class SkillLibrary:
             "entrypoint": candidate.entrypoint,
             "caps": candidate.caps,
             "tests": candidate.tests,
-            "status": QUARANTINED,
+            "status": status,
+            "sensitive": is_sensitive(candidate.caps),
             "version": version,
             "parent_skill_id": parent_id,
             "usage_count": 0,
@@ -105,6 +120,41 @@ class SkillLibrary:
         }
         skill_id = self._store(None, meta)
         return SkillRecord.from_metadata(skill_id, meta)
+
+    def _set_status(self, skill_id: str, status: str) -> Optional[SkillRecord]:
+        current = self.get(skill_id)
+        if current is None:
+            return None
+        meta = {
+            "kind": "skill",
+            "name": current.name,
+            "description": current.description,
+            "code": current.code,
+            "entrypoint": current.entrypoint,
+            "caps": current.caps,
+            "status": status,
+            "sensitive": is_sensitive(current.caps),
+            "version": current.version,
+            "parent_skill_id": current.parent_skill_id,
+            "usage_count": current.usage_count,
+            "success_count": current.success_count,
+            "success_rate": current.success_rate,
+        }
+        self._store(skill_id, meta)
+        return SkillRecord.from_metadata(skill_id, meta)
+
+    def approve(self, skill_id: str) -> Optional[SkillRecord]:
+        """Human approves a pending skill -> it enters the normal quarantine."""
+        current = self.get(skill_id)
+        if current is None or current.status != PENDING_APPROVAL:
+            return None
+        return self._set_status(skill_id, QUARANTINED)
+
+    def reject(self, skill_id: str) -> Optional[SkillRecord]:
+        current = self.get(skill_id)
+        if current is None or current.status != PENDING_APPROVAL:
+            return None
+        return self._set_status(skill_id, REJECTED)
 
     # --- lifecycle -------------------------------------------------------
 
