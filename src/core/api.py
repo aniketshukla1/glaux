@@ -30,6 +30,7 @@ from core.ledger import Ledger
 from identity import AgentIdentity
 from llm.demo import DemoLLM
 from memory import MemoryManager
+from skills import SkillLibrary, SkillSynthesizer
 
 ROLES = ["router", "coder", "researcher", "reflector"]
 MEMORY_LAYERS = ("semantic", "episodic", "procedural")
@@ -50,6 +51,7 @@ class _State:
     def __init__(self) -> None:
         self.memory_dir = tempfile.mkdtemp(prefix="athena-mem-")
         self.memory = MemoryManager(self.memory_dir)
+        self.skills = SkillLibrary(self.memory.procedural)
         self.reset_ledger()
 
     def reset_ledger(self) -> None:
@@ -61,6 +63,7 @@ class _State:
         shutil.rmtree(self.memory_dir, ignore_errors=True)
         self.memory_dir = tempfile.mkdtemp(prefix="athena-mem-")
         self.memory = MemoryManager(self.memory_dir)
+        self.skills = SkillLibrary(self.memory.procedural)
 
     def store(self, layer: str):
         if layer not in MEMORY_LAYERS:
@@ -106,6 +109,29 @@ class MemoryAddRequest(BaseModel):
     text: str
     code: Optional[str] = None  # procedural skills
     metadata: Optional[dict] = None
+
+
+class SynthesizeRequest(BaseModel):
+    task: str
+
+
+class UseRequest(BaseModel):
+    success: bool
+
+
+def _skill_dict(r) -> dict:
+    return {
+        "id": r.id,
+        "name": r.name,
+        "description": r.description,
+        "status": r.status,
+        "version": r.version,
+        "success_rate": round(r.success_rate, 3),
+        "usage_count": r.usage_count,
+        "caps": r.caps,
+        "parent_skill_id": r.parent_skill_id,
+        "code": r.code,
+    }
 
 
 def _verification() -> dict:
@@ -246,3 +272,40 @@ def memory_add(layer: str, req: MemoryAddRequest) -> dict:
 def reset_memory() -> dict:
     STATE.reset_memory()
     return {"status": "reset"}
+
+
+# --- skills (synthesis + curation) ---------------------------------------
+
+
+@app.get("/api/skills")
+def list_skills(status: Optional[str] = None) -> dict:
+    return {"skills": [_skill_dict(r) for r in STATE.skills.list(status)]}
+
+
+@app.post("/api/skills/synthesize")
+async def synthesize_skill(req: SynthesizeRequest) -> dict:
+    if not req.task.strip():
+        raise HTTPException(status_code=400, detail="task is required")
+    synth = SkillSynthesizer(STATE.llm)
+    res = await run_in_threadpool(synth.synthesize, req.task)
+    stored = STATE.skills.add_candidate(res.candidate) if res.ok else None
+    return {
+        "ok": res.ok,
+        "reason": res.reason,
+        "cap_violations": res.cap_violations,
+        "test_results": res.test_results,
+        "candidate": (
+            {"name": res.candidate.name, "code": res.candidate.code, "caps": res.candidate.caps}
+            if res.candidate
+            else None
+        ),
+        "stored": _skill_dict(stored) if stored else None,
+    }
+
+
+@app.post("/api/skills/{skill_id}/use")
+def use_skill(skill_id: str, req: UseRequest) -> dict:
+    rec = STATE.skills.record_use(skill_id, req.success)
+    if rec is None:
+        raise HTTPException(status_code=404, detail="unknown skill")
+    return _skill_dict(rec)

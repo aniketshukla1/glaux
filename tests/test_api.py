@@ -147,3 +147,30 @@ def test_tight_budget_halts_dispatch():
     assert data["budget_halt"] is not None
     assert data["cost"]["llm_calls"] == 1
     assert not any(s["accepted"] for s in data["steps"])
+
+
+# --- skills (synthesis + curation) ---------------------------------------
+
+
+def test_synthesize_stores_quarantined_skill():
+    r = client.post("/api/skills/synthesize", json={"task": "reverse a string"}).json()
+    assert r["ok"] is True
+    assert r["stored"]["status"] == "quarantined"
+    assert r["stored"]["name"] == "reverse_string"
+    # it shows up in the library listing
+    skills = client.get("/api/skills").json()["skills"]
+    assert any(s["name"] == "reverse_string" for s in skills)
+
+
+def test_skill_promotes_after_uses():
+    synth = client.post("/api/skills/synthesize", json={"task": "reverse"}).json()
+    sid = synth["stored"]["id"]
+    last = None
+    for _ in range(3):
+        last = client.post(f"/api/skills/{sid}/use", json={"success": True}).json()
+    assert last["status"] == "promoted"
+    assert last["success_rate"] == 1.0
+
+
+def test_use_unknown_skill_404():
+    assert client.post("/api/skills/nope/use", json={"success": True}).status_code == 404

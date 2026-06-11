@@ -13,9 +13,11 @@ import ChainAuditor from './components/ChainAuditor.jsx'
 import SafetyControl from './components/SafetyControl.jsx'
 import AgentsPanel from './components/AgentsPanel.jsx'
 import MemoryPanel from './components/MemoryPanel.jsx'
+import SkillLibrary from './components/SkillLibrary.jsx'
 
 const TABS = [
   { key: 'feed', label: '⌁ Swarm Feed' },
+  { key: 'skills', label: '⚒ Skills' },
   { key: 'memory', label: '⛁ Memory' },
   { key: 'roster', label: '✦ Roster' },
 ]
@@ -166,6 +168,7 @@ export default function App() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2">
           {tab === 'feed' && <SwarmFeed blocks={ledger.blocks} />}
+          {tab === 'skills' && <SkillLibrary />}
           {tab === 'memory' && <MemoryPanel />}
           {tab === 'roster' && <AgentsPanel />}
         </div>

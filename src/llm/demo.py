@@ -20,6 +20,17 @@ _PLAN = (
     "]}\n```"
 )
 _ACCEPT = '```json\n{"verdict": "accept", "reason": "meets the task (demo mode)"}\n```'
+_SKILL = (
+    "```json\n"
+    "{"
+    '"name": "reverse_string", '
+    '"description": "Reverse a string", '
+    '"entrypoint": "run", '
+    '"caps": {"time_limit_s": 5}, '
+    '"code": "def run(s):\\n    return s[::-1]\\n", '
+    '"tests": ["assert run(\\"abc\\") == \\"cba\\"", "assert run(\\"\\") == \\"\\""]'
+    "}\n```"
+)
 
 
 class DemoLLM:
@@ -40,6 +51,8 @@ class DemoLLM:
             text = _PLAN
         elif "you review whether" in sys:
             text = _ACCEPT
+        elif "synthesize a reusable python skill" in sys:
+            text = _SKILL
         else:
             snippet = goal.splitlines()[0][:80] if goal else "the task"
             text = (

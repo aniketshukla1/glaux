@@ -30,3 +30,8 @@ export const setSafety = (mode) => post('/api/safety', { mode })
 export const getMemory = (layer, q) =>
   fetch(`/api/memory/${layer}${q ? `?q=${encodeURIComponent(q)}` : ''}`).then(json)
 export const addMemory = (layer, payload) => post(`/api/memory/${layer}`, payload)
+
+// skills (synthesis + curation)
+export const getSkills = () => fetch('/api/skills').then(json)
+export const synthesizeSkill = (task) => post('/api/skills/synthesize', { task })
+export const useSkill = (id, success) => post(`/api/skills/${id}/use`, { success })

@@ -223,22 +223,22 @@ thin Python wrapper adding the agent-facing API + rotation-aware checks.
 
 This is what most "agent platforms" never build. Without it, the skill library degenerates into junk within a week.
 
-### 4.1 Skill Synthesis Pipeline (`src/skills/synthesize.py`)
+### 4.1 Skill Synthesis Pipeline (`src/skills/synthesize.py`) — ✅ COMPLETE
 
-When the Reflector decides a task needed a new skill:
+- [x] **Generate** — LLM proposes `{name, description, code, entrypoint, caps, tests}` in one structured call (`SkillSynthesizer`).
+- [x] **Sandbox-run tests** — each test runs in the Phase 0 sandbox under the skill's declared caps; all must pass.
+- [x] **Quarantine** — passing skills enter procedural memory with `status: quarantined`, counters at 0 (`SkillLibrary.add_candidate`).
+- [x] **Promote** — after K successful uses (default 3) via `record_use`, flips to `promoted`.
+- [x] **Deprecate** — once `usage_count ≥ min_uses` and `success_rate < threshold`, flips to `deprecated`.
+- [ ] Reflector-triggered synthesis (wire `SkillSynthesizer` into the swarm's reflect step) — *next; today synthesis is an explicit API/UI action.*
 
-1. **Generate** — LLM proposes `{name, docstring, code, declared_caps}`.
-2. **Generate tests** — same LLM, separate call: synthesize 3–5 unit tests for the skill against the original task.
-3. **Sandbox-run tests** — execute in Phase 0 sandbox with declared caps.
-4. **Quarantine** — if all tests pass, store in procedural memory with `status: quarantined`, `success_count: 0`.
-5. **Promote** — after K successful real uses (default K=3), flip to `status: promoted`.
-6. **Deprecate** — failure rate above threshold flips back to quarantined or `deprecated`.
+### 4.2 Skill Curation — ✅ COMPLETE
 
-### 4.2 Skill Curation
+- [x] **Versioning:** near-duplicate (`name + description` cosine ≥ 0.9) becomes a new *version* linked by `parent_skill_id`, not a sibling.
+- [x] **Cap enforcement:** AST `static_cap_check` rejects, at synthesis time, code with network imports without `net`, process/FFI escapes, or `open(...,'w')` without `fs_write`.
+- [ ] Retrieval prefers latest promoted version — *refinement (current procedural policy already favors high success_rate).*
 
-- [ ] **Dedup:** before insert, embed `name + docstring` and check procedural memory for similarity > 0.9. If found, the new skill becomes a *version* of the existing one, not a new entry.
-- [ ] **Versioning:** `skill_id` is stable; versions chain via `parent_skill_id`. Retrieval prefers latest promoted version.
-- [ ] **Cap enforcement:** at synthesis time, statically reject skills whose code uses imports outside declared caps (AST walk).
+> **Frontend:** Skills tab — synthesize from a task, see cap-violations / test pass-count, and the library with status badge, version, success-rate, and record-success/failure controls. API: `GET /api/skills`, `POST /api/skills/synthesize`, `POST /api/skills/{id}/use`. Tests: `tests/test_skills.py` (13) + API (3).
 
 ### 4.3 Evaluation Harness (`src/eval/`)
 

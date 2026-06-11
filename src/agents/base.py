@@ -56,14 +56,7 @@ class AgentResult:
 
 
 def _caps_from_dict(d: dict) -> Capabilities:
-    return Capabilities(
-        net=d.get("net", False),
-        fs_read=list(d.get("fs_read", [])),
-        fs_write=list(d.get("fs_write", [])),
-        time_limit_s=d.get("time_limit_s", 5.0),
-        mem_mb=d.get("mem_mb", 256),
-        secrets=list(d.get("secrets", [])),
-    )
+    return Capabilities.from_dict(d)
 
 
 def _hash_prompt(system: Optional[str], messages: list[Message]) -> str:
