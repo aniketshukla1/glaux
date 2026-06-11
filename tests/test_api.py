@@ -18,6 +18,7 @@ client = TestClient(app)
 def _fresh_state():
     client.delete("/api/ledger")
     client.delete("/api/memory")
+    STATE.eval_runs.clear()
     client.post("/api/safety", json={"mode": "live"})
     yield
     client.post("/api/safety", json={"mode": "live"})
@@ -174,3 +175,25 @@ def test_skill_promotes_after_uses():
 
 def test_use_unknown_skill_404():
     assert client.post("/api/skills/nope/use", json={"success": True}).status_code == 404
+
+
+# --- eval harness --------------------------------------------------------
+
+
+def test_eval_run_and_lift_from_synthesized_skill():
+    # baseline: reverse_* cases fail (no skill), inline baselines pass
+    base = client.post("/api/eval/run").json()
+    base_passed = base["run"]["passed"]
+    assert base["run"]["total"] >= 4
+    assert any(not c["passed"] for c in base["run"]["cases"])  # reverse_* missing
+
+    # synthesize the reverse_string skill, then re-run -> lift
+    client.post("/api/skills/synthesize", json={"task": "reverse a string"})
+    after = client.post("/api/eval/run").json()
+    assert after["run"]["passed"] > base_passed
+    assert after["lift"]["delta_pass_rate"] > 0
+    assert "reverse_basic" in after["lift"]["newly_passing"]
+
+    # run history is tracked
+    runs = client.get("/api/eval/runs").json()["runs"]
+    assert len(runs) >= 2

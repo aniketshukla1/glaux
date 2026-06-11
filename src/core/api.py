@@ -17,6 +17,7 @@ from __future__ import annotations
 import os
 import shutil
 import tempfile
+from pathlib import Path
 from typing import Optional
 
 from fastapi import FastAPI, HTTPException
@@ -28,12 +29,14 @@ import safety
 from agents import Budget, Reflector, Router, Swarm, coder_agent, researcher_agent
 from core.ledger import Ledger
 from identity import AgentIdentity
+from eval import EvalHarness, EvalRun, lift, load_bench
 from llm.demo import DemoLLM
 from memory import MemoryManager
 from skills import SkillLibrary, SkillSynthesizer
 
 ROLES = ["router", "coder", "researcher", "reflector"]
 MEMORY_LAYERS = ("semantic", "episodic", "procedural")
+BENCH_DIR = Path(__file__).resolve().parents[2] / "bench"
 
 
 def _make_llm():
@@ -52,6 +55,7 @@ class _State:
         self.memory_dir = tempfile.mkdtemp(prefix="athena-mem-")
         self.memory = MemoryManager(self.memory_dir)
         self.skills = SkillLibrary(self.memory.procedural)
+        self.eval_runs: list[EvalRun] = []
         self.reset_ledger()
 
     def reset_ledger(self) -> None:
@@ -309,3 +313,26 @@ def use_skill(skill_id: str, req: UseRequest) -> dict:
     if rec is None:
         raise HTTPException(status_code=404, detail="unknown skill")
     return _skill_dict(rec)
+
+
+# --- evaluation harness --------------------------------------------------
+
+
+@app.post("/api/eval/run")
+async def run_eval() -> dict:
+    cases = load_bench(BENCH_DIR)
+    harness = EvalHarness(STATE.skills)
+    previous = STATE.eval_runs[-1] if STATE.eval_runs else None
+    run = await run_in_threadpool(harness.run_suite, cases)
+    STATE.eval_runs.append(run)
+    return {"run": run.to_dict(), "lift": lift(run, previous)}
+
+
+@app.get("/api/eval/runs")
+def eval_runs() -> dict:
+    return {
+        "runs": [
+            {"timestamp": r.timestamp, "pass_rate": round(r.pass_rate, 4), "passed": r.passed, "total": r.total}
+            for r in STATE.eval_runs
+        ]
+    }

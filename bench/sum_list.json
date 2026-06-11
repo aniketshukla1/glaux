@@ -1,0 +1,9 @@
+{
+  "name": "sum_list",
+  "description": "baseline: sum a list of integers (self-contained)",
+  "code": "def run(xs):\n    return sum(xs)\n",
+  "entrypoint": "run",
+  "args": { "xs": [1, 2, 3, 4] },
+  "expected": 10,
+  "tags": ["coding", "baseline"]
+}

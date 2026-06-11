@@ -14,10 +14,12 @@ import SafetyControl from './components/SafetyControl.jsx'
 import AgentsPanel from './components/AgentsPanel.jsx'
 import MemoryPanel from './components/MemoryPanel.jsx'
 import SkillLibrary from './components/SkillLibrary.jsx'
+import EvalDashboard from './components/EvalDashboard.jsx'
 
 const TABS = [
   { key: 'feed', label: '⌁ Swarm Feed' },
   { key: 'skills', label: '⚒ Skills' },
+  { key: 'eval', label: '📊 Eval' },
   { key: 'memory', label: '⛁ Memory' },
   { key: 'roster', label: '✦ Roster' },
 ]
@@ -169,6 +171,7 @@ export default function App() {
         <div className="lg:col-span-2">
           {tab === 'feed' && <SwarmFeed blocks={ledger.blocks} />}
           {tab === 'skills' && <SkillLibrary />}
+          {tab === 'eval' && <EvalDashboard />}
           {tab === 'memory' && <MemoryPanel />}
           {tab === 'roster' && <AgentsPanel />}
         </div>

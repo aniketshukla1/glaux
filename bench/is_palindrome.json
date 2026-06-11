@@ -1,0 +1,9 @@
+{
+  "name": "is_palindrome",
+  "description": "baseline: detect a palindrome (self-contained)",
+  "code": "def run(s):\n    return s == s[::-1]\n",
+  "entrypoint": "run",
+  "args": { "s": "racecar" },
+  "expected": true,
+  "tags": ["coding", "baseline"]
+}

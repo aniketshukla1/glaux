@@ -35,3 +35,7 @@ export const addMemory = (layer, payload) => post(`/api/memory/${layer}`, payloa
 export const getSkills = () => fetch('/api/skills').then(json)
 export const synthesizeSkill = (task) => post('/api/skills/synthesize', { task })
 export const useSkill = (id, success) => post(`/api/skills/${id}/use`, { success })
+
+// eval harness
+export const runEval = () => post('/api/eval/run', {})
+export const getEvalRuns = () => fetch('/api/eval/runs').then(json)
