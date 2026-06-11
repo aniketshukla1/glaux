@@ -1,0 +1,45 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background:
+    radial-gradient(1200px 600px at 20% -10%, rgba(94, 234, 212, 0.08), transparent),
+    radial-gradient(900px 500px at 100% 0%, rgba(129, 140, 248, 0.1), transparent),
+    #0a0e14;
+  color: #cbd5e1;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.glass {
+  background: rgba(17, 22, 31, 0.6);
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  backdrop-filter: blur(12px);
+  border-radius: 14px;
+}
+
+.hash {
+  font-size: 11px;
+  color: #64748b;
+  word-break: break-all;
+}
+
+pre {
+  margin: 0;
+  font-family: inherit;
+}
+
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.2);
+  border-radius: 4px;
+}

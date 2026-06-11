@@ -184,6 +184,9 @@ The cognitive layer, now built on signed actions instead of hash-chained payload
 - [x] `swarm.py` — orchestrator: router → topological execution → token-gated `delegate` per step → reflect/retry → thread dependency outputs into context. Executor role is the existing `BaseAgent` sandbox path.
 - [x] `handoff.py` — `delegate()` mints a signed capability token, logs `CALL_AGENT` + `CAPABILITY_GRANT`, and the receiver's `accept_handoff` verifies it before working. Tests: `tests/test_swarm.py` (11) incl. rejection of mis-addressed / expired / tampered tokens.
 
+> [!NOTE]
+> **Known gap (flagged, not claimed done):** specialists are differentiated by *prompt only*, not yet by **memory partition**. The ReAct loop currently retrieves *procedural* skills into context but does not pull **semantic/episodic** memory — so e.g. a researcher does not yet lean on semantic facts. This is a deliberate refinement deferred to a later pass (wire `MemoryManager.semantic`/`episodic` retrieval into `BaseAgent._build_messages`, and add `retrieved_memory_hash` to the reproducibility envelope at the same time).
+
 ### 3.3 ReAct Protocols
 
 - [x] `CALL_SKILL { skill_id, args }` — pulls skill (from procedural memory or supplied set), runs in the Phase 0 sandbox under declared caps, folds the result back as an observation.
@@ -251,20 +254,23 @@ When the Reflector decides a task needed a new skill:
 
 ## Phase 5 — UI, Observability & Platform Polish
 
-### 5.1 React Dashboard (`frontend/`)
+> **Started early (in parallel)** so the swarm is viewable/testable while later phases land. First cut is live: dispatch a directive, watch the signed trace, audit the chain.
 
-- [ ] Vite + React + Tailwind, dark monospace aesthetic.
-- [ ] **Task Console** — dispatch directives, see plan DAG render live.
-- [ ] **Swarm Feed** — collapsible per-agent traces, signature & ledger hash on each card.
-- [ ] **Chain Auditor** — visualize blocks, verify signatures, surface tampering.
-- [ ] **Skill Library Browser** — table of skills with version, status, success rate, recent usage. Filter by capability.
-- [ ] **Eval Dashboard** — bench score trend, cost-per-task trend, regression alerts.
+### 5.1 React Dashboard (`frontend/`) — 🟡 IN PROGRESS
 
-### 5.2 Backend (`src/core/api.py`)
+- [x] Vite + React + Tailwind, dark glassmorphism aesthetic.
+- [x] **Task Console** — dispatch directives; shows the returned plan DAG + result.
+- [x] **Swarm Feed** — collapsible signed-action cards (action type, agent id, hash); expand for payload + Ed25519 signature.
+- [x] **Chain Auditor** — verification banner (native Rust verify), block count, re-verify; surfaces the exact tampered block.
+- [ ] **Skill Library Browser** — needs Phase 4 (skills).
+- [ ] **Eval Dashboard** — needs Phase 4 (eval harness).
 
-- [ ] FastAPI + WebSockets. Streams ledger blocks to UI as they're written.
+### 5.2 Backend (`src/core/api.py`) — 🟡 IN PROGRESS
+
+- [x] FastAPI app: `POST /api/task` (run swarm), `GET /api/ledger`, `GET /api/block/{i}`, `GET /api/health`, `DELETE /api/ledger`. Persistent ledger + stable agent identities across dispatches. Offline `DemoLLM` by default; real Claude when `ANTHROPIC_API_KEY` is set. Tests: `tests/test_api.py` (4).
+- [ ] **WebSocket live streaming** — stream blocks as they're written (today the full signed trace renders on completion).
 - [ ] REST endpoints for skill list, eval reports, kill-switch toggle.
-- [ ] Auth: HMAC on every request (use a separate platform key — agents have keypairs, the dashboard has a shared secret).
+- [ ] Auth: HMAC on every request (dashboard shared secret, separate from agent keypairs).
 
 ### 5.3 Observability
 
