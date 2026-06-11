@@ -262,14 +262,22 @@ When the Reflector decides a task needed a new skill:
 - [x] **Task Console** — dispatch directives; shows the returned plan DAG + result.
 - [x] **Swarm Feed** — collapsible signed-action cards (action type, agent id, hash); expand for payload + Ed25519 signature.
 - [x] **Chain Auditor** — verification banner (native Rust verify), block count, re-verify; surfaces the exact tampered block.
+- [x] **Safety control** — header toggle for the kill switch (live / dry_run / halted), wired to `/api/safety`.
+- [x] **Memory browser** — tabbed semantic/episodic/procedural with add + search (Phase 2 parity).
+- [x] **Agent Roster** — agents with role, public key, namespace (Phase 0/3 identity parity).
 - [ ] **Skill Library Browser** — needs Phase 4 (skills).
 - [ ] **Eval Dashboard** — needs Phase 4 (eval harness).
 
+> **Policy:** the frontend tracks the backend phase-for-phase from here on — each phase ships matching API + UI, and the UI stays at parity with built subsystems.
+
 ### 5.2 Backend (`src/core/api.py`) — 🟡 IN PROGRESS
 
-- [x] FastAPI app: `POST /api/task` (run swarm), `GET /api/ledger`, `GET /api/block/{i}`, `GET /api/health`, `DELETE /api/ledger`. Persistent ledger + stable agent identities across dispatches. Offline `DemoLLM` by default; real Claude when `ANTHROPIC_API_KEY` is set. Tests: `tests/test_api.py` (4).
+- [x] FastAPI app: `POST /api/task` (run swarm), `GET /api/ledger`, `GET /api/block/{i}`, `GET /api/health`, `DELETE /api/ledger`. Persistent ledger + stable agent identities across dispatches. Offline `DemoLLM` by default; real Claude when `ANTHROPIC_API_KEY` is set.
+- [x] **Safety** endpoints — `GET`/`POST /api/safety` (kill-switch toggle).
+- [x] **Memory** endpoints — `GET`/`POST /api/memory/{layer}` (browse/search/add via AthenaDB `scan`), `DELETE /api/memory`.
+- [x] **Roster** endpoint — `GET /api/agents`. Tests: `tests/test_api.py` (11).
 - [ ] **WebSocket live streaming** — stream blocks as they're written (today the full signed trace renders on completion).
-- [ ] REST endpoints for skill list, eval reports, kill-switch toggle.
+- [ ] REST endpoints for skill list + eval reports (Phase 4).
 - [ ] Auth: HMAC on every request (dashboard shared secret, separate from agent keypairs).
 
 ### 5.3 Observability

@@ -1,26 +1,43 @@
 import React, { useCallback, useEffect, useState } from 'react'
-import { dispatchTask, getHealth, getLedger, resetLedger } from './api.js'
+import {
+  dispatchTask,
+  getHealth,
+  getLedger,
+  getSafety,
+  resetLedger,
+  setSafety,
+} from './api.js'
 import TaskConsole from './components/TaskConsole.jsx'
 import SwarmFeed from './components/SwarmFeed.jsx'
 import ChainAuditor from './components/ChainAuditor.jsx'
+import SafetyControl from './components/SafetyControl.jsx'
+import AgentsPanel from './components/AgentsPanel.jsx'
+import MemoryPanel from './components/MemoryPanel.jsx'
+
+const TABS = [
+  { key: 'feed', label: '⌁ Swarm Feed' },
+  { key: 'memory', label: '⛁ Memory' },
+  { key: 'roster', label: '✦ Roster' },
+]
 
 export default function App() {
   const [health, setHealth] = useState(null)
   const [ledger, setLedger] = useState({ count: 0, blocks: [], verification: null })
+  const [safety, setSafetyMode] = useState('live')
+  const [tab, setTab] = useState('feed')
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState(null)
   const [error, setError] = useState(null)
 
   const refresh = useCallback(async () => {
     try {
-      const [l, h] = [await getLedger(), await getHealth()]
+      const [l, h, s] = [await getLedger(), await getHealth(), await getSafety()]
       setLedger(l)
       setHealth(h)
+      setSafetyMode(s.mode)
       setError(null)
     } catch {
-      setError(
-        'Backend unreachable. Start it:  PYTHONPATH=src uvicorn core.api:app --port 8000',
-      )
+      setError('Backend unreachable. Start it:  PYTHONPATH=src uvicorn core.api:app --port 8000')
     }
   }, [])
 
@@ -35,6 +52,7 @@ export default function App() {
     try {
       const r = await dispatchTask(directive)
       setResult(r)
+      setTab('feed')
       await refresh()
     } catch (e) {
       setError(`Dispatch failed: ${e.message}`)
@@ -53,9 +71,18 @@ export default function App() {
     }
   }
 
+  const onSafety = async (mode) => {
+    try {
+      const r = await setSafety(mode)
+      setSafetyMode(r.mode)
+    } catch {
+      /* ignore */
+    }
+  }
+
   return (
     <div className="min-h-screen p-6 max-w-7xl mx-auto">
-      <header className="flex items-center justify-between mb-6">
+      <header className="flex items-center justify-between mb-6 flex-wrap gap-3">
         <div>
           <h1 className="text-2xl font-semibold text-slate-100 tracking-tight">
             Athena <span className="text-athena-accent">·</span>{' '}
@@ -65,10 +92,11 @@ export default function App() {
             Signed, sandboxed, self-improving multi-agent swarm
           </p>
         </div>
-        {health && (
-          <div className="text-right text-xs">
+        <div className="flex items-center gap-4">
+          <SafetyControl mode={safety} onChange={onSafety} />
+          {health && (
             <span
-              className={`px-2 py-1 rounded ${
+              className={`px-2 py-1 rounded text-xs ${
                 health.live
                   ? 'bg-athena-accent/15 text-athena-accent'
                   : 'bg-slate-600/20 text-slate-400'
@@ -76,8 +104,8 @@ export default function App() {
             >
               {health.live ? '● live' : '○ demo'} · {health.llm}
             </span>
-          </div>
-        )}
+          )}
+        </div>
       </header>
 
       {error && (
@@ -88,7 +116,7 @@ export default function App() {
 
       {result && (
         <div className="glass p-4 mt-4">
-          <div className="flex items-center gap-3 mb-2">
+          <div className="flex items-center gap-3 mb-2 flex-wrap">
             <span
               className={`px-2 py-0.5 rounded text-xs font-semibold ${
                 result.success
@@ -107,9 +135,27 @@ export default function App() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-6">
+      <div className="flex gap-1 mt-6 mb-4">
+        {TABS.map((t) => (
+          <button
+            key={t.key}
+            onClick={() => setTab(t.key)}
+            className={`px-4 py-2 rounded-lg text-sm border transition ${
+              tab === t.key
+                ? 'text-slate-100 border-slate-500/50 bg-slate-700/30'
+                : 'text-slate-500 border-transparent hover:text-slate-300'
+            }`}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2">
-          <SwarmFeed blocks={ledger.blocks} />
+          {tab === 'feed' && <SwarmFeed blocks={ledger.blocks} />}
+          {tab === 'memory' && <MemoryPanel />}
+          {tab === 'roster' && <AgentsPanel />}
         </div>
         <div>
           <ChainAuditor ledger={ledger} onVerify={refresh} />

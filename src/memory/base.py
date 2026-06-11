@@ -108,6 +108,24 @@ class MemoryStore:
 
     # --- reads -----------------------------------------------------------
 
+    def list_all(self, limit: Optional[int] = None, offset: int = 0) -> list[MemoryHit]:
+        """Enumerate this layer's records (no ranking), via AthenaDB `scan`.
+        Powers memory browsing and the deferred scan-based hygiene triggers."""
+        rows = self.db.scan(self.namespace, None, limit, offset)
+        hits = []
+        for rec_id, ns, _model, meta_json in rows:
+            meta = json.loads(meta_json)
+            hits.append(
+                MemoryHit(
+                    id=rec_id,
+                    similarity=0.0,
+                    text=meta.get("text", ""),
+                    metadata=meta,
+                    namespace=ns,
+                )
+            )
+        return hits
+
     def candidates(self, query_text: str, n: int) -> list[MemoryHit]:
         qvec = self.embedder.embed_one(query_text)
         rows = self.db.query(qvec, n, self.namespace)
