@@ -24,18 +24,23 @@ from typing import Optional
 
 import safety
 from core.ledger import Action, Ledger
+from identity import verify_token
 from identity.keypair import AgentIdentity
 from llm.gateway import LLMClient, Message
 from sandbox import Capabilities, SecretsBroker, run as sandbox_run
 
 from .protocol import CALL_AGENT, CALL_SKILL, FINISH, parse_action
 
-DEFAULT_SYSTEM_PROMPT = """You are {name}, a specialist agent in the Athena swarm.
-Reason step by step about the goal, then emit exactly one action as a JSON object
-in a ```json code block. Available actions:
-- {{"action": "call_skill", "skill_id": "<id>", "args": {{...}}}} — run a skill from your library.
-- {{"action": "finish", "result": "<answer>", "success": true}} — complete the task.
+ACTION_INSTRUCTIONS = """Reason step by step about the goal, then emit exactly one action as a JSON object in a ```json code block. Available actions:
+- {"action": "call_skill", "skill_id": "<id>", "args": {...}} — run a skill from your library.
+- {"action": "finish", "result": "<answer>", "success": true} — complete the task.
 Only call skills listed as available. Keep all args JSON-serializable."""
+
+DEFAULT_ROLE = "You are {name}, a specialist agent in the Athena swarm."
+
+
+class HandoffRejected(Exception):
+    """Raised when an agent refuses a handoff (invalid/expired/misaddressed token)."""
 
 
 @dataclass
@@ -93,7 +98,13 @@ class BaseAgent:
         self.memory = memory
         self.secrets_broker = secrets_broker
         self.name = name
-        self.system_prompt = (system_prompt or DEFAULT_SYSTEM_PROMPT).format(name=name)
+        # A provided prompt is used verbatim (so specialists can include their
+        # own JSON examples without str.format choking on the braces).
+        self.system_prompt = (
+            system_prompt
+            if system_prompt is not None
+            else DEFAULT_ROLE.format(name=name) + "\n" + ACTION_INSTRUCTIONS
+        )
         self.max_iterations = max_iterations
         self.temperature = temperature
         self.seed = seed
@@ -101,6 +112,27 @@ class BaseAgent:
         self.checkpoint_dir = checkpoint_dir
 
     # --- public ----------------------------------------------------------
+
+    def accept_handoff(
+        self,
+        token,
+        issuer_public_key_b58: str,
+        goal: str,
+        *,
+        capability: Optional[str] = None,
+        **run_kwargs,
+    ) -> "AgentResult":
+        """Accept a delegated task only if `token` is a valid capability grant
+        issued *to this agent* by `issuer_public_key_b58`. Receiver-side check —
+        this is where the Phase 0 capability tokens are enforced."""
+        if not verify_token(
+            token, issuer_public_key_b58, subject=self.identity.agent_id, capability=capability
+        ):
+            raise HandoffRejected(
+                f"{self.name} rejected handoff: capability token invalid, expired, "
+                f"or not issued to this agent"
+            )
+        return self.run(goal, **run_kwargs)
 
     def run(
         self,

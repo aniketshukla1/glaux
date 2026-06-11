@@ -38,6 +38,8 @@ class Action:
     REVOKE = "CAPABILITY_REVOKE"
     ROTATE = "KEY_ROTATION"
     APPROVAL = "REQUEST_APPROVAL"
+    PLAN = "PLAN"
+    REFLECT = "REFLECT"
 
 
 @dataclass

@@ -176,19 +176,20 @@ The cognitive layer, now built on signed actions instead of hash-chained payload
 - [x] **Reproducibility envelope** — records model_id, temperature, seed, and per-step prompt hashes.
 - [ ] Accept handoffs only with a valid capability token issued to this agent — *deferred to 3.2 (needs multiple agents).*  Tests: `tests/test_agent.py` (9), `tests/test_llm.py` (6).
 
-### 3.2 The Swarm
+### 3.2 The Swarm — ✅ COMPLETE
 
-- [ ] `router.py` — decomposes a directive into a DAG of subtasks (planner), assigns to specialists. Returns a signed plan.
-- [ ] `specialists/` — `coder.py`, `researcher.py`. Differentiated by system prompt and which memory partitions they query.
-- [ ] `reflector.py` — replaces the bare "Evaluator". Reads the trace, can *reject and retry* (not just log). Decides whether to synthesize a new skill.
-- [ ] `executor.py` — drives sandbox calls via Phase 0 sandbox.
+- [x] `router.py` — decomposes a directive into a DAG of subtasks (`Step`s with `depends_on`), assigns roles. Returns a plan signed onto the ledger (`Action.PLAN`).
+- [x] `specialists.py` — `coder_agent` / `researcher_agent` factories: `BaseAgent`s differentiated by role system prompt. *(Memory-partition routing — researchers leaning on semantic memory — is a noted refinement.)*
+- [x] `reflector.py` — reviews a result and returns accept/retry; the swarm re-runs a step with the critique in context (reject-and-retry, not just log). Skill-synthesis-on-reflection lands in Phase 4.
+- [x] `swarm.py` — orchestrator: router → topological execution → token-gated `delegate` per step → reflect/retry → thread dependency outputs into context. Executor role is the existing `BaseAgent` sandbox path.
+- [x] `handoff.py` — `delegate()` mints a signed capability token, logs `CALL_AGENT` + `CAPABILITY_GRANT`, and the receiver's `accept_handoff` verifies it before working. Tests: `tests/test_swarm.py` (11) incl. rejection of mis-addressed / expired / tampered tokens.
 
 ### 3.3 ReAct Protocols
 
 - [x] `CALL_SKILL { skill_id, args }` — pulls skill (from procedural memory or supplied set), runs in the Phase 0 sandbox under declared caps, folds the result back as an observation.
 - [x] `EMIT_OBSERVATION` — observations are appended to the scratchpad and signed to the ledger.
 - [x] Implemented actions are logged to the ledger as signed blocks; `finish` ends the loop.
-- [ ] `CALL_AGENT { agent_id, capability_token, payload }` — protocol defined (parser + ledger action), receiver-side token verification wired in 3.2.
+- [x] `CALL_AGENT { agent_id, capability_token }` — token-gated handoff via `delegate` / `accept_handoff`; receiver verifies the token (subject + capability + expiry + signature) before accepting. Mis-addressed, expired, and tampered tokens are all rejected. Logged as signed `CALL_AGENT` + `CAPABILITY_GRANT` blocks.
 
 ### 3.4 Cryptographic Swarm Ledger — ✅ COMPLETE
 

@@ -38,17 +38,23 @@ def _first_balanced_object(text: str) -> Optional[dict]:
     return None
 
 
-def parse_action(text: str) -> Optional[dict]:
-    """Return the action dict embedded in ``text``, or None if none parses."""
+def extract_json(text: str) -> Optional[dict]:
+    """Return the first JSON object in ``text`` (fenced block preferred, else the
+    first balanced top-level object), or None. No schema requirement."""
     m = _FENCED.search(text)
     if m:
         try:
             obj = json.loads(m.group(1))
-            if isinstance(obj, dict) and "action" in obj:
+            if isinstance(obj, dict):
                 return obj
         except json.JSONDecodeError:
             pass
-    obj = _first_balanced_object(text)
+    return _first_balanced_object(text)
+
+
+def parse_action(text: str) -> Optional[dict]:
+    """Return the embedded action dict (must have an ``action`` key), or None."""
+    obj = extract_json(text)
     if isinstance(obj, dict) and "action" in obj:
         return obj
     return None
