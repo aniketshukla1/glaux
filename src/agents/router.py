@@ -15,6 +15,7 @@ from core.ledger import Action, Ledger
 from identity.keypair import AgentIdentity
 from llm.gateway import LLMClient, Message
 
+from .budget import BudgetTracker, charge_for_response
 from .protocol import extract_json
 
 ROUTER_SYSTEM = """You are the router for the Athena swarm. Decompose the user's
@@ -58,6 +59,7 @@ class Router:
         self.name = name
         self.temperature = temperature
         self.max_tokens = max_tokens
+        self.budget: Optional[BudgetTracker] = None  # set by the Swarm per task
 
     def plan(self, directive: str, *, roles: Optional[list[str]] = None) -> Plan:
         roles = roles or []
@@ -66,6 +68,7 @@ class Router:
         resp = self.llm.complete(
             messages, system=ROUTER_SYSTEM, temperature=self.temperature, max_tokens=self.max_tokens
         )
+        charge_for_response(self.budget, resp, ROUTER_SYSTEM, messages)
         data = extract_json(resp.text) or {}
         steps = [
             Step(

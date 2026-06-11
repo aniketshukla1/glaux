@@ -16,6 +16,7 @@ from typing import Optional
 from core.ledger import Ledger
 
 from .base import AgentResult, HandoffRejected
+from .budget import Budget, BudgetTracker
 from .handoff import delegate
 from .reflector import Reflector
 from .router import Plan, Router, Step
@@ -59,6 +60,8 @@ class SwarmResult:
     steps: dict = field(default_factory=dict)  # step_id -> StepResult
     final: Optional[str] = None
     success: bool = False
+    cost: dict = field(default_factory=dict)
+    budget_halt: Optional[str] = None
 
 
 class Swarm:
@@ -79,13 +82,37 @@ class Swarm:
         self.max_retries = max_retries
         self.handoff_ttl = handoff_ttl
 
-    def run(self, directive: str, *, skills_by_role: Optional[dict] = None) -> SwarmResult:
+    def run(
+        self,
+        directive: str,
+        *,
+        skills_by_role: Optional[dict] = None,
+        budget: Optional[Budget] = None,
+    ) -> SwarmResult:
+        # One shared budget tracker for the whole task — every LLM caller charges it.
+        tracker = BudgetTracker(budget or Budget())
+        self.router.budget = tracker
+        if self.reflector is not None:
+            self.reflector.budget = tracker
+        for agent in self.specialists.values():
+            agent.budget = tracker
+
         plan = self.router.plan(directive, roles=list(self.specialists.keys()))
         order = topo_sort(plan.steps)
         results: dict[str, StepResult] = {}
         success = True
+        budget_halt: Optional[str] = None
 
         for step in order:
+            # Stop dispatching new work once the task's budget is spent.
+            reason = tracker.exceeded()
+            if reason is not None:
+                budget_halt = reason
+                results[step.id] = StepResult(
+                    step, AgentResult(False, f"skipped: {reason}", [], 0), False, 0
+                )
+                success = False
+                continue
             target = self.specialists.get(step.role)
             if target is None:
                 results[step.id] = StepResult(
@@ -134,4 +161,11 @@ class Swarm:
                 success = False
 
         final = results[order[-1].id].result.result if order else None
-        return SwarmResult(plan=plan, steps=results, final=final, success=success)
+        return SwarmResult(
+            plan=plan,
+            steps=results,
+            final=final,
+            success=success,
+            cost=tracker.snapshot(),
+            budget_halt=budget_halt,
+        )

@@ -19,7 +19,8 @@ export const getAgents = () => fetch('/api/agents').then(json)
 export const getLedger = () => fetch('/api/ledger').then(json)
 export const getBlock = (i) => fetch(`/api/block/${i}`).then(json)
 export const resetLedger = () => fetch('/api/ledger', { method: 'DELETE' }).then(json)
-export const dispatchTask = (directive) => post('/api/task', { directive })
+export const dispatchTask = (directive, budget) =>
+  post('/api/task', budget ? { directive, budget } : { directive })
 
 // safety (kill switch)
 export const getSafety = () => fetch('/api/safety').then(json)

@@ -1,6 +1,7 @@
 """Athena agents and swarm."""
 
 from .base import AgentResult, BaseAgent, HandoffRejected
+from .budget import Budget, BudgetTracker
 from .handoff import delegate
 from .protocol import CALL_AGENT, CALL_SKILL, FINISH, extract_json, parse_action
 from .reflector import Reflector, Verdict
@@ -12,6 +13,8 @@ __all__ = [
     "BaseAgent",
     "AgentResult",
     "HandoffRejected",
+    "Budget",
+    "BudgetTracker",
     "delegate",
     "parse_action",
     "extract_json",

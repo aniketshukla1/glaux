@@ -45,12 +45,12 @@ export default function App() {
     refresh()
   }, [refresh])
 
-  const onDispatch = async (directive) => {
+  const onDispatch = async (directive, budget) => {
     setLoading(true)
     setError(null)
     setResult(null)
     try {
-      const r = await dispatchTask(directive)
+      const r = await dispatchTask(directive, budget)
       setResult(r)
       setTab('feed')
       await refresh()
@@ -132,6 +132,18 @@ export default function App() {
             plan: {result.plan.map((s) => `${s.id}:${s.role}`).join(' → ')} ·{' '}
             {result.new_blocks.length} new signed blocks
           </div>
+          {result.cost && Object.keys(result.cost).length > 0 && (
+            <div className="flex gap-4 text-xs mt-2 text-slate-400">
+              <span>⛂ {result.cost.llm_calls} LLM calls</span>
+              <span>{result.cost.total_tokens.toLocaleString()} tokens</span>
+              <span>~${result.cost.usd.toFixed(4)}</span>
+            </div>
+          )}
+          {result.budget_halt && (
+            <div className="mt-2 text-xs text-amber-300 border border-amber-500/40 bg-amber-500/10 rounded px-2 py-1">
+              ⛔ budget guard: {result.budget_halt}
+            </div>
+          )}
         </div>
       )}
 

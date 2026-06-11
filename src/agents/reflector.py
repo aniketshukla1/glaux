@@ -14,6 +14,7 @@ from core.ledger import Action, Ledger
 from identity.keypair import AgentIdentity
 from llm.gateway import LLMClient, Message
 
+from .budget import BudgetTracker, charge_for_response
 from .protocol import extract_json
 
 REFLECTOR_SYSTEM = """You review whether a specialist agent's result satisfies its
@@ -46,6 +47,7 @@ class Reflector:
         self.name = name
         self.temperature = temperature
         self.max_tokens = max_tokens
+        self.budget: Optional[BudgetTracker] = None  # set by the Swarm per task
 
     def review(self, goal: str, result) -> Verdict:
         summary = {
@@ -54,12 +56,14 @@ class Reflector:
             "iterations": result.iterations,
         }
         content = f"TASK: {goal}\nRESULT: {summary}"
+        messages = [Message(role="user", content=content)]
         resp = self.llm.complete(
-            [Message(role="user", content=content)],
+            messages,
             system=REFLECTOR_SYSTEM,
             temperature=self.temperature,
             max_tokens=self.max_tokens,
         )
+        charge_for_response(self.budget, resp, REFLECTOR_SYSTEM, messages)
         data = extract_json(resp.text) or {}
         verdict = str(data.get("verdict", "accept")).lower()
         accept = verdict == "accept"

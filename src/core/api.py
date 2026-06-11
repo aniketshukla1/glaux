@@ -25,7 +25,7 @@ from pydantic import BaseModel
 from starlette.concurrency import run_in_threadpool
 
 import safety
-from agents import Reflector, Router, Swarm, coder_agent, researcher_agent
+from agents import Budget, Reflector, Router, Swarm, coder_agent, researcher_agent
 from core.ledger import Ledger
 from identity import AgentIdentity
 from llm.demo import DemoLLM
@@ -95,6 +95,7 @@ app.add_middleware(
 
 class TaskRequest(BaseModel):
     directive: str
+    budget: Optional[dict] = None  # {max_tokens?, max_usd?, max_llm_calls?}
 
 
 class SafetyRequest(BaseModel):
@@ -172,11 +173,14 @@ async def run_task(req: TaskRequest) -> dict:
         raise HTTPException(status_code=400, detail="directive is required")
     before = len(STATE.ledger)
     swarm = STATE.build_swarm()
-    result = await run_in_threadpool(swarm.run, req.directive)
+    budget = Budget.from_dict(req.budget)
+    result = await run_in_threadpool(lambda: swarm.run(req.directive, budget=budget))
     new_blocks = [STATE.ledger.block(i) for i in range(before, len(STATE.ledger))]
     return {
         "success": result.success,
         "final": result.final,
+        "cost": result.cost,
+        "budget_halt": result.budget_halt,
         "plan": [s.to_dict() for s in result.plan.steps],
         "steps": [
             {

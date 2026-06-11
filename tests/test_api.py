@@ -126,3 +126,24 @@ def test_memory_layers_are_isolated():
 
 def test_unknown_memory_layer_404():
     assert client.get("/api/memory/nonsense").status_code == 404
+
+
+# --- cost / budget guard -------------------------------------------------
+
+
+def test_dispatch_reports_cost():
+    data = client.post("/api/task", json={"directive": "do a thing"}).json()
+    assert data["cost"]["llm_calls"] > 0
+    assert data["cost"]["total_tokens"] > 0
+    assert data["budget_halt"] is None
+
+
+def test_tight_budget_halts_dispatch():
+    data = client.post(
+        "/api/task",
+        json={"directive": "do a multi-step thing", "budget": {"max_llm_calls": 1}},
+    ).json()
+    # router consumes the 1 allowed call; specialists are never dispatched
+    assert data["budget_halt"] is not None
+    assert data["cost"]["llm_calls"] == 1
+    assert not any(s["accepted"] for s in data["steps"])

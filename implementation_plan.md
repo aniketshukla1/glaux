@@ -40,7 +40,7 @@ Non-negotiable properties baked into the data model and runtime from the first c
 - [x] **Durable, resumable execution** (Phase 3) — `BaseAgent` checkpoints its state to disk after every step; `run(resume=True)` continues from the last committed step, not from zero.
 - [x] **Reproducibility envelope** (Phase 3) — each run records `{model_id, temperature, seed, prompt_hashes, skills_offered}`. *(retrieved_memory_hash to be added when memory is wired into the loop in 3.2.)*
 - [x] **Key rotation & validity windows** (Phase 0/3) — agents rotate keys; the registry tracks each key's valid time range, and `Ledger.verify(registry=...)` checks every block's signing key against the window valid at its timestamp. So history keeps verifying across rotations, and a key used outside its window is caught.
-- [ ] **Cost/budget guard** (Phase 3) — the agent loop checks a per-task token/USD budget before each LLM call and each skill run; exceeding it halts the task cleanly.
+- [x] **Cost/budget guard** (Phase 3) — one `BudgetTracker` shared across router/specialists/reflector; the agent loop checks `max_tokens` / `max_usd` / `max_llm_calls` before each LLM call and the swarm stops dispatching when exceeded, halting the task cleanly. Surfaced in the UI (budget inputs + cost meter + halt banner). `src/agents/budget.py`; tests `tests/test_budget.py` (8) + API.
 - [ ] **HITL approval gate** (Phase 3) — `REQUEST_APPROVAL` is a first-class action type alongside `CALL_SKILL` / `CALL_AGENT`. Irreversible or out-of-policy actions block on human approval, logged to the ledger.
 
 ---

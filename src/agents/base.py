@@ -29,6 +29,7 @@ from identity.keypair import AgentIdentity
 from llm.gateway import LLMClient, Message
 from sandbox import Capabilities, SecretsBroker, run as sandbox_run
 
+from .budget import BudgetTracker, charge_for_response
 from .protocol import CALL_AGENT, CALL_SKILL, FINISH, parse_action
 
 ACTION_INSTRUCTIONS = """Reason step by step about the goal, then emit exactly one action as a JSON object in a ```json code block. Available actions:
@@ -51,6 +52,7 @@ class AgentResult:
     iterations: int
     halted: bool = False
     reproducibility: dict = field(default_factory=dict)
+    cost: dict = field(default_factory=dict)
 
 
 def _caps_from_dict(d: dict) -> Capabilities:
@@ -91,12 +93,14 @@ class BaseAgent:
         seed: Optional[int] = None,
         max_tokens: int = 1024,
         checkpoint_dir: Optional[str] = None,
+        budget: Optional[BudgetTracker] = None,
     ) -> None:
         self.identity = identity
         self.llm = llm
         self.ledger = ledger
         self.memory = memory
         self.secrets_broker = secrets_broker
+        self.budget = budget
         self.name = name
         # A provided prompt is used verbatim (so specialists can include their
         # own JSON examples without str.format choking on the braces).
@@ -162,6 +166,16 @@ class BaseAgent:
         }
 
         for i in range(start_iter, self.max_iterations):
+            # Cost/budget guard: stop cleanly *before* spending more.
+            if self.budget is not None:
+                reason = self.budget.exceeded()
+                if reason is not None:
+                    self._log(Action.OBSERVATION, {"budget_halt": True, "reason": reason})
+                    return AgentResult(
+                        False, f"halted: {reason}", scratchpad, i,
+                        reproducibility=repro, cost=self._cost(),
+                    )
+
             messages = self._build_messages(goal, scratchpad, available, context)
             prompt_hash = _hash_prompt(self.system_prompt, messages)
             repro["prompt_hashes"].append(prompt_hash)
@@ -173,6 +187,7 @@ class BaseAgent:
                 max_tokens=self.max_tokens,
                 seed=self.seed,
             )
+            charge_for_response(self.budget, resp, self.system_prompt, messages)
             action = parse_action(resp.text)
             self._log(
                 Action.THINK,
@@ -194,6 +209,7 @@ class BaseAgent:
                         steps=scratchpad,
                         iterations=i + 1,
                         reproducibility=repro,
+                        cost=self._cost(),
                     )
                 elif atype == CALL_SKILL:
                     self._log(
@@ -220,9 +236,15 @@ class BaseAgent:
 
             self._save_checkpoint(task_id, scratchpad, i + 1, goal)
 
-        return AgentResult(False, "max iterations reached", scratchpad, self.max_iterations, reproducibility=repro)
+        return AgentResult(
+            False, "max iterations reached", scratchpad, self.max_iterations,
+            reproducibility=repro, cost=self._cost(),
+        )
 
     # --- internals -------------------------------------------------------
+
+    def _cost(self) -> dict:
+        return self.budget.snapshot() if self.budget is not None else {}
 
     def _run_skill(self, available: dict, action: dict) -> dict:
         skill_id = action.get("skill_id")
