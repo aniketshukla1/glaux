@@ -23,10 +23,12 @@ from typing import Optional
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import PlainTextResponse
+from fastapi.responses import JSONResponse, PlainTextResponse
 from pydantic import BaseModel
 from starlette.concurrency import run_in_threadpool
+from starlette.middleware.base import BaseHTTPMiddleware
 
+from core import auth
 from core.observability import METRICS, log_json
 
 import safety
@@ -125,6 +127,43 @@ class _State:
 STATE = _State()
 
 app = FastAPI(title="Athena Swarm API", version="0.2.0")
+
+# Public (never signed): liveness + auth-state discovery so a client can bootstrap.
+_AUTH_EXEMPT = {"/api/auth", "/api/health"}
+
+
+class HMACAuthMiddleware(BaseHTTPMiddleware):
+    """Enforce HMAC request signing on /api/* when ATHENA_API_SECRET is set."""
+
+    async def dispatch(self, request, call_next):
+        secret = auth.current_secret()
+        path = request.url.path
+        if (
+            secret
+            and request.method != "OPTIONS"
+            and path.startswith("/api/")
+            and path not in _AUTH_EXEMPT
+        ):
+            body = await request.body()
+            ok = auth.verify(
+                secret,
+                request.method,
+                path,
+                request.headers.get(auth.HEADER_TS, ""),
+                body,
+                request.headers.get(auth.HEADER_SIG, ""),
+            )
+            if not ok:
+                return JSONResponse({"detail": "unauthorized"}, status_code=401)
+
+            async def receive():  # re-inject the consumed body for the route
+                return {"type": "http.request", "body": body, "more_body": False}
+
+            request._receive = receive
+        return await call_next(request)
+
+
+app.add_middleware(HMACAuthMiddleware)
 app.add_middleware(
     CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"]
 )
@@ -191,6 +230,11 @@ def _hit(h) -> dict:
 
 
 # --- health / roster -----------------------------------------------------
+
+
+@app.get("/api/auth")
+def auth_status() -> dict:
+    return {"enabled": auth.current_secret() is not None}
 
 
 @app.get("/api/health")

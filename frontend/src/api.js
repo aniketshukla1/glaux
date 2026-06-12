@@ -1,58 +1,92 @@
 // Thin client for the Athena backend (proxied to :8000 in dev via vite.config.js).
+//
+// When VITE_ATHENA_API_SECRET is set, every request is HMAC-signed (Web Crypto)
+// to match the backend's env-gated auth. Otherwise requests are sent plain.
 
-const json = (r) => {
+const SECRET = import.meta.env.VITE_ATHENA_API_SECRET || ''
+const enc = new TextEncoder()
+
+const hex = (buf) =>
+  [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, '0')).join('')
+
+const sha256hex = async (s) => hex(await crypto.subtle.digest('SHA-256', enc.encode(s)))
+
+async function hmacHex(secret, msg) {
+  const key = await crypto.subtle.importKey(
+    'raw',
+    enc.encode(secret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign'],
+  )
+  return hex(await crypto.subtle.sign('HMAC', key, enc.encode(msg)))
+}
+
+async function authHeaders(method, path, bodyStr) {
+  if (!SECRET) return {}
+  const ts = Math.floor(Date.now() / 1000).toString()
+  const canonical = `${ts}\n${method.toUpperCase()}\n${path}\n${await sha256hex(bodyStr || '')}`
+  return { 'X-Athena-Timestamp': ts, 'X-Athena-Signature': await hmacHex(SECRET, canonical) }
+}
+
+async function request(method, url, bodyObj) {
+  const path = url.split('?')[0]
+  const hasBody = bodyObj !== undefined
+  const bodyStr = hasBody ? JSON.stringify(bodyObj) : ''
+  const headers = await authHeaders(method, path, bodyStr)
+  const opts = { method, headers }
+  if (hasBody) {
+    opts.headers = { 'Content-Type': 'application/json', ...headers }
+    opts.body = bodyStr
+  }
+  const r = await fetch(url, opts)
   if (!r.ok) throw new Error(`HTTP ${r.status}`)
   return r.json()
 }
-const post = (url, body) =>
-  fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  }).then(json)
 
-// health / roster
-export const getHealth = () => fetch('/api/health').then(json)
-export const getAgents = () => fetch('/api/agents').then(json)
+// health / roster / auth
+export const getHealth = () => request('GET', '/api/health')
+export const getAgents = () => request('GET', '/api/agents')
+export const getAuth = () => request('GET', '/api/auth')
 
 // swarm / ledger
-export const getLedger = () => fetch('/api/ledger').then(json)
-export const getBlock = (i) => fetch(`/api/block/${i}`).then(json)
-export const resetLedger = () => fetch('/api/ledger', { method: 'DELETE' }).then(json)
+export const getLedger = () => request('GET', '/api/ledger')
+export const getBlock = (i) => request('GET', `/api/block/${i}`)
+export const resetLedger = () => request('DELETE', '/api/ledger')
 export const dispatchTask = (directive, budget) =>
-  post('/api/task', budget ? { directive, budget } : { directive })
+  request('POST', '/api/task', budget ? { directive, budget } : { directive })
 
 // safety (kill switch)
-export const getSafety = () => fetch('/api/safety').then(json)
-export const setSafety = (mode) => post('/api/safety', { mode })
+export const getSafety = () => request('GET', '/api/safety')
+export const setSafety = (mode) => request('POST', '/api/safety', { mode })
+
+// approval mode (HITL gate)
+export const getApproval = () => request('GET', '/api/approval')
+export const setApproval = (mode) => request('POST', '/api/approval', { mode })
 
 // memory
 export const getMemory = (layer, q) =>
-  fetch(`/api/memory/${layer}${q ? `?q=${encodeURIComponent(q)}` : ''}`).then(json)
-export const addMemory = (layer, payload) => post(`/api/memory/${layer}`, payload)
+  request('GET', `/api/memory/${layer}${q ? `?q=${encodeURIComponent(q)}` : ''}`)
+export const addMemory = (layer, payload) => request('POST', `/api/memory/${layer}`, payload)
 
 // skills (synthesis + curation)
-export const getSkills = () => fetch('/api/skills').then(json)
-export const synthesizeSkill = (task) => post('/api/skills/synthesize', { task })
-export const useSkill = (id, success) => post(`/api/skills/${id}/use`, { success })
-export const approveSkill = (id) => post(`/api/skills/${id}/approve`, {})
-export const rejectSkill = (id) => post(`/api/skills/${id}/reject`, {})
-
-// approval mode (HITL gate)
-export const getApproval = () => fetch('/api/approval').then(json)
-export const setApproval = (mode) => post('/api/approval', { mode })
+export const getSkills = () => request('GET', '/api/skills')
+export const synthesizeSkill = (task) => request('POST', '/api/skills/synthesize', { task })
+export const useSkill = (id, success) => request('POST', `/api/skills/${id}/use`, { success })
+export const approveSkill = (id) => request('POST', `/api/skills/${id}/approve`, {})
+export const rejectSkill = (id) => request('POST', `/api/skills/${id}/reject`, {})
 
 // eval harness
-export const runEval = () => post('/api/eval/run', {})
-export const getEvalRuns = () => fetch('/api/eval/runs').then(json)
+export const runEval = () => request('POST', '/api/eval/run', {})
+export const getEvalRuns = () => request('GET', '/api/eval/runs')
 
 // observability
-export const getMetrics = () => fetch('/api/metrics').then(json)
+export const getMetrics = () => request('GET', '/api/metrics')
 
 // MCP tools
-export const getMcpTools = () => fetch('/api/mcp/tools').then(json)
-export const callMcpTool = (tool, args) => post('/api/mcp/call', { tool, args })
+export const getMcpTools = () => request('GET', '/api/mcp/tools')
+export const callMcpTool = (tool, args) => request('POST', '/api/mcp/call', { tool, args })
 
 // LLM backend
-export const getLlm = () => fetch('/api/llm').then(json)
-export const setLlm = (backend, model) => post('/api/llm', { backend, model })
+export const getLlm = () => request('GET', '/api/llm')
+export const setLlm = (backend, model) => request('POST', '/api/llm', { backend, model })

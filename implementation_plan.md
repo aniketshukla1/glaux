@@ -281,8 +281,8 @@ This is what most "agent platforms" never build. Without it, the skill library d
 - [x] **Memory** endpoints — `GET`/`POST /api/memory/{layer}` (browse/search/add via AthenaDB `scan`), `DELETE /api/memory`.
 - [x] **Roster** endpoint — `GET /api/agents`. Tests: `tests/test_api.py` (11).
 - [ ] **WebSocket live streaming** — stream blocks as they're written (today the full signed trace renders on completion).
-- [ ] REST endpoints for skill list + eval reports (Phase 4).
-- [ ] Auth: HMAC on every request (dashboard shared secret, separate from agent keypairs).
+- [x] REST endpoints for skill list + eval reports (Phase 4).
+- [x] **Auth: HMAC request signing** (`src/core/auth.py`) — env-gated by `ATHENA_API_SECRET`; every `/api/*` request signed with `X-Athena-Timestamp` + `X-Athena-Signature` (HMAC-SHA256 over `ts\nMETHOD\npath\nsha256(body)`), with a replay window and constant-time compare. `/api/health` + `/api/auth` stay public to bootstrap. The shared platform secret is separate from agent keypairs. Frontend signs via Web Crypto (`VITE_ATHENA_API_SECRET`). Tests: `tests/test_auth.py` (8). Verified live: unsigned → 401, signed dashboard works.
 
 ### 5.3 Observability — 🟡 IN PROGRESS
 

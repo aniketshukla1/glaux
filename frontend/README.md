@@ -27,6 +27,23 @@ Open http://localhost:5173 and dispatch a directive. With no API key the backend
 uses a built-in demo planner so the full signed trace + verification still work;
 set `ANTHROPIC_API_KEY` (and optionally `ATHENA_MODEL`) for real agent reasoning.
 
+## API auth (optional)
+
+The API is open by default. To require HMAC-signed requests, set a shared secret
+on both sides:
+
+```bash
+# backend
+ATHENA_API_SECRET=your-secret PYTHONPATH=src uvicorn core.api:app --port 8000
+# frontend (frontend/.env.local, gitignored)
+echo 'VITE_ATHENA_API_SECRET=your-secret' > frontend/.env.local
+```
+
+When enabled, every `/api/*` request must carry `X-Athena-Timestamp` +
+`X-Athena-Signature` (HMAC-SHA256 over `ts\nMETHOD\npath\nsha256(body)`);
+`/api/health` and `/api/auth` stay public so a client can bootstrap. The
+dashboard signs automatically via Web Crypto.
+
 ## Notes
 
 - The backend keeps one continuous ledger across dispatches (stable agent
