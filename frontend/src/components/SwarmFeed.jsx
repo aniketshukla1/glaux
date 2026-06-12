@@ -60,11 +60,17 @@ function BlockCard({ b }) {
   )
 }
 
-export default function SwarmFeed({ blocks }) {
+export default function SwarmFeed({ blocks, streaming }) {
   return (
     <section>
       <h2 className="text-slate-300 mb-3 flex items-center gap-2">
         ⌁ Swarm Feed <span className="text-xs text-slate-500">({blocks.length} blocks)</span>
+        {streaming && (
+          <span className="text-xs text-emerald-300 flex items-center gap-1">
+            <span className="inline-block w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+            live
+          </span>
+        )}
       </h2>
       <div className="space-y-2 max-h-[70vh] overflow-auto pr-1">
         {blocks.length === 0 && (

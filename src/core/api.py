@@ -14,14 +14,16 @@ Run:  PYTHONPATH=src uvicorn core.api:app --port 8000 --reload
 
 from __future__ import annotations
 
+import asyncio
 import os
 import shutil
 import tempfile
 import time
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Optional
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, PlainTextResponse
 from pydantic import BaseModel
@@ -77,6 +79,44 @@ def _make_llm(config: dict):
     return DemoLLM()
 
 
+class WSManager:
+    """Broadcasts ledger blocks to connected dashboards. Blocks are appended
+    from a worker thread (the swarm runs in a threadpool), so publishing hops
+    onto the event loop thread-safely."""
+
+    def __init__(self) -> None:
+        self.clients: set = set()
+        self._loop: Optional[asyncio.AbstractEventLoop] = None
+
+    def set_loop(self, loop) -> None:
+        self._loop = loop
+
+    async def connect(self, ws: WebSocket) -> None:
+        await ws.accept()
+        self.clients.add(ws)
+
+    def disconnect(self, ws: WebSocket) -> None:
+        self.clients.discard(ws)
+
+    def publish(self, message: dict) -> None:
+        if self._loop is None:
+            return
+        self._loop.call_soon_threadsafe(self._fanout, message)
+
+    def _fanout(self, message: dict) -> None:
+        for ws in list(self.clients):
+            asyncio.create_task(self._safe_send(ws, message))
+
+    async def _safe_send(self, ws: WebSocket, message: dict) -> None:
+        try:
+            await ws.send_json(message)
+        except Exception:
+            self.clients.discard(ws)
+
+
+WS = WSManager()
+
+
 class _State:
     def __init__(self) -> None:
         self.memory_dir = tempfile.mkdtemp(prefix="athena-mem-")
@@ -89,7 +129,7 @@ class _State:
         self.reset_ledger()
 
     def reset_ledger(self) -> None:
-        self.ledger = Ledger()
+        self.ledger = Ledger(on_append=lambda block: WS.publish({"type": "block", "block": block}))
         self.identities = {role: AgentIdentity.generate() for role in ROLES}
         self.llm = _make_llm(self.llm_config)
 
@@ -126,7 +166,13 @@ class _State:
 
 STATE = _State()
 
-app = FastAPI(title="Athena Swarm API", version="0.2.0")
+@asynccontextmanager
+async def _lifespan(_app):
+    WS.set_loop(asyncio.get_running_loop())
+    yield
+
+
+app = FastAPI(title="Athena Swarm API", version="0.2.0", lifespan=_lifespan)
 
 # Public (never signed): liveness + auth-state discovery so a client can bootstrap.
 _AUTH_EXEMPT = {"/api/auth", "/api/health"}
@@ -230,6 +276,18 @@ def _hit(h) -> dict:
 
 
 # --- health / roster -----------------------------------------------------
+
+
+@app.websocket("/ws")
+async def ws_feed(websocket: WebSocket) -> None:
+    await WS.connect(websocket)
+    try:
+        while True:
+            await websocket.receive_text()  # clients don't send; this detects disconnect
+    except WebSocketDisconnect:
+        WS.disconnect(websocket)
+    except Exception:
+        WS.disconnect(websocket)
 
 
 @app.get("/api/auth")

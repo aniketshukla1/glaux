@@ -55,6 +55,8 @@ export default function App() {
     }
   }, [])
 
+  const [streaming, setStreaming] = useState(false)
+
   useEffect(() => {
     refresh()
     // light poll keeps the dashboard live and self-heals a stale error banner
@@ -62,6 +64,42 @@ export default function App() {
     const id = setInterval(refresh, 4000)
     return () => clearInterval(id)
   }, [refresh])
+
+  // Live block streaming over WebSocket (with reconnect).
+  useEffect(() => {
+    let ws
+    let retry
+    let closed = false
+    const connect = () => {
+      const proto = location.protocol === 'https:' ? 'wss' : 'ws'
+      ws = new WebSocket(`${proto}://${location.host}/ws`)
+      ws.onopen = () => setStreaming(true)
+      ws.onmessage = (e) => {
+        let msg
+        try {
+          msg = JSON.parse(e.data)
+        } catch {
+          return
+        }
+        if (msg.type !== 'block') return
+        setLedger((prev) => {
+          if (prev.blocks.some((b) => b.index === msg.block.index)) return prev
+          return { ...prev, blocks: [...prev.blocks, msg.block], count: prev.count + 1 }
+        })
+      }
+      ws.onclose = () => {
+        setStreaming(false)
+        if (!closed) retry = setTimeout(connect, 2000)
+      }
+      ws.onerror = () => ws.close()
+    }
+    connect()
+    return () => {
+      closed = true
+      clearTimeout(retry)
+      if (ws) ws.close()
+    }
+  }, [])
 
   const onDispatch = async (directive, budget) => {
     setLoading(true)
@@ -191,7 +229,7 @@ export default function App() {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2">
-          {tab === 'feed' && <SwarmFeed blocks={ledger.blocks} />}
+          {tab === 'feed' && <SwarmFeed blocks={ledger.blocks} streaming={streaming} />}
           {tab === 'skills' && <SkillLibrary />}
           {tab === 'mcp' && <McpPanel />}
           {tab === 'eval' && <EvalDashboard />}

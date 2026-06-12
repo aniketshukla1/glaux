@@ -55,8 +55,15 @@ class LedgerVerification:
 
 
 class Ledger:
-    def __init__(self, _native: Optional["athena_ledger.Ledger"] = None) -> None:
+    def __init__(
+        self,
+        _native: Optional["athena_ledger.Ledger"] = None,
+        *,
+        on_append=None,
+    ) -> None:
         self._led = _native if _native is not None else athena_ledger.Ledger()
+        # optional callback(block_dict) fired after each append (e.g. live streaming)
+        self.on_append = on_append
 
     def __len__(self) -> int:
         return len(self._led)
@@ -82,7 +89,13 @@ class Ledger:
             json.dumps(payload),
             timestamp,
         )
-        return json.loads(block_json)
+        block = json.loads(block_json)
+        if self.on_append is not None:
+            try:
+                self.on_append(block)
+            except Exception:
+                pass  # streaming must never break the ledger write
+        return block
 
     def verify(self, registry: Optional[KeyRegistry] = None) -> LedgerVerification:
         """Native crypto + chain verification, then optional rotation-aware

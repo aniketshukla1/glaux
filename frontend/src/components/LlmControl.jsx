@@ -14,6 +14,9 @@ export default function LlmControl({ onChange }) {
   }
   useEffect(() => {
     load()
+    // keep in sync if the backend LLM changes (e.g. via API)
+    const id = setInterval(load, 10000)
+    return () => clearInterval(id)
   }, [])
 
   if (!llm) return null
