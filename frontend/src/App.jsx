@@ -14,6 +14,7 @@ import SwarmFeed from './components/SwarmFeed.jsx'
 import ChainAuditor from './components/ChainAuditor.jsx'
 import SafetyControl from './components/SafetyControl.jsx'
 import ApprovalControl from './components/ApprovalControl.jsx'
+import LlmControl from './components/LlmControl.jsx'
 import AgentsPanel from './components/AgentsPanel.jsx'
 import MemoryPanel from './components/MemoryPanel.jsx'
 import SkillLibrary from './components/SkillLibrary.jsx'
@@ -121,17 +122,7 @@ export default function App() {
         <div className="flex items-center gap-4 flex-wrap">
           <SafetyControl mode={safety} onChange={onSafety} />
           <ApprovalControl mode={approval} onChange={onApproval} />
-          {health && (
-            <span
-              className={`px-2 py-1 rounded text-xs ${
-                health.live
-                  ? 'bg-athena-accent/15 text-athena-accent'
-                  : 'bg-slate-600/20 text-slate-400'
-              }`}
-            >
-              {health.live ? '● live' : '○ demo'} · {health.llm}
-            </span>
-          )}
+          <LlmControl onChange={refresh} />
         </div>
       </header>
 

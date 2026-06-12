@@ -52,3 +52,7 @@ export const getMetrics = () => fetch('/api/metrics').then(json)
 // MCP tools
 export const getMcpTools = () => fetch('/api/mcp/tools').then(json)
 export const callMcpTool = (tool, args) => post('/api/mcp/call', { tool, args })
+
+// LLM backend
+export const getLlm = () => fetch('/api/llm').then(json)
+export const setLlm = (backend, model) => post('/api/llm', { backend, model })

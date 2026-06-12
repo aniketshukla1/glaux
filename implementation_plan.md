@@ -16,7 +16,7 @@ Decisions made upfront so phases don't re-litigate them.
 
 | Concern              | Choice                                              | Why                                                                              |
 |----------------------|------------------------------------------------------|----------------------------------------------------------------------------------|
-| LLM provider         | Anthropic SDK (`claude-opus-4-7`, `claude-sonnet-4-6`) | Native tool use, prompt caching, fits the cryptographic-identity story.        |
+| LLM provider         | Pluggable behind `LLMClient`: Anthropic SDK, **Ollama (local)**, or offline DemoLLM | Anthropic for quality; Ollama to benchmark/test on a real local model with zero cost; Demo for offline. Switchable at runtime via `/api/llm` + a header selector. |
 | Skill sandbox        | `subprocess` + `resource` limits + seccomp (Phase 0); migrate to `wasmtime` (Phase 4) | Subprocess is fast to ship; WASM is the long-term safe answer.                  |
 | Persistence          | Rust WAL + periodic snapshot to disk                | In-RAM-only AthenaDB loses the brain on restart — non-negotiable for "self-improving". |
 | External tools       | MCP (Model Context Protocol) first-class            | Free ecosystem; the platform shouldn't reinvent every connector.                |

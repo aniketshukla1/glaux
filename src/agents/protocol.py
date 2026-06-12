@@ -17,7 +17,29 @@ CALL_SKILL = "call_skill"
 CALL_AGENT = "call_agent"
 CALL_MCP = "call_mcp"
 
-_FENCED = re.compile(r"```(?:json)?\s*(\{.*?\})\s*```", re.DOTALL)
+# greedy capture so nested objects (e.g. a plan with step objects) are kept whole
+_FENCED = re.compile(r"```(?:json)?\s*(\{.*\})\s*```", re.DOTALL)
+_EMPTY_PARENS = re.compile(r"\(\)")
+_TRAILING_COMMA = re.compile(r",\s*([}\]])")
+
+
+def _repair(s: str) -> str:
+    """Fix the JSON defects small/instruct models commonly emit: stray empty
+    parens and trailing commas. Both are never valid JSON, so this is safe."""
+    s = _EMPTY_PARENS.sub("", s)
+    s = _TRAILING_COMMA.sub(r"\1", s)
+    return s
+
+
+def _loads_lenient(s: str) -> Optional[dict]:
+    for candidate in (s, _repair(s)):
+        try:
+            obj = json.loads(candidate)
+            if isinstance(obj, dict):
+                return obj
+        except (json.JSONDecodeError, TypeError):
+            continue
+    return None
 
 
 def _first_balanced_object(text: str) -> Optional[dict]:
@@ -32,24 +54,21 @@ def _first_balanced_object(text: str) -> Optional[dict]:
             if depth > 0:
                 depth -= 1
                 if depth == 0 and start is not None:
-                    try:
-                        return json.loads(text[start : i + 1])
-                    except json.JSONDecodeError:
-                        start = None
+                    obj = _loads_lenient(text[start : i + 1])
+                    if obj is not None:
+                        return obj
+                    start = None
     return None
 
 
 def extract_json(text: str) -> Optional[dict]:
     """Return the first JSON object in ``text`` (fenced block preferred, else the
-    first balanced top-level object), or None. No schema requirement."""
+    first balanced top-level object), tolerating common LLM JSON defects."""
     m = _FENCED.search(text)
     if m:
-        try:
-            obj = json.loads(m.group(1))
-            if isinstance(obj, dict):
-                return obj
-        except json.JSONDecodeError:
-            pass
+        obj = _loads_lenient(m.group(1))
+        if obj is not None:
+            return obj
     return _first_balanced_object(text)
 
 

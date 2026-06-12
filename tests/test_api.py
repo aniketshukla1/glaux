@@ -23,9 +23,11 @@ def _fresh_state():
     METRICS.reset()
     client.post("/api/safety", json={"mode": "live"})
     client.post("/api/approval", json={"mode": "auto"})
+    client.post("/api/llm", json={"backend": "demo"})
     yield
     client.post("/api/safety", json={"mode": "live"})
     client.post("/api/approval", json={"mode": "auto"})
+    client.post("/api/llm", json={"backend": "demo"})
 
 
 def test_health_reports_demo_mode():
@@ -270,3 +272,33 @@ def test_mcp_list_and_call():
 
     bad = client.post("/api/mcp/call", json={"tool": "nope", "args": {}}).json()
     assert bad["ok"] is False
+
+
+# --- LLM backend selection -----------------------------------------------
+
+
+def test_llm_status_defaults_to_demo():
+    data = client.get("/api/llm").json()
+    assert data["backend"] == "demo"  # no key in tests
+    assert "ollama" in data and "reachable" in data["ollama"]
+    assert set(data["backends"]) == {"demo", "ollama", "anthropic"}
+
+
+def test_switch_to_demo_ok():
+    assert client.post("/api/llm", json={"backend": "demo"}).json()["backend"] == "demo"
+
+
+def test_switch_to_ollama_respects_reachability():
+    status = client.get("/api/llm").json()["ollama"]
+    model = status["models"][0] if status["models"] else "llama3.2"
+    r = client.post("/api/llm", json={"backend": "ollama", "model": model})
+    if status["reachable"]:
+        assert r.status_code == 200
+        assert r.json()["backend"] == "ollama"
+    else:
+        assert r.status_code == 400
+        assert "not reachable" in r.json()["detail"].lower()
+
+
+def test_unknown_backend_rejected():
+    assert client.post("/api/llm", json={"backend": "gpt5"}).status_code == 400

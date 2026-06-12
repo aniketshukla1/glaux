@@ -51,12 +51,25 @@ MEMORY_LAYERS = ("semantic", "episodic", "procedural")
 BENCH_DIR = Path(__file__).resolve().parents[2] / "bench"
 
 
-def _make_llm():
-    if os.environ.get("ANTHROPIC_API_KEY"):
+def _default_llm_config() -> dict:
+    backend = os.environ.get("ATHENA_LLM")
+    if backend is None:
+        backend = "anthropic" if os.environ.get("ANTHROPIC_API_KEY") else "demo"
+    return {"backend": backend, "model": os.environ.get("ATHENA_MODEL")}
+
+
+def _make_llm(config: dict):
+    backend = config.get("backend", "demo")
+    model = config.get("model")
+    if backend == "ollama":
+        from llm.ollama import OllamaClient
+
+        return OllamaClient(model=model or "llama3.2")
+    if backend == "anthropic":
         try:
             from llm.gateway import AnthropicClient
 
-            return AnthropicClient(model=os.environ.get("ATHENA_MODEL", "claude-sonnet-4-6"))
+            return AnthropicClient(model=model or "claude-sonnet-4-6")
         except Exception:
             pass
     return DemoLLM()
@@ -70,12 +83,13 @@ class _State:
         self.mcp = default_local_client()
         self.eval_runs: list[EvalRun] = []
         self.approval_mode = "auto"  # auto | gated (gated => human approves synthesized skills)
+        self.llm_config = _default_llm_config()
         self.reset_ledger()
 
     def reset_ledger(self) -> None:
         self.ledger = Ledger()
         self.identities = {role: AgentIdentity.generate() for role in ROLES}
-        self.llm = _make_llm()
+        self.llm = _make_llm(self.llm_config)
 
     def reset_memory(self) -> None:
         shutil.rmtree(self.memory_dir, ignore_errors=True)
@@ -146,6 +160,11 @@ class ApprovalModeRequest(BaseModel):
     mode: str  # auto | gated
 
 
+class LLMRequest(BaseModel):
+    backend: str  # demo | ollama | anthropic
+    model: Optional[str] = None
+
+
 def _skill_dict(r) -> dict:
     return {
         "id": r.id,
@@ -180,6 +199,7 @@ def health() -> dict:
         "status": "ok",
         "llm": STATE.llm.model_id,
         "live": STATE.llm.model_id != "demo-offline",
+        "backend": STATE.llm_config["backend"],
         "safety": safety.current_mode().value,
         "approval": STATE.approval_mode,
         "blocks": len(STATE.ledger),
@@ -393,6 +413,44 @@ def set_approval(req: ApprovalModeRequest) -> dict:
         raise HTTPException(status_code=400, detail=f"invalid mode {req.mode!r}")
     STATE.approval_mode = req.mode
     return {"mode": STATE.approval_mode}
+
+
+# --- LLM backend ---------------------------------------------------------
+
+
+@app.get("/api/llm")
+def get_llm() -> dict:
+    from llm.ollama import ollama_status
+
+    return {
+        "backend": STATE.llm_config["backend"],
+        "model": STATE.llm_config.get("model"),
+        "model_id": STATE.llm.model_id,
+        "backends": ["demo", "ollama", "anthropic"],
+        "anthropic_key": bool(os.environ.get("ANTHROPIC_API_KEY")),
+        "ollama": ollama_status(),
+    }
+
+
+@app.post("/api/llm")
+def set_llm(req: LLMRequest) -> dict:
+    if req.backend not in ("demo", "ollama", "anthropic"):
+        raise HTTPException(status_code=400, detail=f"unknown backend {req.backend!r}")
+    if req.backend == "ollama":
+        from llm.ollama import ollama_status
+
+        status = ollama_status()
+        if not status["reachable"]:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Ollama not reachable at {status['host']} — start it with `ollama serve`",
+            )
+    if req.backend == "anthropic" and not os.environ.get("ANTHROPIC_API_KEY"):
+        raise HTTPException(status_code=400, detail="ANTHROPIC_API_KEY is not set")
+
+    STATE.llm_config = {"backend": req.backend, "model": req.model}
+    STATE.llm = _make_llm(STATE.llm_config)
+    return {"backend": STATE.llm_config["backend"], "model_id": STATE.llm.model_id}
 
 
 # --- MCP tools -----------------------------------------------------------

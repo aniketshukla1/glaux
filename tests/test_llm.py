@@ -43,3 +43,19 @@ def test_parse_returns_none_without_action_key():
 def test_parse_prefers_fenced_block():
     text = '{"action": "finish", "result": "bare"}\n```json\n{"action": "finish", "result": "fenced"}\n```'
     assert parse_action(text)["result"] == "fenced"
+
+
+def test_parse_repairs_small_model_json_defects():
+    from agents.protocol import extract_json
+
+    # stray empty parens (seen from qwen2.5) + nested objects in a fenced block
+    text = '```json\n{"plan": [{"id": "s1", "depends_on": []}, {"id": "s2", "depends_on": ["s1"]()}]}\n```'
+    obj = extract_json(text)
+    assert obj is not None
+    assert [s["id"] for s in obj["plan"]] == ["s1", "s2"]
+
+
+def test_parse_repairs_trailing_comma():
+    from agents.protocol import extract_json
+
+    assert extract_json('{"action": "finish", "result": "x",}')["result"] == "x"
