@@ -41,6 +41,7 @@ class Action:
     PLAN = "PLAN"
     REFLECT = "REFLECT"
     SYNTHESIZE = "SYNTHESIZE_SKILL"
+    MCP_TOOL = "MCP_TOOL"
 
 
 @dataclass

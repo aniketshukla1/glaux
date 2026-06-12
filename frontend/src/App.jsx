@@ -19,10 +19,12 @@ import MemoryPanel from './components/MemoryPanel.jsx'
 import SkillLibrary from './components/SkillLibrary.jsx'
 import EvalDashboard from './components/EvalDashboard.jsx'
 import MetricsPanel from './components/MetricsPanel.jsx'
+import McpPanel from './components/McpPanel.jsx'
 
 const TABS = [
   { key: 'feed', label: '⌁ Swarm Feed' },
   { key: 'skills', label: '⚒ Skills' },
+  { key: 'mcp', label: '🔌 MCP' },
   { key: 'eval', label: '📊 Eval' },
   { key: 'metrics', label: '📈 Metrics' },
   { key: 'memory', label: '⛁ Memory' },
@@ -200,6 +202,7 @@ export default function App() {
         <div className="lg:col-span-2">
           {tab === 'feed' && <SwarmFeed blocks={ledger.blocks} />}
           {tab === 'skills' && <SkillLibrary />}
+          {tab === 'mcp' && <McpPanel />}
           {tab === 'eval' && <EvalDashboard />}
           {tab === 'metrics' && <MetricsPanel />}
           {tab === 'memory' && <MemoryPanel />}

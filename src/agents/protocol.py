@@ -15,6 +15,7 @@ from typing import Optional
 FINISH = "finish"
 CALL_SKILL = "call_skill"
 CALL_AGENT = "call_agent"
+CALL_MCP = "call_mcp"
 
 _FENCED = re.compile(r"```(?:json)?\s*(\{.*?\})\s*```", re.DOTALL)
 

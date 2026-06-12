@@ -210,10 +210,12 @@ thin Python wrapper adding the agent-facing API + rotation-aware checks.
 - [ ] **Capability grants on the ledger** as a distinct action type (`Action.GRANT/REVOKE` defined; wired into the swarm in 3.2/3.3).
 - [ ] **External anchoring (optional, behind flag):** every N blocks, post the Merkle root to an RFC 3161 timestamp service. *(Deferred — additive.)*
 
-### 3.5 MCP Integration
+### 3.5 MCP Integration — ✅ COMPLETE
 
-- [ ] `src/agents/mcp_client.py` — agents can call any registered MCP tool as if it were a skill.
-- [ ] MCP tool invocations are also signed and logged.
+- [x] `src/agents/mcp.py` — `MCPClient` interface + `LocalMCPClient` (real in-process tools: `calc`, `word_count`, `uppercase`). Agents call tools via the `call_mcp` action; tools are listed in the prompt alongside skills.
+- [x] MCP tool invocations are signed + logged as `MCP_TOOL` ledger blocks; honor the kill switch (skipped in dry-run).
+- [x] API: `GET /api/mcp/tools`, `POST /api/mcp/call`. Frontend: **MCP tab** — list tools, call one with JSON args, see the result.
+- [ ] Real stdio/HTTP MCP servers behind the same interface (via the `mcp` SDK) — *extension point; the integration layer is done.* Tests: `tests/test_mcp.py` (9) + API.
 
 **Phase 3 exit criteria:** a router decomposes "research X and write a report", delegates to specialists with signed capability tokens, every step is on the ledger, the ledger verifies cleanly, and a tampered block is detected by `verify_chain()`.
 

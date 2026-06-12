@@ -255,3 +255,18 @@ def test_prometheus_endpoint():
     text = client.get("/metrics").text
     assert "swarm_tasks_total" in text
     assert "llm_tokens_total" in text
+
+
+# --- MCP tools -----------------------------------------------------------
+
+
+def test_mcp_list_and_call():
+    tools = client.get("/api/mcp/tools").json()["tools"]
+    names = {t["name"] for t in tools}
+    assert {"calc", "word_count", "uppercase"} <= names
+
+    res = client.post("/api/mcp/call", json={"tool": "calc", "args": {"expression": "10 / 2"}}).json()
+    assert res["ok"] is True and res["result"] == 5.0
+
+    bad = client.post("/api/mcp/call", json={"tool": "nope", "args": {}}).json()
+    assert bad["ok"] is False

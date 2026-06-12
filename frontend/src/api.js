@@ -48,3 +48,7 @@ export const getEvalRuns = () => fetch('/api/eval/runs').then(json)
 
 // observability
 export const getMetrics = () => fetch('/api/metrics').then(json)
+
+// MCP tools
+export const getMcpTools = () => fetch('/api/mcp/tools').then(json)
+export const callMcpTool = (tool, args) => post('/api/mcp/call', { tool, args })

@@ -30,12 +30,13 @@ from llm.gateway import LLMClient, Message
 from sandbox import Capabilities, SecretsBroker, run as sandbox_run
 
 from .budget import BudgetTracker, charge_for_response
-from .protocol import CALL_AGENT, CALL_SKILL, FINISH, parse_action
+from .protocol import CALL_AGENT, CALL_MCP, CALL_SKILL, FINISH, parse_action
 
 ACTION_INSTRUCTIONS = """Reason step by step about the goal, then emit exactly one action as a JSON object in a ```json code block. Available actions:
 - {"action": "call_skill", "skill_id": "<id>", "args": {...}} — run a skill from your library.
+- {"action": "call_mcp", "tool": "<name>", "args": {...}} — call an external MCP tool.
 - {"action": "finish", "result": "<answer>", "success": true} — complete the task.
-Only call skills listed as available. Keep all args JSON-serializable."""
+Only call skills/tools listed as available. Keep all args JSON-serializable."""
 
 DEFAULT_ROLE = "You are {name}, a specialist agent in the Athena swarm."
 
@@ -87,6 +88,7 @@ class BaseAgent:
         max_tokens: int = 1024,
         checkpoint_dir: Optional[str] = None,
         budget: Optional[BudgetTracker] = None,
+        mcp_client=None,
     ) -> None:
         self.identity = identity
         self.llm = llm
@@ -94,6 +96,7 @@ class BaseAgent:
         self.memory = memory
         self.secrets_broker = secrets_broker
         self.budget = budget
+        self.mcp_client = mcp_client
         self.name = name
         # A provided prompt is used verbatim (so specialists can include their
         # own JSON examples without str.format choking on the braces).
@@ -219,6 +222,13 @@ class BaseAgent:
                             "error": obs.get("error"),
                         },
                     )
+                elif atype == CALL_MCP:
+                    obs = self._call_mcp(action)
+                    step["observation"] = obs
+                    self._log(
+                        Action.MCP_TOOL,
+                        {"tool": action.get("tool"), "args": action.get("args"), "ok": obs.get("ok")},
+                    )
                 elif atype == CALL_AGENT:
                     self._log(Action.CALL_AGENT, {"target": action.get("agent_id")})
                     step["observation"] = {
@@ -260,6 +270,13 @@ class BaseAgent:
             "killed_reason": res.killed_reason,
         }
 
+    def _call_mcp(self, action: dict) -> dict:
+        if self.mcp_client is None:
+            return {"ok": False, "error": "no MCP client configured"}
+        if safety.is_dry_run():
+            return {"ok": True, "result": "[dry-run] MCP call skipped"}
+        return self.mcp_client.call_tool(action.get("tool"), action.get("args") or {})
+
     def _retrieve_skills(self, goal: str) -> dict:
         if self.memory is None:
             return {}
@@ -288,6 +305,12 @@ class BaseAgent:
                 lines.append(f"- {sid}: {s.get('name', sid)} — {s.get('description') or ''}")
         else:
             lines.append("AVAILABLE SKILLS: none")
+        if self.mcp_client is not None:
+            tools = self.mcp_client.list_tools()
+            if tools:
+                lines.append("AVAILABLE MCP TOOLS:")
+                for t in tools:
+                    lines.append(f"- {t.name}: {t.description} args={t.input_schema}")
         if scratchpad:
             lines.append("HISTORY:")
             for step in scratchpad:

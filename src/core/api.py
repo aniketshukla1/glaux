@@ -30,7 +30,15 @@ from starlette.concurrency import run_in_threadpool
 from core.observability import METRICS, log_json
 
 import safety
-from agents import Budget, Reflector, Router, Swarm, coder_agent, researcher_agent
+from agents import (
+    Budget,
+    Reflector,
+    Router,
+    Swarm,
+    coder_agent,
+    default_local_client,
+    researcher_agent,
+)
 from core.ledger import Ledger
 from identity import AgentIdentity
 from eval import EvalHarness, EvalRun, lift, load_bench
@@ -59,6 +67,7 @@ class _State:
         self.memory_dir = tempfile.mkdtemp(prefix="athena-mem-")
         self.memory = MemoryManager(self.memory_dir)
         self.skills = SkillLibrary(self.memory.procedural)
+        self.mcp = default_local_client()
         self.eval_runs: list[EvalRun] = []
         self.approval_mode = "auto"  # auto | gated (gated => human approves synthesized skills)
         self.reset_ledger()
@@ -81,9 +90,11 @@ class _State:
 
     def build_swarm(self) -> Swarm:
         router = Router(identity=self.identities["router"], llm=self.llm, ledger=self.ledger)
-        coder = coder_agent(identity=self.identities["coder"], llm=self.llm, ledger=self.ledger)
+        coder = coder_agent(
+            identity=self.identities["coder"], llm=self.llm, ledger=self.ledger, mcp_client=self.mcp
+        )
         researcher = researcher_agent(
-            identity=self.identities["researcher"], llm=self.llm, ledger=self.ledger
+            identity=self.identities["researcher"], llm=self.llm, ledger=self.ledger, mcp_client=self.mcp
         )
         reflector = Reflector(identity=self.identities["reflector"], llm=self.llm, ledger=self.ledger)
         return Swarm(
@@ -382,6 +393,26 @@ def set_approval(req: ApprovalModeRequest) -> dict:
         raise HTTPException(status_code=400, detail=f"invalid mode {req.mode!r}")
     STATE.approval_mode = req.mode
     return {"mode": STATE.approval_mode}
+
+
+# --- MCP tools -----------------------------------------------------------
+
+
+class MCPCallRequest(BaseModel):
+    tool: str
+    args: Optional[dict] = None
+
+
+@app.get("/api/mcp/tools")
+def mcp_tools() -> dict:
+    return {"tools": [t.to_dict() for t in STATE.mcp.list_tools()]}
+
+
+@app.post("/api/mcp/call")
+def mcp_call(req: MCPCallRequest) -> dict:
+    result = STATE.mcp.call_tool(req.tool, req.args or {})
+    METRICS.inc("mcp_calls_total", outcome="ok" if result.get("ok") else "error")
+    return result
 
 
 # --- observability -------------------------------------------------------
