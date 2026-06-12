@@ -19,8 +19,10 @@ from .budget import BudgetTracker, charge_for_response
 from .protocol import extract_json
 
 ROUTER_SYSTEM = """You are the router for the Athena swarm. Decompose the user's
-directive into a minimal plan of subtasks. Respond with a single JSON object in a
-```json block of the form:
+directive into the FEWEST steps that fully complete it — prefer a single step,
+and only add steps when the directive has genuinely distinct phases (e.g. build
+something AND separately explain/verify it). Do not split a simple task. Respond
+with a single JSON object in a ```json block of the form:
 {"plan": [{"id": "s1", "role": "<role>", "task": "<what to do>", "depends_on": []}]}
 Use only the provided roles. `depends_on` lists ids of steps that must finish first."""
 

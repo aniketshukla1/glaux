@@ -108,6 +108,22 @@ def test_router_parses_and_signs_plan():
     assert any(b["action_type"] == "PLAN" for b in led.blocks())
 
 
+def test_demo_router_emits_minimal_plans():
+    from llm.demo import DemoLLM
+
+    def roles_for(directive):
+        r = Router(identity=AgentIdentity.generate(), llm=DemoLLM())
+        return [s.role for s in r.plan(directive, roles=["coder", "researcher"]).steps]
+
+    # a single specialist when one role covers it
+    assert roles_for("Compute the sum of 12, 30 and 8") == ["coder"]
+    assert roles_for("Reverse a string") == ["coder"]
+    assert roles_for("Summarize how transformers work") == ["researcher"]
+    assert roles_for("What is the capital of France?") == ["researcher"]
+    # split only when the task has distinct do-it + explain-it phases
+    assert roles_for("Reverse a string and explain how it works") == ["coder", "researcher"]
+
+
 def test_topo_sort_orders_dependencies():
     steps = [
         Step("s2", "researcher", "summarize", ["s1"]),
