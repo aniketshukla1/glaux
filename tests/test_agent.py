@@ -72,10 +72,20 @@ def test_unknown_skill_is_reported_not_crashed():
     assert "unknown skill" in res.steps[0]["observation"]["error"]
 
 
-def test_max_iterations_without_finish():
-    # always calls an unknown skill, never finishes
-    llm = ScriptedLLM(handler=lambda m, s: _call("ghost", n=1))
-    res = _agent(llm, max_iterations=3).run("loop forever", skills={})
+def test_repeated_failing_action_aborts():
+    # qwen-style loop: keeps calling a skill that doesn't exist
+    llm = ScriptedLLM(handler=lambda m, s: _call("slicing", x=1))
+    res = _agent(llm, max_iterations=10).run("reverse a string", skills={})
+    assert not res.success
+    assert "aborted" in res.result
+    assert res.iterations <= 3  # stopped by the loop guard, not after 10
+
+
+def test_max_iterations_with_progress_but_no_finish():
+    # calls a real skill every turn (progresses) but never finishes -> max iters
+    skills = {"noop": {"code": "def run():\n    return 1\n", "caps": {}, "entrypoint": "run"}}
+    llm = ScriptedLLM(handler=lambda m, s: _call("noop"))
+    res = _agent(llm, max_iterations=3).run("loop", skills=skills)
     assert not res.success
     assert res.iterations == 3
     assert "max iterations" in res.result

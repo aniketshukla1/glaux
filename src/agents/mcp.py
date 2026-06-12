@@ -65,7 +65,8 @@ class LocalMCPClient:
     def call_tool(self, name: str, args: dict) -> dict:
         entry = self._tools.get(name)
         if entry is None:
-            return {"ok": False, "error": f"unknown tool {name!r}"}
+            available = list(self._tools)
+            return {"ok": False, "error": f"unknown tool {name!r}. Available tools: {available}"}
         _tool, fn = entry
         try:
             return {"ok": True, "result": fn(**(args or {}))}

@@ -36,7 +36,9 @@ ACTION_INSTRUCTIONS = """Reason step by step about the goal, then emit exactly o
 - {"action": "call_skill", "skill_id": "<id>", "args": {...}} — run a skill from your library.
 - {"action": "call_mcp", "tool": "<name>", "args": {...}} — call an external MCP tool.
 - {"action": "finish", "result": "<answer>", "success": true} — complete the task.
-Only call skills/tools listed as available. Keep all args JSON-serializable."""
+Only call skills/tools that are listed as available — never invent an id. If no
+skill or tool fits, just answer directly and finish. Do not repeat an action that
+already failed. Keep all args JSON-serializable."""
 
 DEFAULT_ROLE = "You are {name}, a specialist agent in the Athena swarm."
 
@@ -83,6 +85,7 @@ class BaseAgent:
         name: str = "agent",
         system_prompt: Optional[str] = None,
         max_iterations: int = 8,
+        max_repeats: int = 3,
         temperature: float = 0.0,
         seed: Optional[int] = None,
         max_tokens: int = 1024,
@@ -106,6 +109,7 @@ class BaseAgent:
             else DEFAULT_ROLE.format(name=name) + "\n" + ACTION_INSTRUCTIONS
         )
         self.max_iterations = max_iterations
+        self.max_repeats = max_repeats
         self.temperature = temperature
         self.seed = seed
         self.max_tokens = max_tokens
@@ -160,6 +164,7 @@ class BaseAgent:
             "prompt_hashes": [],
             "skills_offered": sorted(available.keys()),
         }
+        repeats: dict[str, int] = {}
 
         for i in range(start_iter, self.max_iterations):
             # Cost/budget guard: stop cleanly *before* spending more.
@@ -237,6 +242,28 @@ class BaseAgent:
                 else:
                     step["observation"] = {"error": f"unknown action {atype!r}"}
 
+            # Loop guard: abort if the agent keeps repeating a non-progressing
+            # action (e.g. calling a skill that doesn't exist). Prevents real
+            # models from burning iterations/tokens on a stuck loop.
+            obs = step.get("observation")
+            progressed = isinstance(obs, dict) and bool(obs.get("ok"))
+            if not progressed:
+                sig = self._action_signature(action)
+                repeats[sig] = repeats.get(sig, 0) + 1
+                if repeats[sig] >= self.max_repeats:
+                    self._log(
+                        Action.OBSERVATION,
+                        {"aborted": True, "reason": f"repeated {sig!r} {repeats[sig]}x"},
+                    )
+                    return AgentResult(
+                        False,
+                        f"aborted: repeated a non-progressing action ({sig}) {repeats[sig]} times",
+                        scratchpad,
+                        i + 1,
+                        reproducibility=repro,
+                        cost=self._cost(),
+                    )
+
             self._save_checkpoint(task_id, scratchpad, i + 1, goal)
 
         return AgentResult(
@@ -249,11 +276,28 @@ class BaseAgent:
     def _cost(self) -> dict:
         return self.budget.snapshot() if self.budget is not None else {}
 
+    @staticmethod
+    def _action_signature(action: Optional[dict]) -> str:
+        if not action:
+            return "no_action"
+        atype = action.get("action")
+        if atype == CALL_SKILL:
+            return f"call_skill:{action.get('skill_id')}"
+        if atype == CALL_MCP:
+            return f"call_mcp:{action.get('tool')}"
+        return str(atype)
+
     def _run_skill(self, available: dict, action: dict) -> dict:
         skill_id = action.get("skill_id")
         skill = available.get(skill_id)
         if not skill:
-            return {"ok": False, "error": f"unknown skill {skill_id!r}"}
+            avail = list(available.keys())
+            hint = (
+                f" Available skills: {avail}."
+                if avail
+                else " No skills are available — answer the task yourself and finish."
+            )
+            return {"ok": False, "error": f"unknown skill {skill_id!r}.{hint}"}
         caps = _caps_from_dict(skill.get("caps") or {})
         res = sandbox_run(
             skill["code"],
@@ -304,7 +348,7 @@ class BaseAgent:
             for sid, s in available.items():
                 lines.append(f"- {sid}: {s.get('name', sid)} — {s.get('description') or ''}")
         else:
-            lines.append("AVAILABLE SKILLS: none")
+            lines.append("AVAILABLE SKILLS: none (do not use call_skill)")
         if self.mcp_client is not None:
             tools = self.mcp_client.list_tools()
             if tools:
