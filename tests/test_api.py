@@ -10,6 +10,7 @@ pytest.importorskip("fastapi")
 from fastapi.testclient import TestClient  # noqa: E402
 
 from core.api import STATE, app  # noqa: E402
+from core.observability import METRICS  # noqa: E402
 
 client = TestClient(app)
 
@@ -19,6 +20,7 @@ def _fresh_state():
     client.delete("/api/ledger")
     client.delete("/api/memory")
     STATE.eval_runs.clear()
+    METRICS.reset()
     client.post("/api/safety", json={"mode": "live"})
     client.post("/api/approval", json={"mode": "auto"})
     yield
@@ -231,3 +233,25 @@ def test_invalid_approval_mode_rejected():
 
 def test_approve_nonexistent_skill_404():
     assert client.post("/api/skills/nope/approve").status_code == 404
+
+
+# --- observability -------------------------------------------------------
+
+
+def test_metrics_update_after_dispatch_and_eval():
+    client.post("/api/task", json={"directive": "build a function that reverses a string"})
+    client.post("/api/eval/run")
+    m = client.get("/api/metrics").json()
+    assert m["tasks_total"] >= 1
+    assert m["tasks_success"] >= 1
+    assert m["llm_calls"] > 0
+    assert m["tokens_total"] > 0
+    assert m["eval_runs"] == 1
+    assert m["skills_synthesized"] >= 1  # autonomous synthesis happened
+
+
+def test_prometheus_endpoint():
+    client.post("/api/task", json={"directive": "do something"})
+    text = client.get("/metrics").text
+    assert "swarm_tasks_total" in text
+    assert "llm_tokens_total" in text

@@ -18,11 +18,13 @@ import AgentsPanel from './components/AgentsPanel.jsx'
 import MemoryPanel from './components/MemoryPanel.jsx'
 import SkillLibrary from './components/SkillLibrary.jsx'
 import EvalDashboard from './components/EvalDashboard.jsx'
+import MetricsPanel from './components/MetricsPanel.jsx'
 
 const TABS = [
   { key: 'feed', label: '⌁ Swarm Feed' },
   { key: 'skills', label: '⚒ Skills' },
   { key: 'eval', label: '📊 Eval' },
+  { key: 'metrics', label: '📈 Metrics' },
   { key: 'memory', label: '⛁ Memory' },
   { key: 'roster', label: '✦ Roster' },
 ]
@@ -199,6 +201,7 @@ export default function App() {
           {tab === 'feed' && <SwarmFeed blocks={ledger.blocks} />}
           {tab === 'skills' && <SkillLibrary />}
           {tab === 'eval' && <EvalDashboard />}
+          {tab === 'metrics' && <MetricsPanel />}
           {tab === 'memory' && <MemoryPanel />}
           {tab === 'roster' && <AgentsPanel />}
         </div>

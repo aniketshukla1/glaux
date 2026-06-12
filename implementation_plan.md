@@ -282,11 +282,11 @@ This is what most "agent platforms" never build. Without it, the skill library d
 - [ ] REST endpoints for skill list + eval reports (Phase 4).
 - [ ] Auth: HMAC on every request (dashboard shared secret, separate from agent keypairs).
 
-### 5.3 Observability
+### 5.3 Observability — 🟡 IN PROGRESS
 
-- [ ] **Prometheus metrics:** `swarm_tasks_total{outcome}`, `swarm_task_duration_seconds`, `skill_invocations_total{skill_id,outcome}`, `llm_tokens_total{model,direction}`, `llm_cost_usd_total`.
-- [ ] **OpenTelemetry traces:** one span per agent step, one span per skill invocation, one root span per task. Attributes include `agent_id`, `block_hash`.
-- [ ] **Structured logs:** JSON to stdout, fields include `task_id`, `agent_id`, `block_index`.
+- [x] **Prometheus metrics** (`src/core/observability.py`, scrapeable at `/metrics`): `swarm_tasks_total{outcome}`, `swarm_task_duration_seconds_{sum,count}`, `llm_calls_total`, `llm_tokens_total`, `llm_cost_usd_total`, `skills_synthesized_total`, `eval_runs_total`, `eval_pass_rate`. Plus `/api/metrics` (JSON KPIs) and a **Metrics dashboard tab**.
+- [x] **Structured logs:** one JSON line per task/eval to stdout (`log_json`).
+- [ ] **OpenTelemetry traces** — one span per agent step / skill / task with `agent_id` + `block_hash`. *(Deferred — needs a collector to be useful.)*
 
 ### 5.4 AthenaDB HTTP Mode (defer-or-commit decision lives here)
 

@@ -17,13 +17,17 @@ from __future__ import annotations
 import os
 import shutil
 import tempfile
+import time
 from pathlib import Path
 from typing import Optional
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel
 from starlette.concurrency import run_in_threadpool
+
+from core.observability import METRICS, log_json
 
 import safety
 from agents import Budget, Reflector, Router, Swarm, coder_agent, researcher_agent
@@ -214,8 +218,28 @@ async def run_task(req: TaskRequest) -> dict:
     before = len(STATE.ledger)
     swarm = STATE.build_swarm()
     budget = Budget.from_dict(req.budget)
+    t0 = time.monotonic()
     result = await run_in_threadpool(lambda: swarm.run(req.directive, budget=budget))
+    elapsed = time.monotonic() - t0
     new_blocks = [STATE.ledger.block(i) for i in range(before, len(STATE.ledger))]
+
+    outcome = "success" if result.success else ("budget_halt" if result.budget_halt else "incomplete")
+    METRICS.inc("swarm_tasks_total", outcome=outcome)
+    METRICS.observe_duration("swarm_task_duration", elapsed)
+    METRICS.inc("llm_calls_total", result.cost.get("llm_calls", 0))
+    METRICS.inc("llm_tokens_total", result.cost.get("total_tokens", 0))
+    METRICS.inc("llm_cost_usd_total", result.cost.get("usd", 0.0))
+    for s in result.synthesized:
+        if s.get("ok"):
+            METRICS.inc("skills_synthesized_total")
+    log_json(
+        "task",
+        outcome=outcome,
+        blocks=len(new_blocks),
+        duration_s=round(elapsed, 3),
+        cost=result.cost,
+        synthesized=len(result.synthesized),
+    )
     return {
         "success": result.success,
         "final": result.final,
@@ -304,6 +328,8 @@ async def synthesize_skill(req: SynthesizeRequest) -> dict:
     synth = SkillSynthesizer(STATE.llm)
     res = await run_in_threadpool(synth.synthesize, req.task)
     stored = STATE.skills.add_candidate(res.candidate) if res.ok else None
+    if stored is not None:
+        METRICS.inc("skills_synthesized_total")
     return {
         "ok": res.ok,
         "reason": res.reason,
@@ -358,6 +384,34 @@ def set_approval(req: ApprovalModeRequest) -> dict:
     return {"mode": STATE.approval_mode}
 
 
+# --- observability -------------------------------------------------------
+
+
+@app.get("/metrics", response_class=PlainTextResponse)
+def prometheus_metrics() -> str:
+    return METRICS.render_prometheus()
+
+
+@app.get("/api/metrics")
+def metrics_json() -> dict:
+    m = METRICS
+    duration_count = m.value("swarm_task_duration_seconds_count")
+    avg = (m.value("swarm_task_duration_seconds_sum") / duration_count) if duration_count else 0.0
+    return {
+        "tasks_total": m.total("swarm_tasks_total"),
+        "tasks_success": m.value("swarm_tasks_total", outcome="success"),
+        "tasks_incomplete": m.value("swarm_tasks_total", outcome="incomplete"),
+        "tasks_budget_halt": m.value("swarm_tasks_total", outcome="budget_halt"),
+        "task_duration_avg_s": round(avg, 3),
+        "llm_calls": m.value("llm_calls_total"),
+        "tokens_total": m.value("llm_tokens_total"),
+        "usd_total": round(m.value("llm_cost_usd_total"), 6),
+        "skills_synthesized": m.value("skills_synthesized_total"),
+        "eval_runs": m.value("eval_runs_total"),
+        "last_pass_rate": m.value("eval_pass_rate"),
+    }
+
+
 # --- evaluation harness --------------------------------------------------
 
 
@@ -368,6 +422,9 @@ async def run_eval() -> dict:
     previous = STATE.eval_runs[-1] if STATE.eval_runs else None
     run = await run_in_threadpool(harness.run_suite, cases)
     STATE.eval_runs.append(run)
+    METRICS.inc("eval_runs_total")
+    METRICS.set("eval_pass_rate", run.pass_rate)
+    log_json("eval", passed=run.passed, total=run.total, pass_rate=round(run.pass_rate, 3))
     return {"run": run.to_dict(), "lift": lift(run, previous)}
 
 

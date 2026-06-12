@@ -45,3 +45,6 @@ export const setApproval = (mode) => post('/api/approval', { mode })
 // eval harness
 export const runEval = () => post('/api/eval/run', {})
 export const getEvalRuns = () => fetch('/api/eval/runs').then(json)
+
+// observability
+export const getMetrics = () => fetch('/api/metrics').then(json)
