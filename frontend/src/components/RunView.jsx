@@ -1,10 +1,11 @@
-import React, { useMemo, useState } from 'react'
+import React, { useMemo, useRef, useState } from 'react'
 import {
   Sparkles, ArrowUp, Compass, Code2, Search, ShieldCheck, Wrench, Terminal,
   Check, AlertTriangle, ChevronRight, Loader2, GraduationCap, BadgeCheck,
-  Plus, Coins, Cpu,
+  Plus, Coins, Cpu, Mic, Volume2, VolumeX,
 } from 'lucide-react'
 import { ROLE_META, short, buildTimeline } from '../lib/blocks.js'
+import { recognitionSupported, createRecognizer, ttsSupported, speak, stopSpeaking } from '../lib/speech.js'
 
 const ROLE_ICON = { router: Compass, coder: Code2, researcher: Search, reflector: ShieldCheck, agent: Cpu }
 const ACT_ICON = { tool: Wrench, skill: Terminal, check: Check, alert: AlertTriangle }
@@ -136,11 +137,31 @@ function PlanCard({ item }) {
 function ResultCard({ result, verification }) {
   const ok = result.success
   const c = result.cost || {}
+  const [speaking, setSpeaking] = useState(false)
+  const canSpeak = ttsSupported() && !!result.final
+  const toggleSpeak = () => {
+    if (speaking) {
+      stopSpeaking()
+      setSpeaking(false)
+      return
+    }
+    if (speak(result.final, { onEnd: () => setSpeaking(false) })) setSpeaking(true)
+  }
   return (
     <div className="card p-5 animate-fade-up" style={{ borderColor: ok ? 'rgb(var(--accent) / 0.4)' : undefined }}>
       <div className="flex items-center gap-2 mb-2">
         <BadgeCheck className={`w-5 h-5 ${ok ? 'text-accent' : 'text-amber-400'}`} />
         <span className="text-faint text-xs uppercase tracking-wide">{ok ? 'Result' : 'Incomplete'}</span>
+        {canSpeak && (
+          <button
+            onClick={toggleSpeak}
+            className="ml-auto btn p-1.5"
+            aria-label={speaking ? 'Stop reading' : 'Read aloud'}
+            title={speaking ? 'Stop reading' : 'Read aloud'}
+          >
+            {speaking ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
+          </button>
+        )}
       </div>
       <p className="text-fg text-lg leading-relaxed">{result.final || '—'}</p>
       {result.budget_halt && (
@@ -166,9 +187,32 @@ function ResultCard({ result, verification }) {
 
 function Hero({ onDispatch }) {
   const [input, setInput] = useState('')
+  const [listening, setListening] = useState(false)
+  const recRef = useRef(null)
   const submit = (e) => {
     e.preventDefault()
     if (input.trim()) onDispatch(input.trim())
+  }
+  const toggleMic = () => {
+    if (listening) {
+      recRef.current?.stop()
+      return
+    }
+    const rec = createRecognizer({
+      onResult: (text, isFinal) => {
+        setInput(text)
+        if (isFinal && text.trim()) {
+          rec.stop()
+          onDispatch(text.trim()) // dictation runs the task hands-free
+        }
+      },
+      onError: () => setListening(false),
+      onEnd: () => setListening(false),
+    })
+    if (!rec) return
+    recRef.current = rec
+    setListening(true)
+    rec.start()
   }
   return (
     <div className="min-h-[58vh] flex flex-col items-center justify-center text-center animate-fade-in">
@@ -185,10 +229,25 @@ function Hero({ onDispatch }) {
           <input
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder="e.g. summarize how transformers work"
+            placeholder={listening ? 'Listening…' : 'e.g. summarize how transformers work'}
             className="flex-1 bg-transparent outline-none text-fg placeholder-faint py-2"
             autoFocus
           />
+          {recognitionSupported() && (
+            <button
+              type="button"
+              onClick={toggleMic}
+              className={`p-2.5 rounded-lg border transition ${
+                listening
+                  ? 'border-rose-500/50 text-rose-400 bg-rose-500/10 animate-pulse'
+                  : 'border-line/16 text-muted hover:text-fg'
+              }`}
+              aria-label={listening ? 'Stop dictation' : 'Dictate'}
+              title={listening ? 'Stop' : 'Speak your task'}
+            >
+              <Mic className="w-5 h-5" />
+            </button>
+          )}
           <button type="submit" disabled={!input.trim()} className="btn-accent p-2.5 disabled:opacity-40" aria-label="Run">
             <ArrowUp className="w-5 h-5" />
           </button>
