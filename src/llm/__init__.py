@@ -2,6 +2,7 @@
 
 from .gateway import AnthropicClient, LLMClient, LLMResponse, Message, ScriptedLLM
 from .ollama import OllamaClient, ollama_status
+from .localmodel import LocalModelError, LocalModelManager, detect_format, plan_runtime
 from .providers import (
     PROVIDERS,
     LLMError,
@@ -29,4 +30,8 @@ __all__ = [
     "hf_runtimes",
     "make_client",
     "key_available",
+    "LocalModelManager",
+    "LocalModelError",
+    "detect_format",
+    "plan_runtime",
 ]

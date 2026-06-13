@@ -357,6 +357,53 @@ def test_local_provider_needs_no_key():
     assert r.status_code == 200 and r.json()["backend"] == "lmstudio"
 
 
+# --- local model files ---------------------------------------------------
+
+
+def test_local_model_plan_detects_gguf(tmp_path):
+    gguf = tmp_path / "tiny.gguf"
+    gguf.write_bytes(b"\x00")
+    plan = client.post("/api/llm/local/plan", json={"path": str(gguf)}).json()
+    assert plan["format"] == "gguf" and plan["path"] == str(gguf)
+
+
+def test_local_model_missing_path_400():
+    r = client.post("/api/llm/local", json={"path": "/no/such/model.gguf"})
+    assert r.status_code == 400 and "not found" in r.json()["detail"]
+
+
+def test_local_model_load_serves_and_unloads(tmp_path, monkeypatch):
+    import pathlib
+    import sys
+
+    fixture = pathlib.Path(__file__).parent / "fixtures" / "fake_openai_server.py"
+
+    def fake_plan(path):
+        return {
+            "format": "gguf", "runtime": "stub", "available": True, "model": path.stem,
+            "cmd": lambda port: [sys.executable, str(fixture), "--port", str(port)],
+        }
+
+    monkeypatch.setattr("llm.localmodel.plan_runtime", fake_plan)
+    gguf = tmp_path / "mymodel.gguf"
+    gguf.write_bytes(b"\x00")
+    try:
+        r = client.post("/api/llm/local", json={"path": str(gguf)})
+        assert r.status_code == 200, r.text
+        body = r.json()
+        assert body["backend"] == "localmodel"
+        assert body["model_id"] == "local:mymodel"
+        assert body["local_model"]["running"] is True
+        # health + status reflect the running local model
+        assert client.get("/api/health").json()["backend"] == "localmodel"
+        assert client.get("/api/llm").json()["local_model"]["running"] is True
+        # unload switches back to demo and stops the server
+        assert client.delete("/api/llm/local").json()["backend"] == "demo"
+        assert client.get("/api/llm").json()["local_model"]["running"] is False
+    finally:
+        STATE.local_model.stop()
+
+
 def test_switch_to_ollama_respects_reachability():
     status = client.get("/api/llm").json()["ollama"]
     model = status["models"][0] if status["models"] else "llama3.2"

@@ -93,6 +93,14 @@ def _make_llm(config: dict):
             return AnthropicClient(model=model or "claude-sonnet-4-6")
         except Exception:
             return DemoLLM()
+    if backend == "localmodel":
+        # a model file served locally; the manager owns the process, we just talk to it
+        from llm.providers import OpenAICompatibleClient
+
+        base = config.get("base_url")
+        if not base:
+            return DemoLLM()
+        return OpenAICompatibleClient(base_url=base, model=model or "local", provider="local", api_key=None)
     # any OpenAI-compatible provider in the catalog (or "custom" with a base_url)
     try:
         from llm.providers import make_client
@@ -149,6 +157,9 @@ class _State:
         self.skills = SkillLibrary(self.memory.procedural)
         self.mcp = MCPRegistry(builtin=default_local_client(), config_path=_mcp_config_path())
         self.mcp.load(connect=True)
+        from llm.localmodel import LocalModelManager
+
+        self.local_model = LocalModelManager()
         self.eval_runs: list[EvalRun] = []
         self.approval_mode = "auto"  # auto | gated (gated => human approves synthesized skills)
         self.llm_config = _default_llm_config()
@@ -197,6 +208,7 @@ async def _lifespan(_app):
     WS.set_loop(asyncio.get_running_loop())
     yield
     STATE.mcp.close_all()
+    STATE.local_model.stop()
 
 
 app = FastAPI(title="Athena Swarm API", version="0.2.0", lifespan=_lifespan)
@@ -565,6 +577,8 @@ def get_llm() -> dict:
         "providers": provider_catalog(),
         # ways to run any Hugging Face model (hosted router or a local server)
         "hf_runtimes": hf_runtimes(),
+        # local model file server (.gguf / .safetensors / .bin / .pt) managed by Athena
+        "local_model": STATE.local_model.status(),
     }
 
 
@@ -607,6 +621,46 @@ def set_llm(req: LLMRequest) -> dict:
     }
     STATE.llm = _make_llm(STATE.llm_config)
     return {"backend": backend, "model_id": STATE.llm.model_id}
+
+
+# --- local model files (.gguf / .safetensors / .bin / .pt) ---------------
+
+
+class LocalModelRequest(BaseModel):
+    path: str
+    port: Optional[int] = None
+
+
+@app.post("/api/llm/local/plan")
+def local_model_plan(req: LocalModelRequest) -> dict:
+    """Preview: what format is this, which runtime serves it, is it installed."""
+    return STATE.local_model.plan(req.path)
+
+
+@app.post("/api/llm/local")
+async def local_model_load(req: LocalModelRequest) -> dict:
+    from llm.localmodel import LocalModelError
+
+    try:
+        status = await run_in_threadpool(STATE.local_model.launch, req.path, port=req.port)
+    except LocalModelError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    STATE.llm_config = {
+        "backend": "localmodel",
+        "model": status.get("model"),
+        "api_key": None,
+        "base_url": status.get("base_url"),
+    }
+    STATE.llm = _make_llm(STATE.llm_config)
+    return {"backend": "localmodel", "model_id": STATE.llm.model_id, "local_model": status}
+
+
+@app.delete("/api/llm/local")
+def local_model_unload() -> dict:
+    STATE.local_model.stop()
+    STATE.llm_config = {"backend": "demo", "model": None, "api_key": None, "base_url": None}
+    STATE.llm = _make_llm(STATE.llm_config)
+    return {"ok": True, "backend": "demo"}
 
 
 # --- MCP tools -----------------------------------------------------------

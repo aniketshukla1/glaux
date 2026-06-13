@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react'
-import { Check, Loader2, KeyRound, Boxes, Copy, ChevronDown } from 'lucide-react'
-import { getLlm, setLlm } from '../api.js'
+import { Check, Loader2, KeyRound, Boxes, Copy, ChevronDown, HardDrive, Square } from 'lucide-react'
+import { getLlm, setLlm, loadLocalModel, unloadLocalModel } from '../api.js'
 
 const KIND_LABELS = {
   cloud: 'Frontier & major',
@@ -26,6 +26,10 @@ export default function LlmControl({ onChange }) {
   const [hfRepo, setHfRepo] = useState('')
   const [hfRuntime, setHfRuntime] = useState('hf-router')
   const [copied, setCopied] = useState(false)
+  const [lmOpen, setLmOpen] = useState(false)
+  const [lmPath, setLmPath] = useState('')
+  const [lmBusy, setLmBusy] = useState(false)
+  const [lmErr, setLmErr] = useState(null)
 
   const load = async () => {
     try {
@@ -105,6 +109,46 @@ export default function LlmControl({ onChange }) {
     setApiKey('')
     setErr(null)
     setHfOpen(false)
+  }
+
+  const lm = llm?.local_model || { status: 'idle', running: false }
+
+  const loadLocal = async () => {
+    if (!lmPath.trim()) return
+    setLmBusy(true)
+    setLmErr(null)
+    try {
+      await loadLocalModel(lmPath.trim())
+      await load()
+      onChange && onChange()
+    } catch {
+      // surface the backend's detail (install hint / load error)
+      try {
+        const r = await fetch('/api/llm/local', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ path: lmPath.trim() }),
+        })
+        const j = await r.json().catch(() => ({}))
+        setLmErr(j.detail || 'Failed to load the model.')
+      } catch {
+        setLmErr('Failed to load the model.')
+      }
+      await load()
+    } finally {
+      setLmBusy(false)
+    }
+  }
+
+  const stopLocal = async () => {
+    setLmBusy(true)
+    try {
+      await unloadLocalModel()
+      await load()
+      onChange && onChange()
+    } finally {
+      setLmBusy(false)
+    }
   }
 
   if (!llm) return <div className="text-faint text-xs">Backend unreachable.</div>
@@ -256,6 +300,48 @@ export default function LlmControl({ onChange }) {
           )}
         </div>
       )}
+
+      {/* Run a model straight from a local weights file */}
+      <div className="card p-3">
+        <button onClick={() => setLmOpen((o) => !o)} className="flex items-center gap-2 text-muted text-sm w-full">
+          <HardDrive className="w-3.5 h-3.5 text-accent" /> Run a local model file
+          {lm.running && <span className="w-1.5 h-1.5 rounded-full" style={{ background: 'rgb(52 211 153)' }} />}
+          <ChevronDown className={`w-3.5 h-3.5 ml-auto transition ${lmOpen ? 'rotate-180' : ''}`} />
+        </button>
+        {lmOpen && (
+          <div className="mt-3 space-y-2.5">
+            <p className="text-faint text-xs leading-relaxed">
+              Point at a <code className="text-muted">.gguf</code> / <code className="text-muted">.safetensors</code> /
+              <code className="text-muted"> .bin</code> / <code className="text-muted">.pt</code> file (or a model folder).
+              Athena launches the right server and runs the swarm on it — ideal for testing your own or fine-tuned models.
+            </p>
+            <input
+              value={lmPath}
+              onChange={(e) => setLmPath(e.target.value)}
+              placeholder="/path/to/model.gguf"
+              className={inputCls}
+            />
+            <div className="flex items-center gap-2">
+              <button onClick={loadLocal} disabled={lmBusy || !lmPath.trim()} className="btn-accent px-3 py-2 text-sm flex items-center gap-2 disabled:opacity-50">
+                {lmBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : <HardDrive className="w-4 h-4" />}
+                {lmBusy ? 'Loading…' : 'Load & run'}
+              </button>
+              {lm.running && (
+                <button onClick={stopLocal} disabled={lmBusy} className="btn px-3 py-2 text-sm flex items-center gap-1.5 disabled:opacity-50">
+                  <Square className="w-3.5 h-3.5" /> Stop
+                </button>
+              )}
+            </div>
+            {lm.running && (
+              <div className="text-xs" style={{ color: 'rgb(52 211 153)' }}>
+                running: {lm.runtime} · {lm.model} on :{lm.port}
+              </div>
+            )}
+            {lmErr && <div className="text-xs whitespace-pre-wrap" style={{ color: 'rgb(251 113 133)' }}>{lmErr}</div>}
+            <p className="text-faint text-xs">Loading large weights can take a while — Athena waits for the server to come up.</p>
+          </div>
+        )}
+      </div>
     </div>
   )
 }

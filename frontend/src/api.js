@@ -101,3 +101,7 @@ export const setLlm = (backend, model, apiKey, baseUrl) =>
     api_key: apiKey || null,
     base_url: baseUrl || null,
   })
+// local model files (.gguf / .safetensors / .bin / .pt)
+export const planLocalModel = (path) => request('POST', '/api/llm/local/plan', { path })
+export const loadLocalModel = (path) => request('POST', '/api/llm/local', { path })
+export const unloadLocalModel = () => request('DELETE', '/api/llm/local')
