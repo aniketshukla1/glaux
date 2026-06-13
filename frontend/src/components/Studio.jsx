@@ -1,8 +1,9 @@
 import React, { useState } from 'react'
-import { Hammer, Plug, BarChart3, Activity, Database, Users, Link2, LayoutGrid } from 'lucide-react'
+import { Hammer, Plug, BarChart3, Activity, Database, Users, Link2, LayoutGrid, CalendarClock } from 'lucide-react'
 import Drawer from './Drawer.jsx'
 import SkillLibrary from './SkillLibrary.jsx'
 import McpPanel from './McpPanel.jsx'
+import SchedulePanel from './SchedulePanel.jsx'
 import EvalDashboard from './EvalDashboard.jsx'
 import MetricsPanel from './MetricsPanel.jsx'
 import MemoryPanel from './MemoryPanel.jsx'
@@ -13,6 +14,7 @@ import SwarmFeed from './SwarmFeed.jsx'
 const TABS = [
   { key: 'skills', label: 'Skills', Icon: Hammer },
   { key: 'mcp', label: 'Tools', Icon: Plug },
+  { key: 'schedules', label: 'Schedules', Icon: CalendarClock },
   { key: 'eval', label: 'Eval', Icon: BarChart3 },
   { key: 'metrics', label: 'Metrics', Icon: Activity },
   { key: 'memory', label: 'Memory', Icon: Database },
@@ -39,6 +41,7 @@ export default function Studio({ open, onClose, ledger, blocks, onVerify }) {
       </div>
       {tab === 'skills' && <SkillLibrary />}
       {tab === 'mcp' && <McpPanel />}
+      {tab === 'schedules' && <SchedulePanel />}
       {tab === 'eval' && <EvalDashboard />}
       {tab === 'metrics' && <MetricsPanel />}
       {tab === 'memory' && <MemoryPanel />}

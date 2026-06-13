@@ -65,6 +65,10 @@ def _mcp_config_path() -> Path:
     return _athena_home() / "mcp_servers.json"
 
 
+def _schedules_path() -> Path:
+    return _athena_home() / "schedules.json"
+
+
 def _default_llm_config() -> dict:
     backend = os.environ.get("ATHENA_LLM")
     if backend is None:
@@ -160,6 +164,10 @@ class _State:
         from llm.localmodel import LocalModelManager
 
         self.local_model = LocalModelManager()
+        from core.scheduler import Scheduler
+
+        self.scheduler = Scheduler(run_fn=self._run_scheduled, store_path=_schedules_path())
+        self.scheduler.load()
         self.eval_runs: list[EvalRun] = []
         self.approval_mode = "auto"  # auto | gated (gated => human approves synthesized skills)
         self.llm_config = _default_llm_config()
@@ -180,6 +188,13 @@ class _State:
         if layer not in MEMORY_LAYERS:
             raise HTTPException(status_code=404, detail=f"unknown memory layer {layer!r}")
         return getattr(self.memory, layer)
+
+    def _run_scheduled(self, directive: str) -> dict:
+        """Run a scheduled directive through the swarm — same path as a manual
+        task, so each run is signed onto the ledger and streamed live."""
+        swarm = self.build_swarm()
+        result = swarm.run(directive, budget=Budget.from_dict(None))
+        return {"final": result.final, "ok": result.success, "cost": result.cost}
 
     def build_swarm(self) -> Swarm:
         router = Router(identity=self.identities["router"], llm=self.llm, ledger=self.ledger)
@@ -206,7 +221,9 @@ STATE = _State()
 @asynccontextmanager
 async def _lifespan(_app):
     WS.set_loop(asyncio.get_running_loop())
+    STATE.scheduler.start()
     yield
+    STATE.scheduler.stop()
     STATE.mcp.close_all()
     STATE.local_model.stop()
 
@@ -661,6 +678,55 @@ def local_model_unload() -> dict:
     STATE.llm_config = {"backend": "demo", "model": None, "api_key": None, "base_url": None}
     STATE.llm = _make_llm(STATE.llm_config)
     return {"ok": True, "backend": "demo"}
+
+
+# --- scheduled jobs (cron) -----------------------------------------------
+
+
+class ScheduleRequest(BaseModel):
+    directive: str
+    schedule: str  # cron expr | @daily/@hourly/... | "every 30m"
+
+
+class ScheduleEnableRequest(BaseModel):
+    enabled: bool
+
+
+@app.get("/api/schedules")
+def list_schedules() -> dict:
+    return {"jobs": STATE.scheduler.list(), "running": STATE.scheduler._thread is not None}
+
+
+@app.post("/api/schedules")
+def add_schedule(req: ScheduleRequest) -> dict:
+    try:
+        job = STATE.scheduler.add(req.directive, req.schedule)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return {"job": job}
+
+
+@app.delete("/api/schedules/{job_id}")
+def remove_schedule(job_id: str) -> dict:
+    if not STATE.scheduler.remove(job_id):
+        raise HTTPException(status_code=404, detail=f"unknown job {job_id!r}")
+    return {"ok": True, "jobs": STATE.scheduler.list()}
+
+
+@app.post("/api/schedules/{job_id}/enable")
+def enable_schedule(job_id: str, req: ScheduleEnableRequest) -> dict:
+    job = STATE.scheduler.set_enabled(job_id, req.enabled)
+    if job is None:
+        raise HTTPException(status_code=404, detail=f"unknown job {job_id!r}")
+    return {"job": job}
+
+
+@app.post("/api/schedules/{job_id}/run")
+async def run_schedule_now(job_id: str) -> dict:
+    job = await run_in_threadpool(STATE.scheduler.run_now, job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail=f"unknown job {job_id!r}")
+    return {"job": job}
 
 
 # --- MCP tools -----------------------------------------------------------

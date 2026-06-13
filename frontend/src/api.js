@@ -105,3 +105,11 @@ export const setLlm = (backend, model, apiKey, baseUrl) =>
 export const planLocalModel = (path) => request('POST', '/api/llm/local/plan', { path })
 export const loadLocalModel = (path) => request('POST', '/api/llm/local', { path })
 export const unloadLocalModel = () => request('DELETE', '/api/llm/local')
+
+// scheduled jobs (cron)
+export const getSchedules = () => request('GET', '/api/schedules')
+export const addSchedule = (directive, schedule) => request('POST', '/api/schedules', { directive, schedule })
+export const removeSchedule = (id) => request('DELETE', `/api/schedules/${encodeURIComponent(id)}`)
+export const enableSchedule = (id, enabled) =>
+  request('POST', `/api/schedules/${encodeURIComponent(id)}/enable`, { enabled })
+export const runSchedule = (id) => request('POST', `/api/schedules/${encodeURIComponent(id)}/run`)

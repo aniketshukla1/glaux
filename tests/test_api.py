@@ -404,6 +404,47 @@ def test_local_model_load_serves_and_unloads(tmp_path, monkeypatch):
         STATE.local_model.stop()
 
 
+# --- scheduled jobs ------------------------------------------------------
+
+
+def test_schedule_add_list_run_remove(tmp_path):
+    # keep persistence off the user's real ~/.athena during the test
+    original = STATE.scheduler.store_path
+    STATE.scheduler.store_path = tmp_path / "sched.json"
+    STATE.scheduler.jobs.clear()
+    try:
+        r = client.post("/api/schedules", json={"directive": "summarize the day", "schedule": "@daily"})
+        assert r.status_code == 200
+        job = r.json()["job"]
+        assert job["next_run"] and job["schedule"] == "@daily"
+
+        listed = client.get("/api/schedules").json()["jobs"]
+        assert any(j["id"] == job["id"] for j in listed)
+
+        # run it now → goes through the demo swarm and signs blocks onto the ledger
+        before = client.get("/api/health").json()["blocks"]
+        run = client.post(f"/api/schedules/{job['id']}/run").json()["job"]
+        assert run["last_status"] == "ok" and run["run_count"] == 1
+        assert client.get("/api/health").json()["blocks"] > before
+
+        client.post(f"/api/schedules/{job['id']}/enable", json={"enabled": False})
+        assert client.get("/api/schedules").json()["jobs"][0]["enabled"] is False
+
+        assert client.delete(f"/api/schedules/{job['id']}").status_code == 200
+        assert client.get("/api/schedules").json()["jobs"] == []
+    finally:
+        STATE.scheduler.jobs.clear()
+        STATE.scheduler.store_path = original
+
+
+def test_schedule_rejects_bad_cron():
+    assert client.post("/api/schedules", json={"directive": "x", "schedule": "not a cron"}).status_code == 400
+
+
+def test_schedule_run_unknown_404():
+    assert client.post("/api/schedules/nope/run").status_code == 404
+
+
 def test_switch_to_ollama_respects_reachability():
     status = client.get("/api/llm").json()["ollama"]
     model = status["models"][0] if status["models"] else "llama3.2"
