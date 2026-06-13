@@ -1,246 +1,158 @@
-import React, { useCallback, useEffect, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import {
-  dispatchTask,
-  getApproval,
-  getHealth,
-  getLedger,
-  getSafety,
-  resetLedger,
-  setApproval,
-  setSafety,
+  getHealth, getLedger, getAgents, getSafety, setSafety, getApproval, setApproval,
+  getAuth, dispatchTask,
 } from './api.js'
-import TaskConsole from './components/TaskConsole.jsx'
-import SwarmFeed from './components/SwarmFeed.jsx'
-import ChainAuditor from './components/ChainAuditor.jsx'
-import SafetyControl from './components/SafetyControl.jsx'
-import ApprovalControl from './components/ApprovalControl.jsx'
-import LlmControl from './components/LlmControl.jsx'
-import AgentsPanel from './components/AgentsPanel.jsx'
-import MemoryPanel from './components/MemoryPanel.jsx'
-import SkillLibrary from './components/SkillLibrary.jsx'
-import EvalDashboard from './components/EvalDashboard.jsx'
-import MetricsPanel from './components/MetricsPanel.jsx'
-import McpPanel from './components/McpPanel.jsx'
+import TopBar from './components/TopBar.jsx'
+import RunView from './components/RunView.jsx'
+import Studio from './components/Studio.jsx'
+import SettingsPanel from './components/SettingsPanel.jsx'
 
-const TABS = [
-  { key: 'feed', label: '⌁ Swarm Feed' },
-  { key: 'skills', label: '⚒ Skills' },
-  { key: 'mcp', label: '🔌 MCP' },
-  { key: 'eval', label: '📊 Eval' },
-  { key: 'metrics', label: '📈 Metrics' },
-  { key: 'memory', label: '⛁ Memory' },
-  { key: 'roster', label: '✦ Roster' },
-]
+const mergeBlocks = (a, b) => {
+  const seen = new Set(a.map((x) => x.index))
+  const merged = [...a, ...b.filter((x) => !seen.has(x.index))]
+  return merged.sort((x, y) => x.index - y.index)
+}
 
 export default function App() {
+  const [theme, setTheme] = useState(() => localStorage.getItem('athena-theme') || 'dark')
+  const [studioOpen, setStudioOpen] = useState(false)
+  const [settingsOpen, setSettingsOpen] = useState(false)
+
   const [health, setHealth] = useState(null)
   const [ledger, setLedger] = useState({ count: 0, blocks: [], verification: null })
+  const [agentsMap, setAgentsMap] = useState({})
   const [safety, setSafetyMode] = useState('live')
   const [approval, setApprovalMode] = useState('auto')
-  const [tab, setTab] = useState('feed')
-  const [loading, setLoading] = useState(false)
-  const [result, setResult] = useState(null)
+  const [auth, setAuth] = useState({ enabled: false })
   const [error, setError] = useState(null)
+
+  const [liveBlocks, setLiveBlocks] = useState([])
+  const [goal, setGoal] = useState(null)
+  const [running, setRunning] = useState(false)
+  const [result, setResult] = useState(null)
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme)
+    localStorage.setItem('athena-theme', theme)
+  }, [theme])
 
   const refresh = useCallback(async () => {
     try {
-      const [l, h, s, a] = [await getLedger(), await getHealth(), await getSafety(), await getApproval()]
+      const [l, h, a, s, ap, au] = [
+        await getLedger(), await getHealth(), await getAgents(),
+        await getSafety(), await getApproval(), await getAuth(),
+      ]
       setLedger(l)
       setHealth(h)
+      setAgentsMap(Object.fromEntries(a.agents.map((x) => [x.agent_id, x.role])))
       setSafetyMode(s.mode)
-      setApprovalMode(a.mode)
+      setApprovalMode(ap.mode)
+      setAuth(au)
       setError(null)
     } catch {
-      setError('Backend unreachable. Start it:  PYTHONPATH=src uvicorn core.api:app --port 8000')
+      setError('Backend unreachable — start it: PYTHONPATH=src uvicorn core.api:app --port 8000')
     }
   }, [])
 
-  const [streaming, setStreaming] = useState(false)
-
   useEffect(() => {
     refresh()
-    // light poll keeps the dashboard live and self-heals a stale error banner
-    // (e.g. after a backend restart) without a manual reload.
     const id = setInterval(refresh, 4000)
     return () => clearInterval(id)
   }, [refresh])
 
-  // Live block streaming over WebSocket (with reconnect).
+  // live block streaming
   useEffect(() => {
-    let ws
-    let retry
-    let closed = false
+    let ws, retry, closed = false
     const connect = () => {
       const proto = location.protocol === 'https:' ? 'wss' : 'ws'
       ws = new WebSocket(`${proto}://${location.host}/ws`)
-      ws.onopen = () => setStreaming(true)
       ws.onmessage = (e) => {
         let msg
-        try {
-          msg = JSON.parse(e.data)
-        } catch {
-          return
-        }
-        if (msg.type !== 'block') return
-        setLedger((prev) => {
-          if (prev.blocks.some((b) => b.index === msg.block.index)) return prev
-          return { ...prev, blocks: [...prev.blocks, msg.block], count: prev.count + 1 }
-        })
+        try { msg = JSON.parse(e.data) } catch { return }
+        if (msg.type === 'block') setLiveBlocks((prev) => mergeBlocks(prev, [msg.block]))
       }
-      ws.onclose = () => {
-        setStreaming(false)
-        if (!closed) retry = setTimeout(connect, 2000)
-      }
+      ws.onclose = () => { if (!closed) retry = setTimeout(connect, 2000) }
       ws.onerror = () => ws.close()
     }
     connect()
-    return () => {
-      closed = true
-      clearTimeout(retry)
-      if (ws) ws.close()
-    }
+    return () => { closed = true; clearTimeout(retry); if (ws) ws.close() }
   }, [])
 
-  const onDispatch = async (directive, budget) => {
-    setLoading(true)
-    setError(null)
+  const roleOf = useCallback((id) => agentsMap[id], [agentsMap])
+
+  const onDispatch = async (directive) => {
+    setGoal(directive)
+    setRunning(true)
     setResult(null)
+    setLiveBlocks([])
     try {
-      const r = await dispatchTask(directive, budget)
+      const r = await dispatchTask(directive)
       setResult(r)
-      setTab('feed')
+      setLiveBlocks((prev) => mergeBlocks(prev, r.new_blocks || []))
       await refresh()
     } catch (e) {
       setError(`Dispatch failed: ${e.message}`)
     } finally {
-      setLoading(false)
+      setRunning(false)
     }
   }
 
-  const onReset = async () => {
-    try {
-      await resetLedger()
-      setResult(null)
-      await refresh()
-    } catch {
-      /* ignore */
-    }
-  }
+  const onReset = () => { setGoal(null); setResult(null); setLiveBlocks([]) }
 
-  const onSafety = async (mode) => {
-    try {
-      const r = await setSafety(mode)
-      setSafetyMode(r.mode)
-    } catch {
-      /* ignore */
-    }
-  }
+  const onSafety = async (mode) => { try { setSafetyMode((await setSafety(mode)).mode) } catch {} }
+  const onApproval = async (mode) => { try { setApprovalMode((await setApproval(mode)).mode) } catch {} }
 
-  const onApproval = async (mode) => {
-    try {
-      const r = await setApproval(mode)
-      setApprovalMode(r.mode)
-    } catch {
-      /* ignore */
-    }
-  }
+  const verification = result?.verification || ledger.verification
 
   return (
-    <div className="min-h-screen p-6 max-w-7xl mx-auto">
-      <header className="flex items-center justify-between mb-6 flex-wrap gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold text-slate-100 tracking-tight">
-            Athena <span className="text-athena-accent">·</span>{' '}
-            <span className="text-slate-400 font-normal">Swarm Console</span>
-          </h1>
-          <p className="text-xs text-slate-500 mt-1">
-            Signed, sandboxed, self-improving multi-agent swarm
-          </p>
-        </div>
-        <div className="flex items-center gap-4 flex-wrap">
-          <SafetyControl mode={safety} onChange={onSafety} />
-          <ApprovalControl mode={approval} onChange={onApproval} />
-          <LlmControl onChange={refresh} />
-        </div>
-      </header>
+    <div className="min-h-screen px-5 sm:px-8 max-w-5xl mx-auto">
+      <TopBar
+        theme={theme}
+        onToggleTheme={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))}
+        onOpenStudio={() => setStudioOpen(true)}
+        onOpenSettings={() => setSettingsOpen(true)}
+        verified={ledger.verification ? ledger.verification.valid : null}
+        health={health}
+      />
 
       {error && (
-        <div className="glass p-3 mb-4 border-rose-500/40 text-rose-300 text-sm">{error}</div>
-      )}
-
-      <TaskConsole onDispatch={onDispatch} loading={loading} onReset={onReset} />
-
-      {result && (
-        <div className="glass p-4 mt-4">
-          <div className="flex items-center gap-3 mb-2 flex-wrap">
-            <span
-              className={`px-2 py-0.5 rounded text-xs font-semibold ${
-                result.success
-                  ? 'bg-emerald-500/15 text-emerald-300'
-                  : 'bg-rose-500/15 text-rose-300'
-              }`}
-            >
-              {result.success ? 'SUCCESS' : 'INCOMPLETE'}
-            </span>
-            <span className="text-sm text-slate-300">{result.final}</span>
-          </div>
-          <div className="text-xs text-slate-500">
-            plan: {result.plan.map((s) => `${s.id}:${s.role}`).join(' → ')} ·{' '}
-            {result.new_blocks.length} new signed blocks
-          </div>
-          {result.cost && Object.keys(result.cost).length > 0 && (
-            <div className="flex gap-4 text-xs mt-2 text-slate-400">
-              <span>⛂ {result.cost.llm_calls} LLM calls</span>
-              <span>{result.cost.total_tokens.toLocaleString()} tokens</span>
-              <span>~${result.cost.usd.toFixed(4)}</span>
-            </div>
-          )}
-          {result.budget_halt && (
-            <div className="mt-2 text-xs text-amber-300 border border-amber-500/40 bg-amber-500/10 rounded px-2 py-1">
-              ⛔ budget guard: {result.budget_halt}
-            </div>
-          )}
-          {result.synthesized && result.synthesized.length > 0 && (
-            <div className="mt-2 text-xs text-violet-300 border border-violet-500/40 bg-violet-500/10 rounded px-2 py-1">
-              ⚗ synthesized:{' '}
-              {result.synthesized
-                .map((s) => (s.ok ? `${s.name} (${s.status.replace('_', ' ')})` : `rejected (${s.reason})`))
-                .join(', ')}
-            </div>
-          )}
+        <div className="glass p-3 mb-4 text-sm" style={{ borderColor: 'rgb(244 63 94 / 0.4)', color: 'rgb(251 113 133)' }}>
+          {error}
         </div>
       )}
 
-      <div className="flex gap-1 mt-6 mb-4">
-        {TABS.map((t) => (
-          <button
-            key={t.key}
-            onClick={() => setTab(t.key)}
-            className={`px-4 py-2 rounded-lg text-sm border transition ${
-              tab === t.key
-                ? 'text-slate-100 border-slate-500/50 bg-slate-700/30'
-                : 'text-slate-500 border-transparent hover:text-slate-300'
-            }`}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
+      <main className="pt-2">
+        <RunView
+          blocks={liveBlocks}
+          roleOf={roleOf}
+          running={running}
+          result={result}
+          goal={goal}
+          onDispatch={onDispatch}
+          onReset={onReset}
+          verification={verification}
+        />
+      </main>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2">
-          {tab === 'feed' && <SwarmFeed blocks={ledger.blocks} streaming={streaming} />}
-          {tab === 'skills' && <SkillLibrary />}
-          {tab === 'mcp' && <McpPanel />}
-          {tab === 'eval' && <EvalDashboard />}
-          {tab === 'metrics' && <MetricsPanel />}
-          {tab === 'memory' && <MemoryPanel />}
-          {tab === 'roster' && <AgentsPanel />}
-        </div>
-        <div>
-          <ChainAuditor ledger={ledger} onVerify={refresh} />
-        </div>
-      </div>
+      <Studio
+        open={studioOpen}
+        onClose={() => setStudioOpen(false)}
+        ledger={ledger}
+        blocks={liveBlocks}
+        onVerify={refresh}
+      />
+      <SettingsPanel
+        open={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        theme={theme}
+        onSetTheme={setTheme}
+        safety={safety}
+        onSafety={onSafety}
+        approval={approval}
+        onApproval={onApproval}
+        auth={auth}
+      />
     </div>
   )
 }
