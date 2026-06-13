@@ -316,11 +316,45 @@ def test_llm_status_defaults_to_demo():
     data = client.get("/api/llm").json()
     assert data["backend"] == "demo"  # no key in tests
     assert "ollama" in data and "reachable" in data["ollama"]
-    assert set(data["backends"]) == {"demo", "ollama", "anthropic"}
+    assert set(data["native"]) == {"demo", "ollama", "anthropic"}
+    # the full OpenAI-compatible provider catalog is surfaced to the UI
+    ids = {p["id"] for p in data["providers"]}
+    assert {"openai", "openrouter", "deepseek", "sarvam", "groq", "gemini"} <= ids
+    # key values are never exposed — only presence
+    assert all("key_present" in p and "api_key" not in p for p in data["providers"])
 
 
 def test_switch_to_demo_ok():
     assert client.post("/api/llm", json={"backend": "demo"}).json()["backend"] == "demo"
+
+
+def test_provider_requires_key(monkeypatch):
+    monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
+    r = client.post("/api/llm", json={"backend": "deepseek"})
+    assert r.status_code == 400 and "DEEPSEEK_API_KEY" in r.json()["detail"]
+
+
+def test_provider_with_explicit_key_switches():
+    r = client.post("/api/llm", json={"backend": "openai", "model": "gpt-4o", "api_key": "sk-test"})
+    assert r.status_code == 200
+    assert r.json()["model_id"] == "openai:gpt-4o"
+    # the key is held in memory but never echoed back anywhere
+    assert "api_key" not in r.json()
+    assert client.get("/api/llm").json()["backend"] == "openai"
+
+
+def test_custom_provider_requires_base_url():
+    assert client.post("/api/llm", json={"backend": "custom", "model": "m"}).status_code == 400
+    r = client.post(
+        "/api/llm",
+        json={"backend": "custom", "model": "m", "base_url": "https://my.host/v1", "api_key": "k"},
+    )
+    assert r.status_code == 200 and r.json()["model_id"] == "custom:m"
+
+
+def test_local_provider_needs_no_key():
+    r = client.post("/api/llm", json={"backend": "lmstudio", "model": "local-model"})
+    assert r.status_code == 200 and r.json()["backend"] == "lmstudio"
 
 
 def test_switch_to_ollama_respects_reachability():

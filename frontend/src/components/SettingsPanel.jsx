@@ -42,7 +42,7 @@ export default function SettingsPanel({
         </div>
       </Section>
 
-      <Section icon={<Cpu className="w-4 h-4 text-muted" />} title="Model" hint="Run the swarm on a local Ollama model, Claude, or the offline demo.">
+      <Section icon={<Cpu className="w-4 h-4 text-muted" />} title="Model" hint="Run the swarm on any of 30+ providers — OpenAI, Gemini, Grok, DeepSeek, Mistral, Sarvam, Groq, OpenRouter, local models (Ollama / LM Studio / vLLM), or the offline demo.">
         <LlmControl />
       </Section>
 

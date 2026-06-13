@@ -94,4 +94,10 @@ export const reconnectMcpServer = (name) =>
 
 // LLM backend
 export const getLlm = () => request('GET', '/api/llm')
-export const setLlm = (backend, model) => request('POST', '/api/llm', { backend, model })
+export const setLlm = (backend, model, apiKey, baseUrl) =>
+  request('POST', '/api/llm', {
+    backend,
+    model: model || null,
+    api_key: apiKey || null,
+    base_url: baseUrl || null,
+  })

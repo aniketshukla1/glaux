@@ -69,12 +69,19 @@ def _default_llm_config() -> dict:
     backend = os.environ.get("ATHENA_LLM")
     if backend is None:
         backend = "anthropic" if os.environ.get("ANTHROPIC_API_KEY") else "demo"
-    return {"backend": backend, "model": os.environ.get("ATHENA_MODEL")}
+    return {
+        "backend": backend,
+        "model": os.environ.get("ATHENA_MODEL"),
+        "api_key": None,
+        "base_url": os.environ.get("ATHENA_BASE_URL"),
+    }
 
 
 def _make_llm(config: dict):
     backend = config.get("backend", "demo")
     model = config.get("model")
+    if backend == "demo":
+        return DemoLLM()
     if backend == "ollama":
         from llm.ollama import OllamaClient
 
@@ -85,8 +92,16 @@ def _make_llm(config: dict):
 
             return AnthropicClient(model=model or "claude-sonnet-4-6")
         except Exception:
-            pass
-    return DemoLLM()
+            return DemoLLM()
+    # any OpenAI-compatible provider in the catalog (or "custom" with a base_url)
+    try:
+        from llm.providers import make_client
+
+        return make_client(
+            backend, model=model, api_key=config.get("api_key"), base_url=config.get("base_url")
+        )
+    except Exception:
+        return DemoLLM()
 
 
 class WSManager:
@@ -258,8 +273,10 @@ class ApprovalModeRequest(BaseModel):
 
 
 class LLMRequest(BaseModel):
-    backend: str  # demo | ollama | anthropic
+    backend: str  # demo | ollama | anthropic | <provider id> | custom
     model: Optional[str] = None
+    api_key: Optional[str] = None  # in-memory only; never persisted or echoed back
+    base_url: Optional[str] = None  # required for "custom"
 
 
 def _skill_dict(r) -> dict:
@@ -535,22 +552,26 @@ def set_approval(req: ApprovalModeRequest) -> dict:
 @app.get("/api/llm")
 def get_llm() -> dict:
     from llm.ollama import ollama_status
+    from llm.providers import provider_catalog
 
     return {
         "backend": STATE.llm_config["backend"],
         "model": STATE.llm_config.get("model"),
         "model_id": STATE.llm.model_id,
-        "backends": ["demo", "ollama", "anthropic"],
+        # demo + native clients, then every OpenAI-compatible provider in the catalog
+        "native": ["demo", "anthropic", "ollama"],
         "anthropic_key": bool(os.environ.get("ANTHROPIC_API_KEY")),
         "ollama": ollama_status(),
+        "providers": provider_catalog(),
     }
 
 
 @app.post("/api/llm")
 def set_llm(req: LLMRequest) -> dict:
-    if req.backend not in ("demo", "ollama", "anthropic"):
-        raise HTTPException(status_code=400, detail=f"unknown backend {req.backend!r}")
-    if req.backend == "ollama":
+    from llm.providers import PROVIDERS, key_available
+
+    backend = req.backend
+    if backend == "ollama":
         from llm.ollama import ollama_status
 
         status = ollama_status()
@@ -559,12 +580,31 @@ def set_llm(req: LLMRequest) -> dict:
                 status_code=400,
                 detail=f"Ollama not reachable at {status['host']} — start it with `ollama serve`",
             )
-    if req.backend == "anthropic" and not os.environ.get("ANTHROPIC_API_KEY"):
-        raise HTTPException(status_code=400, detail="ANTHROPIC_API_KEY is not set")
+    elif backend == "anthropic":
+        if not os.environ.get("ANTHROPIC_API_KEY"):
+            raise HTTPException(status_code=400, detail="ANTHROPIC_API_KEY is not set")
+    elif backend == "demo":
+        pass
+    elif backend in PROVIDERS:
+        provider = PROVIDERS[backend]
+        if backend == "custom" and not req.base_url:
+            raise HTTPException(status_code=400, detail="custom backend requires a base_url")
+        if provider.requires_key and not key_available(backend, req.api_key):
+            raise HTTPException(
+                status_code=400,
+                detail=f"{provider.label} needs an API key — provide one or set {provider.key_env}",
+            )
+    else:
+        raise HTTPException(status_code=400, detail=f"unknown backend {backend!r}")
 
-    STATE.llm_config = {"backend": req.backend, "model": req.model}
+    STATE.llm_config = {
+        "backend": backend,
+        "model": req.model,
+        "api_key": req.api_key,
+        "base_url": req.base_url,
+    }
     STATE.llm = _make_llm(STATE.llm_config)
-    return {"backend": STATE.llm_config["backend"], "model_id": STATE.llm.model_id}
+    return {"backend": backend, "model_id": STATE.llm.model_id}
 
 
 # --- MCP tools -----------------------------------------------------------
