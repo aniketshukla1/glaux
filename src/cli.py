@@ -220,6 +220,26 @@ def cmd_open(args) -> int:
     return 0
 
 
+def _repo_root() -> Path:
+    return SRC_DIR.parent
+
+
+def cmd_desktop(args) -> int:
+    import subprocess
+
+    src_tauri = _repo_root() / "desktop" / "src-tauri"
+    if not src_tauri.is_dir():
+        print(f"Desktop app not found (expected {src_tauri}).", file=sys.stderr)
+        return 1
+    mode = "build" if args.build else "dev"
+    print(f"Launching the Athena desktop app  (cargo tauri {mode})…")
+    try:
+        return subprocess.call(["cargo", "tauri", mode], cwd=str(src_tauri))
+    except FileNotFoundError:
+        print("cargo not found — install Rust + `cargo install tauri-cli` to build the desktop app.", file=sys.stderr)
+        return 1
+
+
 def cmd_version(_args) -> int:
     print("athena 0.1")
     return 0
@@ -245,6 +265,10 @@ def build_parser() -> argparse.ArgumentParser:
     )
     sub.add_parser("open", help="open the dashboard in a browser").set_defaults(func=cmd_open)
     sub.add_parser("version", help="print the version").set_defaults(func=cmd_version)
+
+    desktop = sub.add_parser("desktop", help="launch the native desktop app")
+    desktop.add_argument("--build", action="store_true", help="build a distributable .app instead of running")
+    desktop.set_defaults(func=cmd_desktop)
 
     run = sub.add_parser("run", help="dispatch a directive to the running server")
     run.add_argument("directive", nargs="+", help="what the swarm should do")

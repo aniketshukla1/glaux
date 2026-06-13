@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Athena</title>
+    <style>
+      :root { color-scheme: dark; }
+      * { box-sizing: border-box; }
+      html, body { height: 100%; margin: 0; }
+      body {
+        display: grid; place-items: center;
+        background:
+          radial-gradient(900px 500px at 15% -8%, rgba(45,212,191,0.07), transparent),
+          radial-gradient(800px 480px at 100% 0%, rgba(129,140,248,0.08), transparent),
+          rgb(9,11,16);
+        color: rgb(226,232,240);
+        font-family: 'Inter', -apple-system, ui-sans-serif, system-ui, sans-serif;
+        -webkit-font-smoothing: antialiased;
+        user-select: none;
+      }
+      .wrap { text-align: center; }
+      .mark {
+        width: 56px; height: 56px; margin: 0 auto 18px;
+        border-radius: 16px; display: grid; place-items: center;
+        background: rgba(45,212,191,0.14); border: 1px solid rgba(45,212,191,0.3);
+      }
+      .mark svg { width: 30px; height: 30px; stroke: rgb(45,212,191); fill: none; stroke-width: 2; }
+      h1 { font-size: 20px; font-weight: 600; margin: 0 0 4px; letter-spacing: -0.01em; }
+      p { color: rgb(148,163,184); font-size: 13px; margin: 0; }
+      .spinner {
+        width: 18px; height: 18px; margin: 22px auto 0;
+        border: 2px solid rgba(148,163,184,0.25); border-top-color: rgb(45,212,191);
+        border-radius: 50%; animation: spin 0.8s linear infinite;
+      }
+      @keyframes spin { to { transform: rotate(360deg); } }
+      .hint { margin-top: 26px; font-size: 12px; color: rgb(100,116,139); max-width: 320px; }
+      code { color: rgb(148,163,184); font-family: ui-monospace, monospace; }
+      .hidden { display: none; }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <div class="mark">
+        <svg viewBox="0 0 24 24"><path d="M12 2 21 7v10l-9 5-9-5V7z" /></svg>
+      </div>
+      <h1>Athena</h1>
+      <p id="status">Starting the swarm…</p>
+      <div class="spinner" id="spinner"></div>
+      <p class="hint hidden" id="hint">
+        Couldn't reach the backend. Start it from a terminal with <code>athena up</code>, then this
+        window will connect automatically.
+      </p>
+    </div>
+    <script>
+      const BACKEND = 'http://127.0.0.1:8000'
+      const statusEl = document.getElementById('status')
+      const hintEl = document.getElementById('hint')
+      let tries = 0
+
+      async function check() {
+        tries++
+        try {
+          const r = await fetch(BACKEND + '/api/health', { cache: 'no-store' })
+          if (r.ok) {
+            statusEl.textContent = 'Connected — opening the console…'
+            window.location.replace(BACKEND)
+            return
+          }
+        } catch (_) {
+          /* backend not up yet */
+        }
+        if (tries === 8) hintEl.classList.remove('hidden')
+        setTimeout(check, 600)
+      }
+      check()
+    </script>
+  </body>
+</html>

@@ -26,6 +26,12 @@ def test_parser_requires_subcommand():
         cli.build_parser().parse_args([])
 
 
+def test_parser_desktop():
+    args = cli.build_parser().parse_args(["desktop", "--build"])
+    assert args.command == "desktop" and args.build is True and args.func is cli.cmd_desktop
+    assert cli.build_parser().parse_args(["desktop"]).build is False
+
+
 def test_pid_roundtrip_and_liveness(tmp_path, monkeypatch):
     monkeypatch.setenv("ATHENA_HOME", str(tmp_path))
     assert cli.read_pid() is None
