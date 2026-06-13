@@ -849,3 +849,20 @@ def eval_runs() -> dict:
             for r in STATE.eval_runs
         ]
     }
+
+
+# --- serve the built dashboard -------------------------------------------
+# When the frontend has been built (`npm run build` -> frontend/dist), serve it
+# from the same origin so `athena up` gives the user one URL for UI + API.
+# Mounted last so /api/*, /ws and /metrics keep precedence over the catch-all.
+
+
+def _frontend_dist() -> Path:
+    return Path(__file__).resolve().parents[2] / "frontend" / "dist"
+
+
+_DIST = _frontend_dist()
+if _DIST.is_dir():
+    from fastapi.staticfiles import StaticFiles
+
+    app.mount("/", StaticFiles(directory=str(_DIST), html=True), name="frontend")

@@ -445,6 +445,22 @@ def test_schedule_run_unknown_404():
     assert client.post("/api/schedules/nope/run").status_code == 404
 
 
+# --- served dashboard (single URL) ---------------------------------------
+
+
+def test_serves_dashboard_when_built():
+    """When frontend/dist exists, the backend serves the UI at / on the same
+    origin — so `athena up` is one URL. API routes keep precedence."""
+    from core.api import _frontend_dist
+
+    if not _frontend_dist().is_dir():
+        pytest.skip("frontend not built (no frontend/dist)")
+    r = client.get("/")
+    assert r.status_code == 200 and "text/html" in r.headers.get("content-type", "")
+    # the catch-all static mount must not shadow the API
+    assert client.get("/api/health").json()["status"] == "ok"
+
+
 def test_switch_to_ollama_respects_reachability():
     status = client.get("/api/llm").json()["ollama"]
     model = status["models"][0] if status["models"] else "llama3.2"

@@ -1,0 +1,84 @@
+"""The `athena` CLI — arg parsing, pid/daemon helpers, result formatting."""
+
+from __future__ import annotations
+
+import os
+
+import pytest
+
+import cli
+
+
+def test_parser_run_collects_directive():
+    args = cli.build_parser().parse_args(["run", "summarize", "the", "news"])
+    assert args.command == "run" and args.directive == ["summarize", "the", "news"]
+    assert args.func is cli.cmd_run
+
+
+def test_parser_up_flags():
+    args = cli.build_parser().parse_args(["--port", "9001", "up", "--foreground", "--open"])
+    assert args.command == "up" and args.port == 9001 and args.foreground and args.open
+    assert args.func is cli.cmd_up
+
+
+def test_parser_requires_subcommand():
+    with pytest.raises(SystemExit):
+        cli.build_parser().parse_args([])
+
+
+def test_pid_roundtrip_and_liveness(tmp_path, monkeypatch):
+    monkeypatch.setenv("ATHENA_HOME", str(tmp_path))
+    assert cli.read_pid() is None
+    cli.write_pid(os.getpid())
+    assert cli.read_pid() == os.getpid()
+    assert cli.process_alive(os.getpid()) is True
+    assert cli.process_alive(2_000_000_000) is False  # almost certainly no such pid
+    assert cli.process_alive(None) is False
+
+
+def test_uvicorn_cmd_targets_the_app():
+    cmd = cli._uvicorn_cmd("127.0.0.1", 8000)
+    assert "uvicorn" in cmd and "core.api:app" in cmd and "8000" in cmd
+
+
+def test_env_with_src_has_src_on_pythonpath():
+    env = cli._env_with_src()
+    assert str(cli.SRC_DIR) in env["PYTHONPATH"]
+
+
+def test_format_run_result_success():
+    out = cli._format_run_result({
+        "success": True,
+        "final": "the answer is 42",
+        "verification": {"valid": True},
+        "cost": {"llm_calls": 3, "total_tokens": 120, "usd": 0.0021},
+        "new_blocks": [1, 2, 3, 4],
+    })
+    assert out.startswith("✓ the answer is 42")
+    assert "chain verified" in out
+    assert "3 model calls" in out and "4 blocks" in out
+
+
+def test_format_run_result_failure_and_tamper():
+    out = cli._format_run_result({"success": False, "final": "gave up", "verification": {"valid": False}})
+    assert out.startswith("✗ gave up")
+    assert "CHAIN INVALID" in out
+
+
+def test_status_when_not_running(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("ATHENA_HOME", str(tmp_path))
+    rc = cli.cmd_status(cli.build_parser().parse_args(["status"]))
+    assert rc == 1
+    assert "not running" in capsys.readouterr().out.lower()
+
+
+def test_run_unreachable_server(monkeypatch, capsys):
+    import urllib.error
+
+    def boom(*a, **k):
+        raise urllib.error.URLError("refused")
+
+    monkeypatch.setattr(cli, "_post_json", boom)
+    rc = cli.cmd_run(cli.build_parser().parse_args(["run", "do", "something"]))
+    assert rc == 1
+    assert "couldn't reach" in capsys.readouterr().err.lower()
