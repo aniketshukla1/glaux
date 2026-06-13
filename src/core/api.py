@@ -36,6 +36,8 @@ from core.observability import METRICS, log_json
 import safety
 from agents import (
     Budget,
+    MCPRegistry,
+    MCPServerConfig,
     Reflector,
     Router,
     Swarm,
@@ -53,6 +55,14 @@ from skills import SkillLibrary, SkillSynthesizer
 ROLES = ["router", "coder", "researcher", "reflector"]
 MEMORY_LAYERS = ("semantic", "episodic", "procedural")
 BENCH_DIR = Path(__file__).resolve().parents[2] / "bench"
+
+
+def _athena_home() -> Path:
+    return Path(os.environ.get("ATHENA_HOME", Path.home() / ".athena"))
+
+
+def _mcp_config_path() -> Path:
+    return _athena_home() / "mcp_servers.json"
 
 
 def _default_llm_config() -> dict:
@@ -122,7 +132,8 @@ class _State:
         self.memory_dir = tempfile.mkdtemp(prefix="athena-mem-")
         self.memory = MemoryManager(self.memory_dir)
         self.skills = SkillLibrary(self.memory.procedural)
-        self.mcp = default_local_client()
+        self.mcp = MCPRegistry(builtin=default_local_client(), config_path=_mcp_config_path())
+        self.mcp.load(connect=True)
         self.eval_runs: list[EvalRun] = []
         self.approval_mode = "auto"  # auto | gated (gated => human approves synthesized skills)
         self.llm_config = _default_llm_config()
@@ -170,6 +181,7 @@ STATE = _State()
 async def _lifespan(_app):
     WS.set_loop(asyncio.get_running_loop())
     yield
+    STATE.mcp.close_all()
 
 
 app = FastAPI(title="Athena Swarm API", version="0.2.0", lifespan=_lifespan)
@@ -573,6 +585,54 @@ def mcp_call(req: MCPCallRequest) -> dict:
     result = STATE.mcp.call_tool(req.tool, req.args or {})
     METRICS.inc("mcp_calls_total", outcome="ok" if result.get("ok") else "error")
     return result
+
+
+class MCPServerRequest(BaseModel):
+    name: str
+    transport: str = "stdio"  # stdio | http
+    command: Optional[str] = None
+    args: Optional[list[str]] = None
+    env: Optional[dict] = None
+    url: Optional[str] = None
+    headers: Optional[dict] = None
+
+
+@app.get("/api/mcp/servers")
+def mcp_servers() -> dict:
+    return {"servers": STATE.mcp.statuses()}
+
+
+@app.post("/api/mcp/servers")
+async def mcp_add_server(req: MCPServerRequest) -> dict:
+    if not req.name.strip():
+        raise HTTPException(status_code=422, detail="server name is required")
+    config = MCPServerConfig(
+        name=req.name.strip(),
+        transport=req.transport,
+        command=req.command,
+        args=req.args or [],
+        env=req.env or {},
+        url=req.url,
+        headers=req.headers or {},
+    )
+    # connecting spawns a process / opens a socket — keep it off the event loop
+    status = await run_in_threadpool(STATE.mcp.add_server, config)
+    return {"server": status}
+
+
+@app.delete("/api/mcp/servers/{name}")
+def mcp_remove_server(name: str) -> dict:
+    STATE.mcp.remove_server(name)
+    return {"ok": True, "servers": STATE.mcp.statuses()}
+
+
+@app.post("/api/mcp/servers/{name}/reconnect")
+async def mcp_reconnect_server(name: str) -> dict:
+    try:
+        status = await run_in_threadpool(STATE.mcp.reconnect, name)
+    except KeyError:
+        raise HTTPException(status_code=404, detail=f"unknown MCP server {name!r}")
+    return {"server": status}
 
 
 # --- observability -------------------------------------------------------

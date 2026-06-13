@@ -83,9 +83,14 @@ export const getEvalRuns = () => request('GET', '/api/eval/runs')
 // observability
 export const getMetrics = () => request('GET', '/api/metrics')
 
-// MCP tools
+// MCP tools + servers
 export const getMcpTools = () => request('GET', '/api/mcp/tools')
 export const callMcpTool = (tool, args) => request('POST', '/api/mcp/call', { tool, args })
+export const getMcpServers = () => request('GET', '/api/mcp/servers')
+export const addMcpServer = (server) => request('POST', '/api/mcp/servers', server)
+export const removeMcpServer = (name) => request('DELETE', `/api/mcp/servers/${encodeURIComponent(name)}`)
+export const reconnectMcpServer = (name) =>
+  request('POST', `/api/mcp/servers/${encodeURIComponent(name)}/reconnect`)
 
 // LLM backend
 export const getLlm = () => request('GET', '/api/llm')

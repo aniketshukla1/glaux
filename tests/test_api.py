@@ -274,6 +274,41 @@ def test_mcp_list_and_call():
     assert bad["ok"] is False
 
 
+def test_mcp_server_add_list_call_remove(tmp_path):
+    import pathlib
+    import sys
+
+    fake = pathlib.Path(__file__).parent / "fixtures" / "fake_mcp_server.py"
+    # keep persistence off the user's real ~/.athena during the test
+    original = STATE.mcp.config_path
+    STATE.mcp.config_path = tmp_path / "mcp.json"
+    try:
+        r = client.post(
+            "/api/mcp/servers",
+            json={"name": "fake", "transport": "stdio", "command": sys.executable, "args": [str(fake)]},
+        )
+        assert r.status_code == 200
+        server = r.json()["server"]
+        assert server["status"] == "connected" and server["tool_count"] >= 2
+
+        # the server's tools now show up in the aggregated tool list...
+        names = {t["name"] for t in client.get("/api/mcp/tools").json()["tools"]}
+        assert {"calc", "echo", "add"} <= names  # builtin + connected server
+
+        # ...and are callable through the same endpoint
+        res = client.post("/api/mcp/call", json={"tool": "add", "args": {"a": 4, "b": 5}}).json()
+        assert res["ok"] is True and res["result"] == "9"
+
+        assert "fake" in {s["name"] for s in client.get("/api/mcp/servers").json()["servers"]}
+
+        client.delete("/api/mcp/servers/fake")
+        assert client.get("/api/mcp/servers").json()["servers"] == []
+        assert "echo" not in {t["name"] for t in client.get("/api/mcp/tools").json()["tools"]}
+    finally:
+        STATE.mcp.remove_server("fake", persist=False)
+        STATE.mcp.config_path = original
+
+
 # --- LLM backend selection -----------------------------------------------
 
 

@@ -3,7 +3,17 @@
 from .base import AgentResult, BaseAgent, HandoffRejected
 from .budget import Budget, BudgetTracker
 from .handoff import delegate
-from .mcp import LocalMCPClient, MCPClient, MCPTool, default_local_client
+from .mcp import (
+    HTTPMCPClient,
+    LocalMCPClient,
+    MCPClient,
+    MCPRegistry,
+    MCPServerConfig,
+    MCPTool,
+    StdioMCPClient,
+    default_local_client,
+    make_client,
+)
 from .protocol import CALL_AGENT, CALL_MCP, CALL_SKILL, FINISH, extract_json, parse_action
 from .reflector import Reflector, Verdict
 from .router import Plan, Router, Step
@@ -26,6 +36,11 @@ __all__ = [
     "MCPClient",
     "MCPTool",
     "LocalMCPClient",
+    "StdioMCPClient",
+    "HTTPMCPClient",
+    "MCPRegistry",
+    "MCPServerConfig",
+    "make_client",
     "default_local_client",
     "Router",
     "Plan",

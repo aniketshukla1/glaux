@@ -3,17 +3,32 @@
 from __future__ import annotations
 
 import json
+import pathlib
+import sys
 
 import pytest
 
 pytest.importorskip("athena_ledger")
 
 import safety  # noqa: E402
-from agents import BaseAgent, LocalMCPClient, default_local_client  # noqa: E402
-from agents.mcp import calc  # noqa: E402
+from agents import (  # noqa: E402
+    BaseAgent,
+    LocalMCPClient,
+    MCPRegistry,
+    MCPServerConfig,
+    StdioMCPClient,
+    default_local_client,
+)
+from agents.mcp import _tool_result_to_obs, calc  # noqa: E402
 from core.ledger import Ledger  # noqa: E402
 from identity import AgentIdentity  # noqa: E402
 from llm import ScriptedLLM  # noqa: E402
+
+FAKE_SERVER = pathlib.Path(__file__).parent / "fixtures" / "fake_mcp_server.py"
+
+
+def _stdio_cfg(name: str = "fake") -> MCPServerConfig:
+    return MCPServerConfig(name=name, transport="stdio", command=sys.executable, args=[str(FAKE_SERVER)])
 
 
 @pytest.fixture(autouse=True)
@@ -97,3 +112,97 @@ def test_mcp_skipped_in_dry_run():
     agent = BaseAgent(identity=AgentIdentity.generate(), llm=llm, name="t", mcp_client=default_local_client())
     res = agent.run("x")
     assert "dry-run" in str(res.steps[0]["observation"]["result"])
+
+
+# --- real stdio MCP server -----------------------------------------------
+
+
+def test_stdio_client_connects_and_lists_tools():
+    c = StdioMCPClient(_stdio_cfg())
+    c.connect()
+    try:
+        assert c.status == "connected"
+        assert {t.name for t in c.list_tools()} >= {"echo", "add"}
+        # tool metadata comes from the server's inputSchema
+        echo = next(t for t in c.list_tools() if t.name == "echo")
+        assert echo.input_schema.get("type") == "object"
+    finally:
+        c.close()
+
+
+def test_stdio_client_calls_tools():
+    c = StdioMCPClient(_stdio_cfg())
+    c.connect()
+    try:
+        assert c.call_tool("echo", {"text": "hi"}) == {"ok": True, "result": "hi"}
+        assert c.call_tool("add", {"a": 2, "b": 3}) == {"ok": True, "result": "5"}
+        bad = c.call_tool("nope", {})
+        assert bad["ok"] is False
+    finally:
+        c.close()
+
+
+def test_stdio_client_bad_command_marks_error():
+    c = StdioMCPClient(MCPServerConfig(name="x", transport="stdio", command="definitely-not-a-real-binary-xyz"))
+    with pytest.raises(Exception):
+        c.connect()
+    assert c.status == "error" and c.error
+
+
+# --- registry ------------------------------------------------------------
+
+
+def test_registry_aggregates_builtin_and_server(tmp_path):
+    reg = MCPRegistry(builtin=default_local_client(), config_path=tmp_path / "mcp.json")
+    reg.add_server(_stdio_cfg())
+    try:
+        names = {t.name for t in reg.list_tools()}
+        assert {"calc", "echo", "add"} <= names  # builtin + connected server
+        assert reg.call_tool("calc", {"expression": "2+2"}) == {"ok": True, "result": 4}
+        assert reg.call_tool("echo", {"text": "yo"}) == {"ok": True, "result": "yo"}
+        assert (tmp_path / "mcp.json").exists()  # persisted on add
+        status = reg.server_status("fake")
+        assert status["status"] == "connected" and status["tool_count"] >= 2
+    finally:
+        reg.close_all()
+
+
+def test_registry_remove_server(tmp_path):
+    reg = MCPRegistry(config_path=tmp_path / "mcp.json")
+    reg.add_server(_stdio_cfg())
+    assert "echo" in {t.name for t in reg.list_tools()}
+    reg.remove_server("fake")
+    assert "echo" not in {t.name for t in reg.list_tools()}
+    assert reg.statuses() == []
+
+
+def test_registry_persistence_roundtrip(tmp_path):
+    path = tmp_path / "mcp.json"
+    reg = MCPRegistry(config_path=path)
+    reg.add_server(_stdio_cfg(), connect=False)  # config saved, no process
+    reg.close_all()
+
+    reg2 = MCPRegistry(config_path=path)
+    reg2.load(connect=True)
+    try:
+        assert "fake" in {s["name"] for s in reg2.statuses()}
+        assert {t.name for t in reg2.list_tools()} >= {"echo", "add"}
+    finally:
+        reg2.close_all()
+
+
+def test_registry_unknown_tool_lists_available(tmp_path):
+    reg = MCPRegistry(builtin=default_local_client(), config_path=tmp_path / "mcp.json")
+    res = reg.call_tool("ghost", {})
+    assert res["ok"] is False and "unknown tool" in res["error"]
+    assert "calc" in res["error"]
+
+
+# --- result flattening ---------------------------------------------------
+
+
+def test_tool_result_flattening():
+    assert _tool_result_to_obs({"content": [{"type": "text", "text": "x"}]}) == {"ok": True, "result": "x"}
+    err = _tool_result_to_obs({"content": [{"type": "text", "text": "boom"}], "isError": True})
+    assert err["ok"] is False and err["error"] == "boom"
+    assert _tool_result_to_obs({"structuredContent": {"n": 5}, "content": []}) == {"ok": True, "result": {"n": 5}}
