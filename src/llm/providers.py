@@ -209,6 +209,15 @@ _PROVIDER_LIST: list[Provider] = [
        "meta-llama/Llama-3.3-70B-Instruct",
        ["meta-llama/Llama-3.3-70B-Instruct", "deepseek-ai/DeepSeek-V3"],
        "https://docs.nebius.com/studio", kind="host"),
+    _p("nvidia", "NVIDIA NIM", "https://integrate.api.nvidia.com/v1", "NVIDIA_API_KEY",
+       "meta/llama-3.3-70b-instruct",
+       ["meta/llama-3.3-70b-instruct", "deepseek-ai/deepseek-r1",
+        "nvidia/llama-3.1-nemotron-70b-instruct", "qwen/qwen2.5-72b-instruct"],
+       "https://docs.api.nvidia.com", kind="host"),
+    _p("nous", "Nous Research Portal", "https://inference-api.nousresearch.com/v1", "NOUS_API_KEY",
+       "Hermes-3-Llama-3.1-70B",
+       ["Hermes-4-405B", "Hermes-4-70B", "Hermes-3-Llama-3.1-70B", "DeepHermes-3-Llama-3-8B-Preview"],
+       "https://portal.nousresearch.com", kind="host"),
 
     # --- regional / international ---
     _p("sarvam", "Sarvam AI (India)", "https://api.sarvam.ai/v1", "SARVAM_API_KEY", "sarvam-m",

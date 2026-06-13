@@ -82,11 +82,11 @@ def test_catalog_is_comprehensive():
     cat = {p["id"] for p in provider_catalog()}
     # a broad sample across categories must be present
     for pid in ["openai", "gemini", "xai", "mistral", "deepseek", "cohere", "openrouter",
-                "groq", "together", "fireworks", "perplexity", "cerebras", "sambanova",
-                "deepinfra", "novita", "sarvam", "moonshot", "zhipu", "dashscope", "yi",
-                "lmstudio", "vllm", "custom"]:
+                "huggingface", "groq", "together", "fireworks", "perplexity", "cerebras",
+                "sambanova", "deepinfra", "novita", "nvidia", "nous", "sarvam", "moonshot",
+                "zhipu", "dashscope", "yi", "lmstudio", "vllm", "custom"]:
         assert pid in cat, pid
-    assert len(cat) >= 25
+    assert len(cat) >= 30
 
 
 def test_catalog_entries_well_formed():
