@@ -552,7 +552,7 @@ def set_approval(req: ApprovalModeRequest) -> dict:
 @app.get("/api/llm")
 def get_llm() -> dict:
     from llm.ollama import ollama_status
-    from llm.providers import provider_catalog
+    from llm.providers import hf_runtimes, provider_catalog
 
     return {
         "backend": STATE.llm_config["backend"],
@@ -563,6 +563,8 @@ def get_llm() -> dict:
         "anthropic_key": bool(os.environ.get("ANTHROPIC_API_KEY")),
         "ollama": ollama_status(),
         "providers": provider_catalog(),
+        # ways to run any Hugging Face model (hosted router or a local server)
+        "hf_runtimes": hf_runtimes(),
     }
 
 

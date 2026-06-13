@@ -7,6 +7,7 @@ from .providers import (
     LLMError,
     OpenAICompatibleClient,
     Provider,
+    hf_runtimes,
     key_available,
     make_client,
     provider_catalog,
@@ -25,6 +26,7 @@ __all__ = [
     "PROVIDERS",
     "LLMError",
     "provider_catalog",
+    "hf_runtimes",
     "make_client",
     "key_available",
 ]

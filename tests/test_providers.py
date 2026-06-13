@@ -17,6 +17,7 @@ from llm.providers import (  # noqa: E402
     PROVIDERS,
     LLMError,
     OpenAICompatibleClient,
+    hf_runtimes,
     key_available,
     make_client,
     provider_catalog,
@@ -139,3 +140,28 @@ def test_key_available_logic(monkeypatch):
     assert key_available("groq", "explicit") is True
     assert key_available("lmstudio") is True  # local, no key needed
     assert key_available("custom") is True
+
+
+def test_huggingface_provider(monkeypatch):
+    assert "huggingface" in PROVIDERS
+    monkeypatch.setenv("HF_TOKEN", "hf_xyz")
+    c = make_client("huggingface", model="Qwen/Qwen2.5-7B-Instruct")
+    assert c.base_url == "https://router.huggingface.co/v1"
+    assert c.api_key == "hf_xyz"
+    assert c.model == "Qwen/Qwen2.5-7B-Instruct"
+
+
+def test_hf_runtimes_cover_hosted_and_local():
+    runtimes = hf_runtimes()
+    ids = {r["id"] for r in runtimes}
+    # a hosted (no-install) path plus the common local servers
+    assert {"hf-router", "vllm", "ollama", "llamacpp", "lmstudio"} <= ids
+    by_id = {r["id"]: r for r in runtimes}
+    assert by_id["hf-router"]["local"] is False
+    assert by_id["vllm"]["local"] is True
+    # local runtimes carry a serve command templated on the repo id
+    assert "{repo}" in by_id["vllm"]["command"]
+    # each runtime maps to a backend Athena can actually switch to
+    backends = set(PROVIDERS) | {"ollama"}
+    for r in runtimes:
+        assert r["provider"] in backends, r["id"]

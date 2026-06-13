@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react'
-import { Check, Loader2, KeyRound } from 'lucide-react'
+import { Check, Loader2, KeyRound, Boxes, Copy, ChevronDown } from 'lucide-react'
 import { getLlm, setLlm } from '../api.js'
 
 const KIND_LABELS = {
@@ -22,6 +22,10 @@ export default function LlmControl({ onChange }) {
   const [baseUrl, setBaseUrl] = useState('')
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState(null)
+  const [hfOpen, setHfOpen] = useState(false)
+  const [hfRepo, setHfRepo] = useState('')
+  const [hfRuntime, setHfRuntime] = useState('hf-router')
+  const [copied, setCopied] = useState(false)
 
   const load = async () => {
     try {
@@ -85,6 +89,22 @@ export default function LlmControl({ onChange }) {
     } finally {
       setBusy(false)
     }
+  }
+
+  const runtimes = llm?.hf_runtimes || []
+  const runtime = runtimes.find((r) => r.id === hfRuntime) || runtimes[0]
+  const repoFill = hfRepo.trim() || '{repo}'
+  const hfCommand = runtime?.command ? runtime.command.replaceAll('{repo}', repoFill) : ''
+
+  const useHfModel = () => {
+    if (!runtime) return
+    const repo = hfRepo.trim()
+    setBackend(runtime.provider)
+    setModel(runtime.model ? runtime.model.replaceAll('{repo}', repo) : repo)
+    setBaseUrl(runtime.base_url || '')
+    setApiKey('')
+    setErr(null)
+    setHfOpen(false)
   }
 
   if (!llm) return <div className="text-faint text-xs">Backend unreachable.</div>
@@ -181,6 +201,61 @@ export default function LlmControl({ onChange }) {
       </div>
 
       {err && <div className="text-xs" style={{ color: 'rgb(251 113 133)' }}>{err}</div>}
+
+      {/* Run any model off the Hugging Face Hub */}
+      {runtimes.length > 0 && (
+        <div className="card p-3 mt-1">
+          <button onClick={() => setHfOpen((o) => !o)} className="flex items-center gap-2 text-muted text-sm w-full">
+            <Boxes className="w-3.5 h-3.5 text-accent" /> Run a Hugging Face model
+            <ChevronDown className={`w-3.5 h-3.5 ml-auto transition ${hfOpen ? 'rotate-180' : ''}`} />
+          </button>
+          {hfOpen && (
+            <div className="mt-3 space-y-2.5">
+              <p className="text-faint text-xs leading-relaxed">
+                Bring any model from the Hub — fine-tuned, quantized, your own. Athena drives the swarm;
+                a runtime serves the model over the OpenAI API.
+              </p>
+              <input
+                value={hfRepo}
+                onChange={(e) => setHfRepo(e.target.value)}
+                placeholder="HF repo id (e.g. Qwen/Qwen2.5-7B-Instruct)"
+                className={inputCls}
+              />
+              <select value={hfRuntime} onChange={(e) => setHfRuntime(e.target.value)} className={inputCls}>
+                {runtimes.map((r) => (
+                  <option key={r.id} value={r.id}>{r.label}</option>
+                ))}
+              </select>
+              {runtime?.note && <p className="text-faint text-xs">{runtime.note}</p>}
+              {runtime?.local && hfCommand && (
+                <div className="glass p-2.5 flex items-start gap-2">
+                  <code className="text-xs text-muted break-all flex-1" style={{ fontFamily: 'ui-monospace, monospace' }}>
+                    {hfCommand}
+                  </code>
+                  <button
+                    onClick={() => { navigator.clipboard?.writeText(hfCommand); setCopied(true); setTimeout(() => setCopied(false), 1200) }}
+                    className="btn p-1.5 shrink-0" aria-label="Copy command"
+                  >
+                    {copied ? <Check className="w-3.5 h-3.5" style={{ color: 'rgb(52 211 153)' }} /> : <Copy className="w-3.5 h-3.5" />}
+                  </button>
+                </div>
+              )}
+              <button
+                onClick={useHfModel}
+                disabled={!hfRepo.trim()}
+                className="btn-accent px-3 py-2 text-sm disabled:opacity-50"
+              >
+                Use this model
+              </button>
+              <p className="text-faint text-xs">
+                {runtime?.local
+                  ? 'Run the command above, then click "Use this model" and Apply.'
+                  : 'Sets the model — add your HF token above and Apply.'}
+              </p>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   )
 }

@@ -157,12 +157,17 @@ _PROVIDER_LIST: list[Provider] = [
     _p("ai21", "AI21 Labs", "https://api.ai21.com/studio/v1", "AI21_API_KEY", "jamba-mini",
        ["jamba-large", "jamba-mini"], "https://docs.ai21.com"),
 
-    # --- aggregator ---
+    # --- aggregator / router ---
     _p("openrouter", "OpenRouter (300+ models)", "https://openrouter.ai/api/v1",
        "OPENROUTER_API_KEY", "openai/gpt-4o-mini",
        ["anthropic/claude-3.7-sonnet", "openai/gpt-4o", "google/gemini-2.5-pro",
         "meta-llama/llama-3.3-70b-instruct", "deepseek/deepseek-chat", "qwen/qwen-2.5-72b-instruct"],
        "https://openrouter.ai/docs", kind="aggregator"),
+    _p("huggingface", "Hugging Face (any model)", "https://router.huggingface.co/v1",
+       "HF_TOKEN", "meta-llama/Llama-3.3-70B-Instruct",
+       ["meta-llama/Llama-3.3-70B-Instruct", "Qwen/Qwen2.5-72B-Instruct", "deepseek-ai/DeepSeek-V3-0324",
+        "mistralai/Mistral-7B-Instruct-v0.3", "google/gemma-2-27b-it"],
+       "https://huggingface.co/docs/inference-providers", kind="aggregator"),
 
     # --- fast inference / model hosts ---
     _p("groq", "Groq", "https://api.groq.com/openai/v1", "GROQ_API_KEY",
@@ -266,6 +271,57 @@ def key_available(provider_id: str, explicit_key: Optional[str] = None) -> bool:
     if not p.requires_key:
         return True
     return bool(explicit_key or (p.key_env and os.environ.get(p.key_env)))
+
+
+# --- Hugging Face: run any downloaded model -------------------------------
+# Athena orchestrates; the model is served by a runtime that speaks the OpenAI
+# API. These are the ways to take any model off the HF Hub and point Athena at
+# it — a hosted router (no install) or a local server you run yourself. The
+# ``{repo}`` placeholder is the HF repo id (e.g. "Qwen/Qwen2.5-7B-Instruct").
+HF_RUNTIMES: list[dict] = [
+    {
+        "id": "hf-router", "label": "Hugging Face Inference (hosted)", "provider": "huggingface",
+        "base_url": "https://router.huggingface.co/v1", "command": "", "local": False,
+        "note": "No install. Needs an HF token; routes any model across inference providers.",
+    },
+    {
+        "id": "vllm", "label": "vLLM (local · GPU)", "provider": "vllm",
+        "base_url": "http://localhost:8000/v1", "command": "pip install vllm && vllm serve {repo}",
+        "local": True, "note": "High-throughput GPU serving. OpenAI API on :8000.",
+    },
+    {
+        "id": "ollama", "label": "Ollama (local · CPU/GPU)", "provider": "ollama",
+        "base_url": "", "command": "ollama run hf.co/{repo}", "model": "hf.co/{repo}",
+        "local": True, "note": "For GGUF repos — runs anywhere, no GPU required.",
+    },
+    {
+        "id": "llamacpp", "label": "llama.cpp (local)", "provider": "llamacpp",
+        "base_url": "http://localhost:8080/v1", "command": "llama-server -hf {repo}",
+        "local": True, "note": "Pulls a GGUF straight from the Hub. OpenAI API on :8080.",
+    },
+    {
+        "id": "lmstudio", "label": "LM Studio (local · GUI)", "provider": "lmstudio",
+        "base_url": "http://localhost:1234/v1",
+        "command": "In LM Studio: search & download {repo}, then start the Local Server",
+        "local": True, "note": "Easiest no-terminal path. OpenAI API on :1234.",
+    },
+    {
+        "id": "tgi", "label": "Text Generation Inference (Docker)", "provider": "custom",
+        "base_url": "http://localhost:8080/v1",
+        "command": "docker run --gpus all -p 8080:80 ghcr.io/huggingface/text-generation-inference --model-id {repo}",
+        "local": True, "note": "HF's official server. Messages API on :8080.",
+    },
+    {
+        "id": "transformers", "label": "transformers serve (local)", "provider": "custom",
+        "base_url": "http://localhost:8000/v1",
+        "command": 'pip install "transformers[serving]" && transformers serve',
+        "local": True, "note": "Then set the model to {repo}. OpenAI API on :8000.",
+    },
+]
+
+
+def hf_runtimes() -> list[dict]:
+    return [dict(r) for r in HF_RUNTIMES]
 
 
 def make_client(
