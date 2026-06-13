@@ -51,7 +51,7 @@ export default function App() {
       setAuth(au)
       setError(null)
     } catch {
-      setError('Backend unreachable — start it: PYTHONPATH=src uvicorn core.api:app --port 8000')
+      setError('Backend unreachable — start it with:  athena up')
     }
   }, [])
 
