@@ -25,7 +25,7 @@
         border-radius: 16px; display: grid; place-items: center;
         background: rgba(45,212,191,0.14); border: 1px solid rgba(45,212,191,0.3);
       }
-      .mark svg { width: 30px; height: 30px; stroke: rgb(45,212,191); fill: none; stroke-width: 2; }
+      .mark svg { width: 38px; height: 38px; }
       h1 { font-size: 20px; font-weight: 600; margin: 0 0 4px; letter-spacing: -0.01em; }
       p { color: rgb(148,163,184); font-size: 13px; margin: 0; }
       .spinner {
@@ -42,7 +42,25 @@
   <body>
     <div class="wrap">
       <div class="mark">
-        <svg viewBox="0 0 24 24"><path d="M12 2 21 7v10l-9 5-9-5V7z" /></svg>
+        <svg viewBox="205 295 610 395" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <linearGradient id="m" gradientUnits="userSpaceOnUse" x1="230" y1="320" x2="790" y2="660">
+              <stop offset="0" stop-color="#2dd4bf" />
+              <stop offset="0.55" stop-color="#34d399" />
+              <stop offset="1" stop-color="#818cf8" />
+            </linearGradient>
+          </defs>
+          <g fill="none" stroke="url(#m)" stroke-width="34" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M286 408 L232 330" />
+            <path d="M738 408 L792 330" />
+            <path d="M286 408 Q372 300 512 392 Q652 300 738 408" />
+            <circle cx="384" cy="528" r="132" />
+            <circle cx="640" cy="528" r="132" />
+          </g>
+          <circle cx="384" cy="536" r="46" fill="url(#m)" />
+          <circle cx="640" cy="536" r="46" fill="url(#m)" />
+          <path d="M512 542 L556 598 L512 660 L468 598 Z" fill="url(#m)" />
+        </svg>
       </div>
       <h1>Athena</h1>
       <p id="status">Starting the swarm…</p>

@@ -1,9 +1,10 @@
 import React, { useMemo, useRef, useState } from 'react'
 import {
-  Sparkles, ArrowUp, Compass, Code2, Search, ShieldCheck, Wrench, Terminal,
+  ArrowUp, Compass, Code2, Search, ShieldCheck, Wrench, Terminal,
   Check, AlertTriangle, ChevronRight, Loader2, GraduationCap, BadgeCheck,
   Plus, Coins, Cpu, Mic, Volume2, VolumeX,
 } from 'lucide-react'
+import AthenaMark from './AthenaMark.jsx'
 import { ROLE_META, short, buildTimeline } from '../lib/blocks.js'
 import { recognitionSupported, createRecognizer, ttsSupported, speak, stopSpeaking } from '../lib/speech.js'
 
@@ -217,7 +218,7 @@ function Hero({ onDispatch }) {
   return (
     <div className="min-h-[58vh] flex flex-col items-center justify-center text-center animate-fade-in">
       <div className="w-12 h-12 rounded-2xl bg-accent/12 border border-accent/25 grid place-items-center mb-6">
-        <Sparkles className="w-6 h-6 text-accent" />
+        <AthenaMark className="w-8 h-8" />
       </div>
       <h1 className="text-fg text-3xl font-medium tracking-tight">What should Athena do?</h1>
       <p className="text-muted mt-3 max-w-md">

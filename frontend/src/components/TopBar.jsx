@@ -1,5 +1,6 @@
 import React from 'react'
-import { Hexagon, Sun, Moon, Settings, LayoutGrid, ShieldCheck, Cpu } from 'lucide-react'
+import { Sun, Moon, Settings, LayoutGrid, ShieldCheck, Cpu } from 'lucide-react'
+import AthenaMark from './AthenaMark.jsx'
 
 export default function TopBar({ theme, onToggleTheme, onOpenStudio, onOpenSettings, verified, health }) {
   const backend = health?.llm || '—'
@@ -9,7 +10,7 @@ export default function TopBar({ theme, onToggleTheme, onOpenStudio, onOpenSetti
     <header className="flex items-center justify-between py-4">
       <div className="flex items-center gap-3">
         <div className="w-9 h-9 rounded-xl bg-accent/15 border border-accent/30 grid place-items-center">
-          <Hexagon className="w-5 h-5 text-accent" strokeWidth={2} />
+          <AthenaMark className="w-6 h-6" />
         </div>
         <div className="leading-tight">
           <div className="text-fg font-medium tracking-tight">Athena</div>
