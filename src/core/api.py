@@ -69,6 +69,10 @@ def _schedules_path() -> Path:
     return _athena_home() / "schedules.json"
 
 
+def _workspace_path() -> Path:
+    return _athena_home() / "workspace.json"
+
+
 def _default_llm_config() -> dict:
     backend = os.environ.get("ATHENA_LLM")
     if backend is None:
@@ -168,6 +172,10 @@ class _State:
 
         self.scheduler = Scheduler(run_fn=self._run_scheduled, store_path=_schedules_path())
         self.scheduler.load()
+        from core.sessions import SessionStore
+
+        self.sessions = SessionStore(store_path=_workspace_path())
+        self.sessions.load()
         self.eval_runs: list[EvalRun] = []
         self.approval_mode = "auto"  # auto | gated (gated => human approves synthesized skills)
         self.llm_config = _default_llm_config()
@@ -277,6 +285,7 @@ app.add_middleware(
 class TaskRequest(BaseModel):
     directive: str
     budget: Optional[dict] = None  # {max_tokens?, max_usd?, max_llm_calls?}
+    session_id: Optional[str] = None  # which conversation to record into (default: active)
 
 
 class SafetyRequest(BaseModel):
@@ -431,6 +440,22 @@ async def run_task(req: TaskRequest) -> dict:
         cost=result.cost,
         synthesized=len(result.synthesized),
     )
+    verification = _verification()
+    from core.sessions import Run
+
+    session = STATE.sessions.record_run(
+        Run(
+            id="",
+            directive=req.directive,
+            final=result.final,
+            success=result.success,
+            cost=result.cost,
+            verification=verification,
+            blocks=new_blocks,
+            created_at="",
+        ),
+        session_id=req.session_id,
+    )
     return {
         "success": result.success,
         "final": result.final,
@@ -449,7 +474,8 @@ async def run_task(req: TaskRequest) -> dict:
             for sid, sr in result.steps.items()
         ],
         "new_blocks": new_blocks,
-        "verification": _verification(),
+        "verification": verification,
+        "session_id": session.id,
     }
 
 
@@ -727,6 +753,85 @@ async def run_schedule_now(job_id: str) -> dict:
     if job is None:
         raise HTTPException(status_code=404, detail=f"unknown job {job_id!r}")
     return {"job": job}
+
+
+# --- workspace: projects + sessions --------------------------------------
+
+
+class ProjectRequest(BaseModel):
+    name: str
+    instructions: Optional[str] = None
+
+
+class SessionCreateRequest(BaseModel):
+    title: Optional[str] = None
+    project_id: Optional[str] = None
+
+
+class SessionUpdateRequest(BaseModel):
+    title: Optional[str] = None
+    project_id: Optional[str] = "_keep"  # "_keep" = leave unchanged; null = ungroup
+
+
+@app.get("/api/workspace")
+def get_workspace() -> dict:
+    return STATE.sessions.tree()
+
+
+@app.post("/api/projects")
+def create_project(req: ProjectRequest) -> dict:
+    return {"project": STATE.sessions.create_project(req.name, req.instructions or "")}
+
+
+@app.patch("/api/projects/{project_id}")
+def update_project(project_id: str, req: ProjectRequest) -> dict:
+    p = STATE.sessions.update_project(project_id, name=req.name, instructions=req.instructions)
+    if p is None:
+        raise HTTPException(status_code=404, detail=f"unknown project {project_id!r}")
+    return {"project": p}
+
+
+@app.delete("/api/projects/{project_id}")
+def delete_project(project_id: str) -> dict:
+    if not STATE.sessions.delete_project(project_id):
+        raise HTTPException(status_code=404, detail=f"unknown project {project_id!r}")
+    return {"ok": True, **STATE.sessions.tree()}
+
+
+@app.post("/api/sessions")
+def create_session(req: SessionCreateRequest) -> dict:
+    s = STATE.sessions.create_session(title=req.title, project_id=req.project_id)
+    return {"session": STATE.sessions.session_meta(s), "active_id": STATE.sessions.active_id}
+
+
+@app.get("/api/sessions/{session_id}")
+def get_session(session_id: str) -> dict:
+    s = STATE.sessions.session_full(session_id)
+    if s is None:
+        raise HTTPException(status_code=404, detail=f"unknown session {session_id!r}")
+    return {"session": s}
+
+
+@app.post("/api/sessions/{session_id}/activate")
+def activate_session(session_id: str) -> dict:
+    if STATE.sessions.activate(session_id) is None:
+        raise HTTPException(status_code=404, detail=f"unknown session {session_id!r}")
+    return {"active_id": session_id}
+
+
+@app.patch("/api/sessions/{session_id}")
+def update_session(session_id: str, req: SessionUpdateRequest) -> dict:
+    s = STATE.sessions.update_session(session_id, title=req.title, project_id=req.project_id)
+    if s is None:
+        raise HTTPException(status_code=404, detail=f"unknown session {session_id!r}")
+    return {"session": s}
+
+
+@app.delete("/api/sessions/{session_id}")
+def delete_session(session_id: str) -> dict:
+    if not STATE.sessions.delete_session(session_id):
+        raise HTTPException(status_code=404, detail=f"unknown session {session_id!r}")
+    return {"ok": True, **STATE.sessions.tree()}
 
 
 # --- MCP tools -----------------------------------------------------------

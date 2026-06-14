@@ -21,6 +21,12 @@ def _fresh_state():
     client.delete("/api/memory")
     STATE.eval_runs.clear()
     METRICS.reset()
+    # isolate the workspace: no disk persistence, a clean session per test
+    STATE.sessions.store_path = None
+    STATE.sessions.projects.clear()
+    STATE.sessions.sessions.clear()
+    STATE.sessions.active_id = None
+    STATE.sessions.ensure_active()
     client.post("/api/safety", json={"mode": "live"})
     client.post("/api/approval", json={"mode": "auto"})
     client.post("/api/llm", json={"backend": "demo"})
@@ -443,6 +449,53 @@ def test_schedule_rejects_bad_cron():
 
 def test_schedule_run_unknown_404():
     assert client.post("/api/schedules/nope/run").status_code == 404
+
+
+# --- workspace: projects + sessions --------------------------------------
+
+
+def test_workspace_has_an_active_session():
+    w = client.get("/api/workspace").json()
+    assert w["active_id"] and any(s["id"] == w["active_id"] for s in w["sessions"])
+
+
+def test_task_records_into_active_session():
+    active = client.get("/api/workspace").json()["active_id"]
+    r = client.post("/api/task", json={"directive": "Compute the sum of 2 and 3"}).json()
+    assert r["session_id"] == active
+    sess = client.get(f"/api/sessions/{active}").json()["session"]
+    assert sess["run_count"] == 1
+    run = sess["runs"][0]
+    assert run["directive"] == "Compute the sum of 2 and 3"
+    assert run["blocks"] and run["verification"]["valid"] is True  # signed blocks captured
+    # the session auto-titled from the first directive
+    assert sess["title"].startswith("Compute the sum")
+
+
+def test_create_activate_rename_delete_session():
+    created = client.post("/api/sessions", json={"title": "scratch"}).json()
+    sid = created["session"]["id"]
+    assert created["active_id"] == sid
+
+    assert client.patch(f"/api/sessions/{sid}", json={"title": "renamed"}).json()["session"]["title"] == "renamed"
+    assert client.post(f"/api/sessions/{sid}/activate").json()["active_id"] == sid
+
+    deleted = client.delete(f"/api/sessions/{sid}")
+    assert deleted.status_code == 200
+    assert all(s["id"] != sid for s in deleted.json()["sessions"])
+    assert client.post("/api/sessions/ghost/activate").status_code == 404
+
+
+def test_projects_create_group_delete():
+    proj = client.post("/api/projects", json={"name": "Research", "instructions": "be rigorous"}).json()["project"]
+    sess = client.post("/api/sessions", json={"title": "lit review", "project_id": proj["id"]}).json()["session"]
+    assert sess["project_id"] == proj["id"]
+    w = client.get("/api/workspace").json()
+    assert any(p["id"] == proj["id"] for p in w["projects"])
+    # deleting the project ungroups but keeps the session
+    client.delete(f"/api/projects/{proj['id']}")
+    after = client.get(f"/api/sessions/{sess['id']}").json()["session"]
+    assert after["project_id"] is None
 
 
 # --- served dashboard (single URL) ---------------------------------------
