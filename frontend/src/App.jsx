@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react'
 import {
   getHealth, getLedger, getAgents, getSafety, setSafety, getApproval, setApproval,
   getAuth, dispatchTask, getWorkspace, getSession, createSession, activateSession,
-  updateSession, deleteSession, createProject, deleteProject,
+  updateSession, deleteSession, createProject, updateProject, deleteProject,
 } from './api.js'
 import TopBar from './components/TopBar.jsx'
 import Sidebar from './components/Sidebar.jsx'
@@ -140,7 +140,13 @@ export default function App() {
     } catch {}
   }
   const onNewProject = async (name) => { try { await createProject(name) } catch {}; await loadWorkspace() }
+  const onUpdateProject = async (id, patch) => { try { await updateProject(id, patch) } catch {}; await loadWorkspace() }
   const onDeleteProject = async (id) => { try { const res = await deleteProject(id); setWorkspace(res) } catch {} }
+  const onMoveSession = async (id, projectId) => {
+    try { await updateSession(id, { project_id: projectId }) } catch {}
+    await loadWorkspace()
+    if (id === activeSession?.id) loadSession(id)
+  }
 
   const onSafety = async (mode) => { try { setSafetyMode((await setSafety(mode)).mode) } catch {} }
   const onApproval = async (mode) => { try { setApprovalMode((await setApproval(mode)).mode) } catch {} }
@@ -158,7 +164,9 @@ export default function App() {
         onRenameSession={onRenameSession}
         onDeleteSession={onDeleteSession}
         onNewProject={onNewProject}
+        onUpdateProject={onUpdateProject}
         onDeleteProject={onDeleteProject}
+        onMoveSession={onMoveSession}
       />
 
       <div className="flex-1 min-w-0 flex flex-col">

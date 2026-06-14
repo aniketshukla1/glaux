@@ -418,8 +418,15 @@ async def run_task(req: TaskRequest) -> dict:
     before = len(STATE.ledger)
     swarm = STATE.build_swarm()
     budget = Budget.from_dict(req.budget)
+    # If the target session belongs to a project, prepend its custom instructions
+    # as context for the run — but keep the recorded directive clean.
+    target_sid = req.session_id or STATE.sessions.active().id
+    instructions = STATE.sessions.project_instructions_for(target_sid)
+    run_directive = req.directive
+    if instructions.strip():
+        run_directive = f"Project instructions:\n{instructions.strip()}\n\nTask:\n{req.directive}"
     t0 = time.monotonic()
-    result = await run_in_threadpool(lambda: swarm.run(req.directive, budget=budget))
+    result = await run_in_threadpool(lambda: swarm.run(run_directive, budget=budget))
     elapsed = time.monotonic() - t0
     new_blocks = [STATE.ledger.block(i) for i in range(before, len(STATE.ledger))]
 

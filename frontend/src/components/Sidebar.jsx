@@ -1,69 +1,119 @@
 import React, { useState } from 'react'
 import {
-  Plus, MessageSquarePlus, Folder, FolderPlus, Pencil, Trash2, PanelLeftClose,
-  PanelLeft, ChevronDown, MessageSquare,
+  Plus, MessageSquarePlus, Folder, FolderPlus, FolderInput, Pencil, Trash2,
+  PanelLeftClose, PanelLeft, ChevronDown, MessageSquare, SlidersHorizontal, X,
 } from 'lucide-react'
 import AthenaMark from './AthenaMark.jsx'
 
-function SessionRow({ s, active, onSelect, onRename, onDelete }) {
+function MoveMenu({ projects, currentProjectId, onMove, onClose }) {
+  const options = [
+    ...(currentProjectId ? [{ id: null, name: 'No project' }] : []),
+    ...projects.filter((p) => p.id !== currentProjectId).map((p) => ({ id: p.id, name: p.name })),
+  ]
+  return (
+    <>
+      <div className="fixed inset-0 z-40" onClick={(e) => { e.stopPropagation(); onClose() }} />
+      <div className="absolute right-0 top-full mt-1 z-50 w-44 card p-1 shadow-xl" onClick={(e) => e.stopPropagation()}>
+        <div className="px-2 py-1 text-[11px] uppercase tracking-wide text-faint">Move to</div>
+        {options.length === 0 ? (
+          <div className="px-2 py-1.5 text-xs text-faint">No projects yet</div>
+        ) : (
+          options.map((o) => (
+            <button key={o.id || 'none'} onClick={(e) => { e.stopPropagation(); onMove(o.id); onClose() }}
+              className="w-full text-left px-2 py-1.5 rounded text-sm text-muted hover:text-fg hover:bg-line/10 truncate">
+              {o.name}
+            </button>
+          ))
+        )}
+      </div>
+    </>
+  )
+}
+
+function SessionRow({ s, active, projects, onSelect, onRename, onDelete, onMove }) {
+  const [moveOpen, setMoveOpen] = useState(false)
   return (
     <div
       onClick={() => onSelect(s.id)}
-      className={`group flex items-center gap-2 px-2.5 py-2 rounded-lg cursor-pointer text-sm transition ${
+      className={`group relative flex items-center gap-2 px-2.5 py-2 rounded-lg cursor-pointer text-sm transition ${
         active ? 'bg-line/10 text-fg' : 'text-muted hover:text-fg hover:bg-line/6'
       }`}
     >
       <MessageSquare className="w-3.5 h-3.5 shrink-0 text-faint" />
       <span className="flex-1 truncate">{s.title}</span>
-      <span className="hidden group-hover:flex items-center gap-0.5 shrink-0">
-        <button
-          onClick={(e) => { e.stopPropagation(); onRename(s) }}
-          className="p-1 rounded hover:bg-line/15 text-faint hover:text-fg" aria-label="Rename"
-        >
+      <span className={`items-center gap-0.5 shrink-0 ${moveOpen ? 'flex' : 'hidden group-hover:flex'}`}>
+        <button onClick={(e) => { e.stopPropagation(); setMoveOpen((o) => !o) }} className="p-1 rounded hover:bg-line/15 text-faint hover:text-fg" aria-label="Move to project">
+          <FolderInput className="w-3 h-3" />
+        </button>
+        <button onClick={(e) => { e.stopPropagation(); onRename(s) }} className="p-1 rounded hover:bg-line/15 text-faint hover:text-fg" aria-label="Rename">
           <Pencil className="w-3 h-3" />
         </button>
-        <button
-          onClick={(e) => { e.stopPropagation(); onDelete(s) }}
-          className="p-1 rounded hover:bg-line/15 text-faint hover:text-rose-400" aria-label="Delete session"
-        >
+        <button onClick={(e) => { e.stopPropagation(); onDelete(s) }} className="p-1 rounded hover:bg-line/15 text-faint hover:text-rose-400" aria-label="Delete session">
           <Trash2 className="w-3 h-3" />
         </button>
       </span>
+      {moveOpen && (
+        <MoveMenu projects={projects} currentProjectId={s.project_id} onMove={(pid) => onMove(s.id, pid)} onClose={() => setMoveOpen(false)} />
+      )}
+    </div>
+  )
+}
+
+function ProjectEditor({ project, onSave, onClose }) {
+  const [name, setName] = useState(project.name || '')
+  const [instructions, setInstructions] = useState(project.instructions || '')
+  const save = () => { onSave(project.id, { name: name.trim() || project.name, instructions }); onClose() }
+  return (
+    <div className="fixed inset-0 z-[60] grid place-items-center p-5" data-theme="dark">
+      <div className="absolute inset-0 bg-black/50" onClick={onClose} />
+      <div className="relative card w-full max-w-md p-5 space-y-4">
+        <div className="flex items-center gap-2">
+          <Folder className="w-4 h-4 text-accent" />
+          <h2 className="text-fg font-medium">Customize project</h2>
+          <button onClick={onClose} className="ml-auto btn p-1.5" aria-label="Close"><X className="w-4 h-4" /></button>
+        </div>
+        <div>
+          <label className="text-faint text-xs">Name</label>
+          <input value={name} onChange={(e) => setName(e.target.value)}
+            className="w-full mt-1 glass px-3 py-2 bg-transparent outline-none text-sm text-fg" />
+        </div>
+        <div>
+          <label className="text-faint text-xs">Custom instructions</label>
+          <p className="text-faint text-xs mt-0.5 mb-1.5">Prepended as context to every task in this project's chats.</p>
+          <textarea value={instructions} onChange={(e) => setInstructions(e.target.value)} rows={5}
+            placeholder="e.g. Answer concisely. Prefer Python. Cite sources."
+            className="w-full glass px-3 py-2 bg-transparent outline-none text-sm text-fg placeholder:text-faint resize-none" />
+        </div>
+        <div className="flex justify-end gap-2">
+          <button onClick={onClose} className="btn px-3 py-2 text-sm">Cancel</button>
+          <button onClick={save} className="btn-accent px-3 py-2 text-sm">Save</button>
+        </div>
+      </div>
     </div>
   )
 }
 
 export default function Sidebar({
   workspace, collapsed, onToggleCollapse, onSelectSession, onNewSession,
-  onRenameSession, onDeleteSession, onNewProject, onDeleteProject,
+  onRenameSession, onDeleteSession, onNewProject, onUpdateProject, onDeleteProject, onMoveSession,
 }) {
   const { projects = [], sessions = [], active_id } = workspace || {}
   const [openProjects, setOpenProjects] = useState({})
+  const [editing, setEditing] = useState(null)
 
-  const rename = (s) => {
-    const t = window.prompt('Rename conversation', s.title)
-    if (t && t.trim()) onRenameSession(s.id, t.trim())
-  }
-  const del = (s) => {
-    if (window.confirm(`Delete "${s.title}"? This can't be undone.`)) onDeleteSession(s.id)
-  }
-  const newProject = () => {
-    const name = window.prompt('New project name')
-    if (name && name.trim()) onNewProject(name.trim())
-  }
+  const rename = (s) => { const t = window.prompt('Rename conversation', s.title); if (t && t.trim()) onRenameSession(s.id, t.trim()) }
+  const del = (s) => { if (window.confirm(`Delete "${s.title}"? This can't be undone.`)) onDeleteSession(s.id) }
+  const newProject = () => { const name = window.prompt('New project name'); if (name && name.trim()) onNewProject(name.trim()) }
 
   const byProject = (pid) => sessions.filter((s) => s.project_id === pid)
   const ungrouped = sessions.filter((s) => !s.project_id)
+  const rowProps = { projects, onSelect: onSelectSession, onRename: rename, onDelete: del, onMove: onMoveSession }
 
   if (collapsed) {
     return (
       <div className="w-14 shrink-0 border-r border-line/10 flex flex-col items-center py-4 gap-3">
-        <button onClick={onToggleCollapse} className="btn p-2" aria-label="Expand sidebar">
-          <PanelLeft className="w-4 h-4" />
-        </button>
-        <button onClick={() => onNewSession()} className="btn-accent p-2" aria-label="New session" title="New session">
-          <Plus className="w-4 h-4" />
-        </button>
+        <button onClick={onToggleCollapse} className="btn p-2" aria-label="Expand sidebar"><PanelLeft className="w-4 h-4" /></button>
+        <button onClick={() => onNewSession()} className="btn-accent p-2" aria-label="New session" title="New session"><Plus className="w-4 h-4" /></button>
       </div>
     )
   }
@@ -75,18 +125,14 @@ export default function Sidebar({
           <AthenaMark className="w-5 h-5" />
         </div>
         <span className="text-fg font-medium tracking-tight">Athena</span>
-        <button onClick={onToggleCollapse} className="ml-auto btn p-1.5" aria-label="Collapse sidebar">
-          <PanelLeftClose className="w-4 h-4" />
-        </button>
+        <button onClick={onToggleCollapse} className="ml-auto btn p-1.5" aria-label="Collapse sidebar"><PanelLeftClose className="w-4 h-4" /></button>
       </div>
 
       <div className="px-2.5 pb-2 flex gap-2">
         <button onClick={() => onNewSession()} className="btn-accent flex-1 px-3 py-2 text-sm flex items-center justify-center gap-2">
           <MessageSquarePlus className="w-4 h-4" /> New session
         </button>
-        <button onClick={newProject} className="btn p-2" aria-label="New project" title="New project">
-          <FolderPlus className="w-4 h-4" />
-        </button>
+        <button onClick={newProject} className="btn p-2" aria-label="New project" title="New project"><FolderPlus className="w-4 h-4" /></button>
       </div>
 
       <div className="flex-1 overflow-y-auto px-2 pb-4 space-y-1">
@@ -101,21 +147,16 @@ export default function Sidebar({
                   <Folder className="w-3.5 h-3.5" />
                   <span className="truncate normal-case text-muted text-sm">{p.name}</span>
                 </button>
-                <button onClick={() => onNewSession(p.id)} className="hidden group-hover:block p-0.5 hover:text-fg" aria-label="New session in project" title="New session">
-                  <Plus className="w-3.5 h-3.5" />
-                </button>
-                <button onClick={() => { if (window.confirm(`Delete project "${p.name}"? Its chats become ungrouped.`)) onDeleteProject(p.id) }} className="hidden group-hover:block p-0.5 hover:text-rose-400" aria-label="Delete project">
-                  <Trash2 className="w-3 h-3" />
-                </button>
+                <button onClick={() => onNewSession(p.id)} className="hidden group-hover:block p-0.5 hover:text-fg" aria-label="New session in project" title="New session"><Plus className="w-3.5 h-3.5" /></button>
+                <button onClick={() => setEditing(p)} className="hidden group-hover:block p-0.5 hover:text-fg" aria-label="Customize project" title="Customize"><SlidersHorizontal className="w-3 h-3" /></button>
+                <button onClick={() => { if (window.confirm(`Delete project "${p.name}"? Its chats become ungrouped.`)) onDeleteProject(p.id) }} className="hidden group-hover:block p-0.5 hover:text-rose-400" aria-label="Delete project"><Trash2 className="w-3 h-3" /></button>
               </div>
               {open && (
                 <div className="pl-2 space-y-0.5">
                   {list.length === 0 ? (
                     <div className="px-2.5 py-1.5 text-xs text-faint">No chats yet</div>
                   ) : (
-                    list.map((s) => (
-                      <SessionRow key={s.id} s={s} active={s.id === active_id} onSelect={onSelectSession} onRename={rename} onDelete={del} />
-                    ))
+                    list.map((s) => <SessionRow key={s.id} s={s} active={s.id === active_id} {...rowProps} />)
                   )}
                 </div>
               )}
@@ -127,13 +168,13 @@ export default function Sidebar({
           <div className="mt-2">
             <div className="px-1.5 py-1 text-xs uppercase tracking-wide text-faint">Chats</div>
             <div className="space-y-0.5">
-              {ungrouped.map((s) => (
-                <SessionRow key={s.id} s={s} active={s.id === active_id} onSelect={onSelectSession} onRename={rename} onDelete={del} />
-              ))}
+              {ungrouped.map((s) => <SessionRow key={s.id} s={s} active={s.id === active_id} {...rowProps} />)}
             </div>
           </div>
         )}
       </div>
+
+      {editing && <ProjectEditor project={editing} onSave={onUpdateProject} onClose={() => setEditing(null)} />}
     </aside>
   )
 }

@@ -140,6 +140,14 @@ class SessionStore:
     def active(self) -> Session:
         return self.ensure_active()
 
+    def project_instructions_for(self, session_id: Optional[str]) -> str:
+        """The custom instructions of the session's project (empty if none)."""
+        s = self.sessions.get(session_id) if session_id else None
+        if s is None or not s.project_id:
+            return ""
+        p = self.projects.get(s.project_id)
+        return (p.instructions if p else "") or ""
+
     def update_session(self, session_id: str, *, title: Optional[str] = None, project_id: Optional[str] = "_keep") -> Optional[dict]:
         s = self.sessions.get(session_id)
         if s is None:

@@ -498,6 +498,21 @@ def test_projects_create_group_delete():
     assert after["project_id"] is None
 
 
+def test_project_instructions_shape_the_run():
+    proj = client.post("/api/projects", json={"name": "Math", "instructions": "always answer in French"}).json()["project"]
+    sess = client.post("/api/sessions", json={"title": "calc", "project_id": proj["id"]}).json()["session"]
+    r = client.post("/api/task", json={"directive": "add 2 and 2", "session_id": sess["id"]}).json()
+    # the recorded directive stays clean (no instructions leaked into history)
+    run = client.get(f"/api/sessions/{sess['id']}").json()["session"]["runs"][0]
+    assert run["directive"] == "add 2 and 2"
+    # but the project instructions were prepended as context for the actual run
+    assert "Project instructions:" in r["final"]
+    # a session with no project runs the directive unchanged
+    plain_sess = client.post("/api/sessions", json={"title": "plain"}).json()["session"]
+    plain = client.post("/api/task", json={"directive": "add 9 and 1", "session_id": plain_sess["id"]}).json()
+    assert "Project instructions:" not in plain["final"]
+
+
 # --- served dashboard (single URL) ---------------------------------------
 
 
