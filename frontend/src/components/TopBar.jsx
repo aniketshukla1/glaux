@@ -1,7 +1,7 @@
 import React from 'react'
-import { Sun, Moon, Settings, LayoutGrid, ShieldCheck, Cpu } from 'lucide-react'
+import { Sun, Moon, Settings, LayoutGrid, ShieldCheck, Cpu, Search } from 'lucide-react'
 
-export default function TopBar({ title, theme, onToggleTheme, onOpenStudio, onOpenSettings, verified, health }) {
+export default function TopBar({ title, theme, onToggleTheme, onOpenStudio, onOpenSettings, onOpenPalette, verified, health }) {
   const backend = health?.llm || '—'
   const live = health?.live
 
@@ -30,6 +30,10 @@ export default function TopBar({ title, theme, onToggleTheme, onOpenStudio, onOp
           <Cpu className="w-3.5 h-3.5" style={{ color: live ? 'rgb(var(--accent))' : undefined }} />
           {backend}
         </span>
+        <button onClick={onOpenPalette} className="btn px-2.5 py-2 hidden sm:flex items-center gap-1.5" aria-label="Command palette" title="Command palette (⌘K)">
+          <Search className="w-4 h-4" />
+          <kbd className="text-[10px] text-faint">⌘K</kbd>
+        </button>
         <button onClick={onToggleTheme} className="btn p-2" aria-label="Toggle theme">
           {theme === 'light' ? <Moon className="w-4 h-4" /> : <Sun className="w-4 h-4" />}
         </button>

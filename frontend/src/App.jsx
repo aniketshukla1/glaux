@@ -1,4 +1,5 @@
-import React, { useCallback, useEffect, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import { MessageSquarePlus, MessageSquare, LayoutGrid, Settings as SettingsIcon, Palette, PanelLeft } from 'lucide-react'
 import {
   getHealth, getLedger, getAgents, getSafety, setSafety, getApproval, setApproval,
   getAuth, dispatchTask, getWorkspace, getSession, createSession, activateSession,
@@ -9,6 +10,9 @@ import Sidebar from './components/Sidebar.jsx'
 import RunView from './components/RunView.jsx'
 import Studio from './components/Studio.jsx'
 import SettingsPanel from './components/SettingsPanel.jsx'
+import CommandPalette from './components/CommandPalette.jsx'
+
+const PALETTE_THEMES = ['dark', 'light', 'oled', 'midnight', 'nord', 'ember']
 
 const mergeBlocks = (a, b) => {
   const seen = new Set(a.map((x) => x.index))
@@ -20,6 +24,7 @@ export default function App() {
   const [collapsed, setCollapsed] = useState(() => localStorage.getItem('athena-sidebar') === 'collapsed')
   const [studioOpen, setStudioOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [paletteOpen, setPaletteOpen] = useState(false)
 
   const [health, setHealth] = useState(null)
   const [ledger, setLedger] = useState({ count: 0, blocks: [], verification: null })
@@ -40,6 +45,14 @@ export default function App() {
     document.documentElement.setAttribute('data-theme', theme)
     localStorage.setItem('athena-theme', theme)
   }, [theme])
+
+  useEffect(() => {
+    const onKey = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); setPaletteOpen((o) => !o) }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
 
   const toggleCollapse = () => setCollapsed((c) => {
     localStorage.setItem('athena-sidebar', c ? 'expanded' : 'collapsed')
@@ -153,6 +166,18 @@ export default function App() {
 
   const verification = result?.verification || ledger.verification
 
+  const commands = useMemo(() => {
+    const cmds = [
+      { id: 'new', section: 'Actions', label: 'New session', icon: MessageSquarePlus, run: () => newSession(), keywords: 'chat conversation' },
+      { id: 'studio', section: 'Actions', label: 'Open Studio', icon: LayoutGrid, run: () => setStudioOpen(true), keywords: 'skills tools eval metrics memory ledger schedules' },
+      { id: 'settings', section: 'Actions', label: 'Open Settings', icon: SettingsIcon, run: () => setSettingsOpen(true), keywords: 'model safety approval' },
+      { id: 'sidebar', section: 'Actions', label: collapsed ? 'Expand sidebar' : 'Collapse sidebar', icon: PanelLeft, run: toggleCollapse },
+      ...PALETTE_THEMES.map((t) => ({ id: `theme-${t}`, section: 'Theme', label: `Theme: ${t[0].toUpperCase()}${t.slice(1)}`, icon: Palette, run: () => setTheme(t), keywords: 'appearance color' })),
+      ...(workspace.sessions || []).map((s) => ({ id: `sess-${s.id}`, section: 'Switch to', label: s.title, icon: MessageSquare, hint: s.id === workspace.active_id ? 'current' : '', run: () => selectSession(s.id), keywords: 'conversation chat open' })),
+    ]
+    return cmds
+  }, [workspace, collapsed])
+
   return (
     <div className="flex min-h-screen">
       <Sidebar
@@ -177,6 +202,7 @@ export default function App() {
             onToggleTheme={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))}
             onOpenStudio={() => setStudioOpen(true)}
             onOpenSettings={() => setSettingsOpen(true)}
+            onOpenPalette={() => setPaletteOpen(true)}
             verified={ledger.verification ? ledger.verification.valid : null}
             health={health}
           />
@@ -201,6 +227,7 @@ export default function App() {
         </main>
       </div>
 
+      <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} commands={commands} />
       <Studio open={studioOpen} onClose={() => setStudioOpen(false)} ledger={ledger} blocks={liveBlocks} onVerify={refresh} />
       <SettingsPanel
         open={settingsOpen} onClose={() => setSettingsOpen(false)}
