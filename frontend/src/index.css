@@ -48,6 +48,66 @@
   color-scheme: light;
 }
 
+[data-theme='oled'] {
+  --bg: 0 0 0;
+  --surface: 12 12 14;
+  --panel: 20 20 24;
+  --fg: 237 237 240;
+  --muted: 150 150 158;
+  --faint: 96 96 104;
+  --line: 150 150 160;
+  --accent: 45 212 191;
+  --accent2: 129 140 248;
+  --glass: 14 14 16;
+  --glass-alpha: 0.6;
+  color-scheme: dark;
+}
+
+[data-theme='midnight'] {
+  --bg: 8 12 28;
+  --surface: 16 22 44;
+  --panel: 22 30 56;
+  --fg: 224 231 245;
+  --muted: 148 163 196;
+  --faint: 100 116 150;
+  --line: 148 163 200;
+  --accent: 56 189 248;
+  --accent2: 167 139 250;
+  --glass: 16 22 44;
+  --glass-alpha: 0.55;
+  color-scheme: dark;
+}
+
+[data-theme='nord'] {
+  --bg: 46 52 64;
+  --surface: 59 66 82;
+  --panel: 67 76 94;
+  --fg: 216 222 233;
+  --muted: 159 168 184;
+  --faint: 120 130 148;
+  --line: 200 210 225;
+  --accent: 136 192 208;
+  --accent2: 129 161 193;
+  --glass: 59 66 82;
+  --glass-alpha: 0.6;
+  color-scheme: dark;
+}
+
+[data-theme='ember'] {
+  --bg: 24 16 14;
+  --surface: 38 26 22;
+  --panel: 48 34 28;
+  --fg: 245 236 230;
+  --muted: 198 172 158;
+  --faint: 146 122 110;
+  --line: 230 200 185;
+  --accent: 251 146 60;
+  --accent2: 244 114 182;
+  --glass: 38 26 22;
+  --glass-alpha: 0.58;
+  color-scheme: dark;
+}
+
 * {
   border-color: rgb(var(--line) / 0.12);
 }
