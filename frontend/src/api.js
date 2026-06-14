@@ -106,6 +106,19 @@ export const planLocalModel = (path) => request('POST', '/api/llm/local/plan', {
 export const loadLocalModel = (path) => request('POST', '/api/llm/local', { path })
 export const unloadLocalModel = () => request('DELETE', '/api/llm/local')
 
+// workspace: projects + sessions
+export const getWorkspace = () => request('GET', '/api/workspace')
+export const getSession = (id) => request('GET', `/api/sessions/${encodeURIComponent(id)}`)
+export const createSession = (title, projectId) =>
+  request('POST', '/api/sessions', { title: title || null, project_id: projectId || null })
+export const activateSession = (id) => request('POST', `/api/sessions/${encodeURIComponent(id)}/activate`)
+export const updateSession = (id, patch) => request('PATCH', `/api/sessions/${encodeURIComponent(id)}`, patch)
+export const deleteSession = (id) => request('DELETE', `/api/sessions/${encodeURIComponent(id)}`)
+export const createProject = (name, instructions) =>
+  request('POST', '/api/projects', { name, instructions: instructions || null })
+export const updateProject = (id, patch) => request('PATCH', `/api/projects/${encodeURIComponent(id)}`, patch)
+export const deleteProject = (id) => request('DELETE', `/api/projects/${encodeURIComponent(id)}`)
+
 // scheduled jobs (cron)
 export const getSchedules = () => request('GET', '/api/schedules')
 export const addSchedule = (directive, schedule) => request('POST', '/api/schedules', { directive, schedule })

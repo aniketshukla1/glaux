@@ -1,21 +1,23 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useState } from 'react'
 import {
   getHealth, getLedger, getAgents, getSafety, setSafety, getApproval, setApproval,
-  getAuth, dispatchTask,
+  getAuth, dispatchTask, getWorkspace, getSession, createSession, activateSession,
+  updateSession, deleteSession, createProject, deleteProject,
 } from './api.js'
 import TopBar from './components/TopBar.jsx'
+import Sidebar from './components/Sidebar.jsx'
 import RunView from './components/RunView.jsx'
 import Studio from './components/Studio.jsx'
 import SettingsPanel from './components/SettingsPanel.jsx'
 
 const mergeBlocks = (a, b) => {
   const seen = new Set(a.map((x) => x.index))
-  const merged = [...a, ...b.filter((x) => !seen.has(x.index))]
-  return merged.sort((x, y) => x.index - y.index)
+  return [...a, ...b.filter((x) => !seen.has(x.index))].sort((x, y) => x.index - y.index)
 }
 
 export default function App() {
   const [theme, setTheme] = useState(() => localStorage.getItem('athena-theme') || 'dark')
+  const [collapsed, setCollapsed] = useState(() => localStorage.getItem('athena-sidebar') === 'collapsed')
   const [studioOpen, setStudioOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
 
@@ -27,6 +29,8 @@ export default function App() {
   const [auth, setAuth] = useState({ enabled: false })
   const [error, setError] = useState(null)
 
+  const [workspace, setWorkspace] = useState({ projects: [], sessions: [], active_id: null })
+  const [activeSession, setActiveSession] = useState(null)
   const [liveBlocks, setLiveBlocks] = useState([])
   const [goal, setGoal] = useState(null)
   const [running, setRunning] = useState(false)
@@ -37,22 +41,32 @@ export default function App() {
     localStorage.setItem('athena-theme', theme)
   }, [theme])
 
+  const toggleCollapse = () => setCollapsed((c) => {
+    localStorage.setItem('athena-sidebar', c ? 'expanded' : 'collapsed')
+    return !c
+  })
+
   const refresh = useCallback(async () => {
     try {
       const [l, h, a, s, ap, au] = [
         await getLedger(), await getHealth(), await getAgents(),
         await getSafety(), await getApproval(), await getAuth(),
       ]
-      setLedger(l)
-      setHealth(h)
+      setLedger(l); setHealth(h)
       setAgentsMap(Object.fromEntries(a.agents.map((x) => [x.agent_id, x.role])))
-      setSafetyMode(s.mode)
-      setApprovalMode(ap.mode)
-      setAuth(au)
-      setError(null)
+      setSafetyMode(s.mode); setApprovalMode(ap.mode); setAuth(au); setError(null)
     } catch {
       setError('Backend unreachable — start it with:  athena up')
     }
+  }, [])
+
+  const loadWorkspace = useCallback(async () => {
+    try { const w = await getWorkspace(); setWorkspace(w); return w } catch { return null }
+  }, [])
+
+  const loadSession = useCallback(async (id) => {
+    if (!id) return
+    try { const { session } = await getSession(id); setActiveSession(session) } catch {}
   }, [])
 
   useEffect(() => {
@@ -60,6 +74,10 @@ export default function App() {
     const id = setInterval(refresh, 4000)
     return () => clearInterval(id)
   }, [refresh])
+
+  useEffect(() => {
+    (async () => { const w = await loadWorkspace(); if (w?.active_id) loadSession(w.active_id) })()
+  }, [loadWorkspace, loadSession])
 
   // live block streaming
   useEffect(() => {
@@ -80,17 +98,18 @@ export default function App() {
   }, [])
 
   const roleOf = useCallback((id) => agentsMap[id], [agentsMap])
+  const clearLive = () => { setGoal(null); setResult(null); setLiveBlocks([]) }
 
   const onDispatch = async (directive) => {
-    setGoal(directive)
-    setRunning(true)
-    setResult(null)
-    setLiveBlocks([])
+    setGoal(directive); setRunning(true); setResult(null); setLiveBlocks([])
     try {
       const r = await dispatchTask(directive)
       setResult(r)
       setLiveBlocks((prev) => mergeBlocks(prev, r.new_blocks || []))
       await refresh()
+      await loadSession(r.session_id || workspace.active_id)
+      await loadWorkspace()
+      clearLive() // the completed run is now in the session history; drop the transient turn
     } catch (e) {
       setError(`Dispatch failed: ${e.message}`)
     } finally {
@@ -98,7 +117,30 @@ export default function App() {
     }
   }
 
-  const onReset = () => { setGoal(null); setResult(null); setLiveBlocks([]) }
+  const selectSession = async (id) => {
+    if (id === workspace.active_id) return
+    clearLive()
+    try { await activateSession(id) } catch {}
+    await loadSession(id)
+    await loadWorkspace()
+  }
+
+  const newSession = async (projectId) => {
+    clearLive()
+    try { const { session } = await createSession(null, projectId); await loadSession(session.id) } catch {}
+    await loadWorkspace()
+  }
+
+  const onRenameSession = async (id, title) => { try { await updateSession(id, { title }) } catch {}; await loadWorkspace(); if (id === activeSession?.id) loadSession(id) }
+  const onDeleteSession = async (id) => {
+    try {
+      const res = await deleteSession(id)
+      setWorkspace(res)
+      if (id === activeSession?.id) { clearLive(); await loadSession(res.active_id) }
+    } catch {}
+  }
+  const onNewProject = async (name) => { try { await createProject(name) } catch {}; await loadWorkspace() }
+  const onDeleteProject = async (id) => { try { const res = await deleteProject(id); setWorkspace(res) } catch {} }
 
   const onSafety = async (mode) => { try { setSafetyMode((await setSafety(mode)).mode) } catch {} }
   const onApproval = async (mode) => { try { setApprovalMode((await setApproval(mode)).mode) } catch {} }
@@ -106,51 +148,57 @@ export default function App() {
   const verification = result?.verification || ledger.verification
 
   return (
-    <div className="min-h-screen px-5 sm:px-8 max-w-5xl mx-auto">
-      <TopBar
-        theme={theme}
-        onToggleTheme={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))}
-        onOpenStudio={() => setStudioOpen(true)}
-        onOpenSettings={() => setSettingsOpen(true)}
-        verified={ledger.verification ? ledger.verification.valid : null}
-        health={health}
+    <div className="flex min-h-screen">
+      <Sidebar
+        workspace={workspace}
+        collapsed={collapsed}
+        onToggleCollapse={toggleCollapse}
+        onSelectSession={selectSession}
+        onNewSession={newSession}
+        onRenameSession={onRenameSession}
+        onDeleteSession={onDeleteSession}
+        onNewProject={onNewProject}
+        onDeleteProject={onDeleteProject}
       />
 
-      {error && (
-        <div className="glass p-3 mb-4 text-sm" style={{ borderColor: 'rgb(244 63 94 / 0.4)', color: 'rgb(251 113 133)' }}>
-          {error}
+      <div className="flex-1 min-w-0 flex flex-col">
+        <div className="px-5 sm:px-8">
+          <TopBar
+            title={activeSession?.title}
+            theme={theme}
+            onToggleTheme={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))}
+            onOpenStudio={() => setStudioOpen(true)}
+            onOpenSettings={() => setSettingsOpen(true)}
+            verified={ledger.verification ? ledger.verification.valid : null}
+            health={health}
+          />
+          {error && (
+            <div className="glass p-3 mb-4 text-sm" style={{ borderColor: 'rgb(244 63 94 / 0.4)', color: 'rgb(251 113 133)' }}>
+              {error}
+            </div>
+          )}
         </div>
-      )}
 
-      <main className="pt-2">
-        <RunView
-          blocks={liveBlocks}
-          roleOf={roleOf}
-          running={running}
-          result={result}
-          goal={goal}
-          onDispatch={onDispatch}
-          onReset={onReset}
-          verification={verification}
-        />
-      </main>
+        <main className="flex-1">
+          <RunView
+            session={activeSession}
+            blocks={liveBlocks}
+            roleOf={roleOf}
+            running={running}
+            result={result}
+            goal={goal}
+            onDispatch={onDispatch}
+            verification={verification}
+          />
+        </main>
+      </div>
 
-      <Studio
-        open={studioOpen}
-        onClose={() => setStudioOpen(false)}
-        ledger={ledger}
-        blocks={liveBlocks}
-        onVerify={refresh}
-      />
+      <Studio open={studioOpen} onClose={() => setStudioOpen(false)} ledger={ledger} blocks={liveBlocks} onVerify={refresh} />
       <SettingsPanel
-        open={settingsOpen}
-        onClose={() => setSettingsOpen(false)}
-        theme={theme}
-        onSetTheme={setTheme}
-        safety={safety}
-        onSafety={onSafety}
-        approval={approval}
-        onApproval={onApproval}
+        open={settingsOpen} onClose={() => setSettingsOpen(false)}
+        theme={theme} onSetTheme={setTheme}
+        safety={safety} onSafety={onSafety}
+        approval={approval} onApproval={onApproval}
         auth={auth}
       />
     </div>
