@@ -37,6 +37,51 @@ function describeActivity(b) {
   return null
 }
 
+// Derive the live swarm graph (agents as nodes, handoffs as edges) from the
+// signed blocks — the visual nobody else can show, because nobody else has a
+// real signed multi-agent swarm underneath.
+export function buildSwarmGraph(blocks, roleOf, { running = false } = {}) {
+  const timeline = buildTimeline(blocks, roleOf)
+  const steps = timeline.filter((i) => i.kind === 'step')
+  const hasReflect = steps.some((s) => s.verdict) || timeline.some((i) => i.kind === 'reflect')
+  const lastStep = steps[steps.length - 1]
+
+  const order = []
+  const byRole = {}
+  for (const s of steps) {
+    if (s.role === 'router') continue
+    if (!byRole[s.role]) { byRole[s.role] = []; order.push(s.role) }
+    byRole[s.role].push(s)
+  }
+
+  const statusFor = (role) => {
+    const ss = byRole[role]
+    if (ss.some((s) => s.verdict === 'retry')) return 'revising'
+    if (ss.some((s) => s.verdict && s.verdict !== 'retry')) return 'verified'
+    if (running && lastStep && lastStep.role === role && !lastStep.verdict) return 'working'
+    return 'done'
+  }
+
+  const specialists = order.map((role) => ({ id: role, role, status: statusFor(role) }))
+  const anyWorking = specialists.some((s) => s.status === 'working')
+  const routerStatus = running && !anyWorking && (!lastStep || !lastStep.verdict) ? 'working' : (specialists.length ? 'done' : (running ? 'working' : 'idle'))
+
+  const nodes = [{ id: 'router', role: 'router', status: routerStatus }, ...specialists]
+  if (hasReflect) {
+    const reflecting = running && lastStep && lastStep.role && !lastStep.verdict
+    nodes.push({ id: 'reflector', role: 'reflector', status: reflecting ? 'idle' : 'verified' })
+  }
+
+  const edges = []
+  for (const s of specialists) {
+    edges.push({ from: 'router', to: s.id, active: s.status === 'working' })
+    if (hasReflect && byRole[s.id].some((st) => st.verdict)) {
+      edges.push({ from: s.id, to: 'reflector', active: false })
+    }
+  }
+  return { nodes, edges }
+}
+
 export function buildTimeline(blocks, roleOf) {
   const items = []
   let step = null

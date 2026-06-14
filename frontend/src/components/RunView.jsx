@@ -5,6 +5,7 @@ import {
   Coins, Cpu, Mic, Volume2, VolumeX,
 } from 'lucide-react'
 import AthenaMark from './AthenaMark.jsx'
+import SwarmGraph from './SwarmGraph.jsx'
 import { ROLE_META, short, buildTimeline } from '../lib/blocks.js'
 import { recognitionSupported, createRecognizer, ttsSupported, speak, stopSpeaking } from '../lib/speech.js'
 
@@ -160,6 +161,7 @@ function Turn({ directive, blocks, roleOf, running, result, verification }) {
   return (
     <div className="space-y-3">
       <DirectiveBubble text={directive} />
+      <SwarmGraph blocks={blocks} roleOf={roleOf} running={running} />
       {timeline.map((item, i) =>
         item.kind === 'plan' ? <PlanCard key={item.index} item={item} />
           : item.kind === 'step' ? <StepCard key={item.index} step={item} working={running && i === lastStepIdx && !item.verdict} />
