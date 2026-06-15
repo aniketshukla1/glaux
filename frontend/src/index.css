@@ -190,6 +190,14 @@ pre {
   animation: shimmer 1.6s infinite;
 }
 
+@keyframes breathe {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.05); }
+}
+.animate-breathe {
+  animation: breathe 4.5s ease-in-out infinite;
+}
+
 *::-webkit-scrollbar {
   width: 8px;
   height: 8px;

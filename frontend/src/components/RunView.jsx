@@ -4,8 +4,8 @@ import {
   Check, AlertTriangle, ChevronRight, Loader2, GraduationCap, BadgeCheck,
   Coins, Cpu, Mic, Volume2, VolumeX,
 } from 'lucide-react'
-import AthenaMark from './AthenaMark.jsx'
 import SwarmGraph from './SwarmGraph.jsx'
+import ConstellationSphere from './ConstellationSphere.jsx'
 import { ROLE_META, short, buildTimeline } from '../lib/blocks.js'
 import { recognitionSupported, createRecognizer, ttsSupported, speak, stopSpeaking } from '../lib/speech.js'
 
@@ -225,11 +225,9 @@ export default function RunView({ session, blocks, roleOf, running, result, goal
 
   if (!hasContent) {
     return (
-      <div className="min-h-[70vh] flex flex-col items-center justify-center text-center animate-fade-in px-5">
-        <div className="w-11 h-11 rounded-2xl bg-accent/12 border border-accent/25 grid place-items-center mb-5">
-          <AthenaMark className="w-7 h-7" />
-        </div>
-        <h1 className="text-fg text-2xl font-medium tracking-tight">What should Athena do?</h1>
+      <div className="min-h-[72vh] flex flex-col items-center justify-center text-center animate-fade-in px-5">
+        <ConstellationSphere size={300} />
+        <h1 className="text-fg text-2xl font-medium tracking-tight -mt-4">What should Athena do?</h1>
         <p className="text-muted text-sm mt-2.5 max-w-md">Describe a goal. A swarm of agents plans it, does it, and proves every step.</p>
         <Composer onDispatch={onDispatch} hero />
         <div className="flex flex-wrap justify-center gap-2 mt-5 max-w-2xl">
