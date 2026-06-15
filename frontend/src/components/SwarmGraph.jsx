@@ -6,8 +6,8 @@ import { ROLE_META, buildSwarmGraph } from '../lib/blocks.js'
 // Built straight from the signed blocks — the swarm that actually did the work.
 
 const VB_W = 600
-const VB_H = 320
-const R = 30
+const VB_H = 300
+const R = 26
 
 function layout(nodes) {
   const pos = {}
@@ -20,7 +20,7 @@ function layout(nodes) {
   specialists.forEach((s, i) => {
     pos[s.id] = { x: n === 1 ? VB_W / 2 : startX + (i * spread) / n, y: VB_H / 2 + 6 }
   })
-  if (hasReflector) pos.reflector = { x: VB_W / 2, y: VB_H - 52 }
+  if (hasReflector) pos.reflector = { x: VB_W / 2, y: VB_H - 64 }
   return pos
 }
 
@@ -65,8 +65,8 @@ function Node({ node, p }) {
           <path d="M -3.2 0 L -0.8 2.6 L 3.4 -2.6" fill="none" stroke="#34d399" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
         </g>
       )}
-      <text x={p.x} y={p.y + R + 18} textAnchor="middle" fontSize="14" fontWeight="600" fill="rgb(var(--fg))">{meta.label}</text>
-      <text x={p.x} y={p.y + R + 33} textAnchor="middle" fontSize="11" fill="rgb(var(--faint))">{meta.sub}</text>
+      <text x={p.x} y={p.y + R + 16} textAnchor="middle" fontSize="13" fontWeight="600" fill="rgb(var(--fg))">{meta.label}</text>
+      <text x={p.x} y={p.y + R + 30} textAnchor="middle" fontSize="10" fill="rgb(var(--faint))">{meta.sub}</text>
     </g>
   )
 }
@@ -104,7 +104,7 @@ export default function SwarmGraph({ blocks, roleOf, running }) {
         )}
         <span className="ml-auto text-faint text-[11px]">{graph.nodes.length} agents · signed hand-offs</span>
       </div>
-      <svg viewBox={`0 0 ${VB_W} ${VB_H}`} className="w-full" style={{ maxHeight: 280 }}>
+      <svg viewBox={`0 0 ${VB_W} ${VB_H}`} className="w-full" style={{ maxHeight: 210 }}>
         <defs>
           <radialGradient id="swarm-bg" cx="50%" cy="38%" r="65%">
             <stop offset="0%" stopColor="rgb(var(--accent))" stopOpacity="0.06" />

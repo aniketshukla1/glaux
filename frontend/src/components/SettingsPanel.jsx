@@ -1,5 +1,5 @@
-import React from 'react'
-import { Settings, Palette, ShieldHalf, UserCheck, Cpu, Lock, Check } from 'lucide-react'
+import React, { useState } from 'react'
+import { Settings, Palette, ShieldHalf, Cpu, Lock, Check } from 'lucide-react'
 import Drawer from './Drawer.jsx'
 import LlmControl from './LlmControl.jsx'
 import SafetyControl from './SafetyControl.jsx'
@@ -12,6 +12,13 @@ const THEMES = [
   { key: 'midnight', label: 'Midnight', bg: '#080c1c', surface: '#10162c', accent: '#38bdf8', fg: '#e0e7f5' },
   { key: 'nord', label: 'Nord', bg: '#2e3440', surface: '#3b4252', accent: '#88c0d0', fg: '#d8dee9' },
   { key: 'ember', label: 'Ember', bg: '#18100e', surface: '#261a16', accent: '#fb923c', fg: '#f5ece6' },
+]
+
+const TABS = [
+  { key: 'appearance', label: 'Appearance', Icon: Palette },
+  { key: 'model', label: 'Model', Icon: Cpu },
+  { key: 'safety', label: 'Safety', Icon: ShieldHalf },
+  { key: 'security', label: 'Security', Icon: Lock },
 ]
 
 function ThemeSwatch({ t, active, onPick }) {
@@ -37,14 +44,12 @@ function ThemeSwatch({ t, active, onPick }) {
   )
 }
 
-function Section({ icon, title, hint, children }) {
+function Field({ title, hint, children }) {
   return (
-    <div className="mb-6">
-      <div className="flex items-center gap-2 mb-1">
-        {icon}
-        <span className="text-fg text-sm font-medium">{title}</span>
-      </div>
-      {hint && <p className="text-faint text-xs mb-2.5">{hint}</p>}
+    <div className="mb-5">
+      <div className="text-fg text-sm font-medium">{title}</div>
+      {hint && <p className="text-faint text-xs mt-0.5 mb-2.5">{hint}</p>}
+      {!hint && <div className="mb-2" />}
       {children}
     </div>
   )
@@ -53,35 +58,54 @@ function Section({ icon, title, hint, children }) {
 export default function SettingsPanel({
   open, onClose, theme, onSetTheme, safety, onSafety, approval, onApproval, auth,
 }) {
+  const [tab, setTab] = useState('appearance')
   return (
-    <Drawer open={open} onClose={onClose} title="Settings" icon={<Settings className="w-4 h-4 text-muted" />} width={420}>
-      <Section icon={<Palette className="w-4 h-4 text-muted" />} title="Theme">
-        <div className="grid grid-cols-3 gap-2">
-          {THEMES.map((t) => (
-            <ThemeSwatch key={t.key} t={t} active={theme === t.key} onPick={onSetTheme} />
-          ))}
-        </div>
-      </Section>
+    <Drawer open={open} onClose={onClose} title="Settings" icon={<Settings className="w-4 h-4 text-muted" />} width={440}>
+      <div className="flex gap-1 flex-wrap mb-5">
+        {TABS.map(({ key, label, Icon }) => (
+          <button key={key} onClick={() => setTab(key)}
+            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-sm border transition ${
+              tab === key ? 'text-fg border-line/30 bg-line/8' : 'text-faint border-transparent hover:text-muted'
+            }`}>
+            <Icon className="w-3.5 h-3.5" /> {label}
+          </button>
+        ))}
+      </div>
 
-      <Section icon={<Cpu className="w-4 h-4 text-muted" />} title="Model" hint="Run the swarm on any of 30+ providers — OpenAI, Gemini, Grok, DeepSeek, Mistral, Sarvam, Groq, OpenRouter, local models (Ollama / LM Studio / vLLM), or the offline demo.">
-        <LlmControl />
-      </Section>
+      {tab === 'appearance' && (
+        <Field title="Theme" hint="Pick a look — the whole app follows it.">
+          <div className="grid grid-cols-3 gap-2">
+            {THEMES.map((t) => <ThemeSwatch key={t.key} t={t} active={theme === t.key} onPick={onSetTheme} />)}
+          </div>
+        </Field>
+      )}
 
-      <Section icon={<ShieldHalf className="w-4 h-4 text-muted" />} title="Safety" hint="The kill switch. Halted stops all execution; dry-run skips side effects.">
-        <SafetyControl mode={safety} onChange={onSafety} />
-      </Section>
+      {tab === 'model' && (
+        <Field title="Model" hint="Run the swarm on any of 30+ providers — OpenAI, Gemini, Grok, DeepSeek, Mistral, Sarvam, Groq, OpenRouter, local models, or the offline demo.">
+          <LlmControl />
+        </Field>
+      )}
 
-      <Section icon={<UserCheck className="w-4 h-4 text-muted" />} title="Approval" hint="In gated mode, skills the swarm writes need your approval before they can run.">
-        <ApprovalControl mode={approval} onChange={onApproval} />
-      </Section>
+      {tab === 'safety' && (
+        <>
+          <Field title="Kill switch" hint="Halted stops all execution; dry-run skips side effects.">
+            <SafetyControl mode={safety} onChange={onSafety} />
+          </Field>
+          <Field title="Approval" hint="In gated mode, skills the swarm writes need your approval before they can run.">
+            <ApprovalControl mode={approval} onChange={onApproval} />
+          </Field>
+        </>
+      )}
 
-      <Section icon={<Lock className="w-4 h-4 text-muted" />} title="API security">
-        <div className="text-xs text-muted">
-          {auth?.enabled
-            ? 'HMAC request signing is enabled — every request is verified.'
-            : 'Open (no auth). Set ATHENA_API_SECRET to require signed requests.'}
-        </div>
-      </Section>
+      {tab === 'security' && (
+        <Field title="API security" hint="How the backend authenticates requests.">
+          <div className="text-xs text-muted leading-relaxed">
+            {auth?.enabled
+              ? 'HMAC request signing is enabled — every request is verified.'
+              : 'Open (no auth). Set ATHENA_API_SECRET to require signed requests.'}
+          </div>
+        </Field>
+      )}
     </Drawer>
   )
 }

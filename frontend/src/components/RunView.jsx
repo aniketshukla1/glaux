@@ -23,9 +23,9 @@ function Avatar({ role }) {
   const meta = ROLE_META[role] || ROLE_META.agent
   const Icon = ROLE_ICON[role] || Cpu
   return (
-    <div className="w-9 h-9 rounded-full grid place-items-center shrink-0"
+    <div className="w-8 h-8 rounded-full grid place-items-center shrink-0"
       style={{ background: `${meta.color}22`, border: `1px solid ${meta.color}44` }}>
-      <Icon className="w-4 h-4" style={{ color: meta.color }} />
+      <Icon className="w-3.5 h-3.5" style={{ color: meta.color }} />
     </div>
   )
 }
@@ -49,11 +49,11 @@ function StepCard({ step, working }) {
   const meta = ROLE_META[step.role] || ROLE_META.agent
   const status = working ? 'working' : step.verdict === 'retry' ? 'revising' : 'verified'
   return (
-    <div className="card p-4 animate-fade-up">
-      <div className="flex items-center gap-3">
+    <div className="card p-3.5 animate-fade-up">
+      <div className="flex items-center gap-2.5">
         <Avatar role={step.role} />
         <div className="min-w-0">
-          <div className="text-fg font-medium leading-tight">{meta.label}</div>
+          <div className="text-fg text-sm font-medium leading-tight">{meta.label}</div>
           <div className="text-faint text-xs">{meta.sub}</div>
         </div>
         <span className="ml-auto">
@@ -95,10 +95,10 @@ function StepCard({ step, working }) {
 
 function PlanCard({ item }) {
   return (
-    <div className="card p-4 animate-fade-up">
+    <div className="card p-3.5 animate-fade-up">
       <div className="flex items-center gap-2.5">
-        <Compass className="w-4 h-4 text-accent2" />
-        <span className="text-fg text-sm">Athena planned {item.steps.length} step{item.steps.length === 1 ? '' : 's'}</span>
+        <Compass className="w-3.5 h-3.5 text-accent2" />
+        <span className="text-fg text-[13px]">Athena planned {item.steps.length} step{item.steps.length === 1 ? '' : 's'}</span>
         <div className="flex gap-1.5 ml-auto flex-wrap">
           {item.steps.map((s) => (
             <span key={s.id} className="text-xs px-2 py-0.5 rounded-md bg-line/8 text-muted">{(ROLE_META[s.role] || ROLE_META.agent).label}</span>
@@ -119,17 +119,17 @@ function ResultCard({ result, verification }) {
     if (speak(result.final, { onEnd: () => setSpeaking(false) })) setSpeaking(true)
   }
   return (
-    <div className="card p-5 animate-fade-up" style={{ borderColor: ok ? 'rgb(var(--accent) / 0.4)' : undefined }}>
-      <div className="flex items-center gap-2 mb-2">
-        <BadgeCheck className={`w-5 h-5 ${ok ? 'text-accent' : 'text-amber-400'}`} />
-        <span className="text-faint text-xs uppercase tracking-wide">{ok ? 'Result' : 'Incomplete'}</span>
+    <div className="card p-4 animate-fade-up" style={{ borderColor: ok ? 'rgb(var(--accent) / 0.4)' : undefined }}>
+      <div className="flex items-center gap-2 mb-1.5">
+        <BadgeCheck className={`w-4 h-4 ${ok ? 'text-accent' : 'text-amber-400'}`} />
+        <span className="text-faint text-[11px] uppercase tracking-wide">{ok ? 'Result' : 'Incomplete'}</span>
         {canSpeak && (
-          <button onClick={toggleSpeak} className="ml-auto btn p-1.5" aria-label={speaking ? 'Stop reading' : 'Read aloud'} title={speaking ? 'Stop reading' : 'Read aloud'}>
-            {speaking ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
+          <button onClick={toggleSpeak} className="ml-auto btn p-1" aria-label={speaking ? 'Stop reading' : 'Read aloud'} title={speaking ? 'Stop reading' : 'Read aloud'}>
+            {speaking ? <VolumeX className="w-3.5 h-3.5" /> : <Volume2 className="w-3.5 h-3.5" />}
           </button>
         )}
       </div>
-      <p className="text-fg text-lg leading-relaxed">{result.final || '—'}</p>
+      <p className="text-fg text-[13.5px] leading-relaxed">{result.final || '—'}</p>
       {result.budget_halt && <div className="mt-2 text-xs text-amber-400">budget guard: {result.budget_halt}</div>}
       <div className="mt-4 pt-3 border-t border-line/10 flex flex-wrap items-center gap-x-5 gap-y-1 text-xs text-faint">
         {verification?.valid && <span className="flex items-center gap-1.5 text-emerald-400"><ShieldCheck className="w-3.5 h-3.5" /> chain verified</span>}
@@ -144,7 +144,7 @@ function ResultCard({ result, verification }) {
 function DirectiveBubble({ text }) {
   return (
     <div className="flex justify-end">
-      <div className="max-w-[85%] rounded-2xl rounded-br-md px-4 py-2.5 bg-accent/10 border border-accent/20 text-fg leading-relaxed">
+      <div className="max-w-[80%] rounded-2xl rounded-br-md px-3 py-1.5 bg-accent/10 border border-accent/20 text-fg text-[13px] leading-relaxed">
         {text}
       </div>
     </div>
@@ -194,24 +194,24 @@ function Composer({ onDispatch, hero }) {
     recRef.current = rec; setListening(true); rec.start()
   }
   return (
-    <form onSubmit={submit} className={hero ? 'w-full max-w-2xl mt-8' : 'max-w-2xl mx-auto w-full'}>
-      <div className="glass flex items-center gap-2 p-2 pl-4 rounded-2xl">
+    <form onSubmit={submit} className={hero ? 'w-full max-w-2xl mt-7' : 'w-full'}>
+      <div className="glass flex items-center gap-1.5 p-1.5 pl-3.5 rounded-xl">
         <input
           value={input}
           onChange={(e) => setInput(e.target.value)}
           placeholder={listening ? 'Listening…' : hero ? 'e.g. summarize how transformers work' : 'Ask Athena to do something…'}
-          className="flex-1 bg-transparent outline-none text-fg placeholder-faint py-2"
+          className="flex-1 bg-transparent outline-none text-fg text-sm placeholder-faint py-1.5"
           autoFocus={hero}
         />
         {recognitionSupported() && (
           <button type="button" onClick={toggleMic}
-            className={`p-2.5 rounded-lg border transition ${listening ? 'border-rose-500/50 text-rose-400 bg-rose-500/10 animate-pulse' : 'border-line/16 text-muted hover:text-fg'}`}
+            className={`p-2 rounded-lg border transition ${listening ? 'border-rose-500/50 text-rose-400 bg-rose-500/10 animate-pulse' : 'border-line/16 text-muted hover:text-fg'}`}
             aria-label={listening ? 'Stop dictation' : 'Dictate'} title={listening ? 'Stop' : 'Speak your task'}>
-            <Mic className="w-5 h-5" />
+            <Mic className="w-4 h-4" />
           </button>
         )}
-        <button type="submit" disabled={!input.trim()} className="btn-accent p-2.5 disabled:opacity-40" aria-label="Run">
-          <ArrowUp className="w-5 h-5" />
+        <button type="submit" disabled={!input.trim()} className="btn-accent p-2 disabled:opacity-40" aria-label="Run">
+          <ArrowUp className="w-4 h-4" />
         </button>
       </div>
     </form>
@@ -226,11 +226,11 @@ export default function RunView({ session, blocks, roleOf, running, result, goal
   if (!hasContent) {
     return (
       <div className="min-h-[70vh] flex flex-col items-center justify-center text-center animate-fade-in px-5">
-        <div className="w-12 h-12 rounded-2xl bg-accent/12 border border-accent/25 grid place-items-center mb-6">
-          <AthenaMark className="w-8 h-8" />
+        <div className="w-11 h-11 rounded-2xl bg-accent/12 border border-accent/25 grid place-items-center mb-5">
+          <AthenaMark className="w-7 h-7" />
         </div>
-        <h1 className="text-fg text-3xl font-medium tracking-tight">What should Athena do?</h1>
-        <p className="text-muted mt-3 max-w-md">Describe a goal. A swarm of agents plans it, does it, and proves every step.</p>
+        <h1 className="text-fg text-2xl font-medium tracking-tight">What should Athena do?</h1>
+        <p className="text-muted text-sm mt-2.5 max-w-md">Describe a goal. A swarm of agents plans it, does it, and proves every step.</p>
         <Composer onDispatch={onDispatch} hero />
         <div className="flex flex-wrap justify-center gap-2 mt-5 max-w-2xl">
           {EXAMPLES.map((ex) => (
@@ -243,7 +243,7 @@ export default function RunView({ session, blocks, roleOf, running, result, goal
 
   return (
     <div className="flex flex-col min-h-[calc(100vh-3.5rem)]">
-      <div className="flex-1 max-w-2xl mx-auto w-full px-5 pt-4 pb-6 space-y-8">
+      <div className="flex-1 w-full max-w-5xl mx-auto px-5 sm:px-8 pt-4 pb-6 space-y-6">
         {runs.map((run) => (
           <Turn key={run.id} directive={run.directive} blocks={run.blocks} roleOf={roleOf}
             result={{ success: run.success, final: run.final, cost: run.cost }} verification={run.verification} />
@@ -252,7 +252,7 @@ export default function RunView({ session, blocks, roleOf, running, result, goal
           <Turn directive={goal} blocks={blocks} roleOf={roleOf} running={running} result={result} verification={verification} />
         )}
       </div>
-      <div className="sticky bottom-0 px-5 pb-5 pt-3 bg-gradient-to-t from-[rgb(var(--bg))] via-[rgb(var(--bg))] to-transparent">
+      <div className="sticky bottom-0 w-full max-w-5xl mx-auto px-5 sm:px-8 pb-5 pt-3 bg-gradient-to-t from-[rgb(var(--bg))] via-[rgb(var(--bg))] to-transparent">
         <Composer onDispatch={onDispatch} />
       </div>
     </div>

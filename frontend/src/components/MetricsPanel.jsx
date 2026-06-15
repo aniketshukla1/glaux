@@ -4,7 +4,7 @@ import { getMetrics } from '../api.js'
 function Card({ label, value, sub }) {
   return (
     <div className="glass p-4">
-      <div className="text-2xl text-slate-100">{value}</div>
+      <div className="text-lg text-slate-100">{value}</div>
       <div className="text-xs text-slate-400 mt-1">{label}</div>
       {sub && <div className="text-xs text-slate-500 mt-0.5">{sub}</div>}
     </div>

@@ -195,7 +195,7 @@ export default function App() {
       />
 
       <div className="flex-1 min-w-0 flex flex-col">
-        <div className="px-5 sm:px-8">
+        <div className="sticky top-0 z-30 px-5 sm:px-8 bg-[rgb(var(--bg))]/85 backdrop-blur-md border-b border-line/8">
           <TopBar
             title={activeSession?.title}
             theme={theme}

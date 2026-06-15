@@ -49,7 +49,7 @@ export default function EvalDashboard() {
         <>
           <div className="glass p-4 mb-3">
             <div className="flex items-end gap-3">
-              <span className="text-3xl text-slate-100">{pct(run.pass_rate)}</span>
+              <span className="text-xl text-slate-100">{pct(run.pass_rate)}</span>
               <span className="text-sm text-slate-400 mb-1">
                 {run.passed}/{run.total} cases passed
               </span>

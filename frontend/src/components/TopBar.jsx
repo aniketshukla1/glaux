@@ -6,8 +6,8 @@ export default function TopBar({ title, theme, onToggleTheme, onOpenStudio, onOp
   const live = health?.live
 
   return (
-    <header className="flex items-center justify-between py-4 gap-3">
-      <div className="min-w-0 text-fg font-medium tracking-tight truncate">{title || 'Athena'}</div>
+    <header className="flex items-center justify-between py-3 gap-3">
+      <div className="min-w-0 text-fg text-sm font-medium tracking-tight truncate">{title || 'Athena'}</div>
 
       <div className="flex items-center gap-2 shrink-0">
         {verified != null && (
