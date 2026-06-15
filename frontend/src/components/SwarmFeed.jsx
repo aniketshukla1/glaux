@@ -1,4 +1,5 @@
 import React, { useState } from 'react'
+import { Radio } from 'lucide-react'
 import { getBlock } from '../api.js'
 
 const COLORS = {
@@ -64,7 +65,7 @@ export default function SwarmFeed({ blocks, streaming }) {
   return (
     <section>
       <h2 className="text-fg mb-3 flex items-center gap-2">
-        ⌁ Swarm Feed <span className="text-xs text-faint">({blocks.length} blocks)</span>
+        <Radio className="w-4 h-4 text-accent" /> Swarm Feed <span className="text-xs text-faint">({blocks.length} blocks)</span>
         {streaming && (
           <span className="text-xs text-emerald-300 flex items-center gap-1">
             <span className="inline-block w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />

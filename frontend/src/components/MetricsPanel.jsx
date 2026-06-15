@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react'
+import { Activity } from 'lucide-react'
 import { getMetrics } from '../api.js'
 
 function Card({ label, value, sub }) {
@@ -30,7 +31,7 @@ export default function MetricsPanel() {
   if (!m) {
     return (
       <section>
-        <h2 className="text-fg mb-3">📈 Metrics</h2>
+        <h2 className="text-fg mb-3 flex items-center gap-2"><Activity className="w-4 h-4 text-accent" /> Metrics</h2>
         <div className="glass p-6 text-center text-faint text-sm">No metrics yet.</div>
       </section>
     )
@@ -41,7 +42,7 @@ export default function MetricsPanel() {
   return (
     <section>
       <h2 className="text-fg mb-3 flex items-center gap-2">
-        📈 Metrics <span className="text-xs text-faint">(live · also at /metrics)</span>
+        <Activity className="w-4 h-4 text-accent" /> Metrics <span className="text-xs text-faint">(live · also at /metrics)</span>
       </h2>
       <div className="grid grid-cols-2 gap-3">
         <Card
@@ -51,7 +52,7 @@ export default function MetricsPanel() {
         />
         <Card
           label="task outcomes"
-          value={`${m.tasks_success}✓ ${m.tasks_incomplete}~ ${m.tasks_budget_halt}⛔`}
+          value={`${m.tasks_success} / ${m.tasks_incomplete} / ${m.tasks_budget_halt}`}
           sub="success · incomplete · budget-halt"
         />
         <Card label="LLM calls" value={m.llm_calls} sub={`${m.tokens_total.toLocaleString()} tokens`} />

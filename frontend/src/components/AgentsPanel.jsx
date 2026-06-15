@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react'
+import { Users } from 'lucide-react'
 import { getAgents } from '../api.js'
 
 const ROLE_COLOR = {
@@ -21,7 +22,7 @@ export default function AgentsPanel() {
   return (
     <section>
       <h2 className="text-fg mb-3 flex items-center gap-2">
-        ✦ Agent Roster <span className="text-xs text-faint">({agents.length})</span>
+        <Users className="w-4 h-4 text-accent" /> Agent Roster <span className="text-xs text-faint">({agents.length})</span>
       </h2>
       <div className="space-y-2">
         {agents.map((a) => {

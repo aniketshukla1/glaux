@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react'
+import { Hammer, AlertTriangle, Check, X } from 'lucide-react'
 import { approveSkill, getSkills, rejectSkill, synthesizeSkill, useSkill } from '../api.js'
 
 const STATUS = {
@@ -56,7 +57,7 @@ export default function SkillLibrary() {
 
   return (
     <section>
-      <h2 className="text-fg mb-3">⚒ Skill Library</h2>
+      <h2 className="text-fg mb-3 flex items-center gap-2"><Hammer className="w-4 h-4 text-accent" /> Skill Library</h2>
 
       <form onSubmit={onSynth} className="flex gap-2 mb-2">
         <input
@@ -111,8 +112,8 @@ export default function SkillLibrary() {
                 {s.status.replace('_', ' ')}
               </span>
               {s.sensitive && (
-                <span className="px-2 py-0.5 rounded text-xs border border-amber-500/40 text-amber-300">
-                  ⚠ sensitive
+                <span className="px-2 py-0.5 rounded text-xs border border-amber-500/40 text-amber-300 inline-flex items-center gap-1">
+                  <AlertTriangle className="w-3 h-3" /> sensitive
                 </span>
               )}
               <span className="text-sm text-fg">{s.name}</span>
@@ -126,15 +127,15 @@ export default function SkillLibrary() {
               <div className="flex gap-2 mt-2">
                 <button
                   onClick={() => onApprove(s.id)}
-                  className="px-2 py-1 rounded text-xs border border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/10"
+                  className="px-2 py-1 rounded text-xs border border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/10 inline-flex items-center gap-1"
                 >
-                  ✓ approve
+                  <Check className="w-3 h-3" /> approve
                 </button>
                 <button
                   onClick={() => onReject(s.id)}
-                  className="px-2 py-1 rounded text-xs border border-rose-500/40 text-rose-300 hover:bg-rose-500/10"
+                  className="px-2 py-1 rounded text-xs border border-rose-500/40 text-rose-300 hover:bg-rose-500/10 inline-flex items-center gap-1"
                 >
-                  ✗ reject
+                  <X className="w-3 h-3" /> reject
                 </button>
               </div>
             ) : (

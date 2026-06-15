@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react'
+import { BarChart3 } from 'lucide-react'
 import { getEvalRuns, runEval } from '../api.js'
 
 export default function EvalDashboard() {
@@ -35,7 +36,7 @@ export default function EvalDashboard() {
   return (
     <section>
       <div className="flex items-center justify-between mb-3">
-        <h2 className="text-fg">📊 Eval Dashboard</h2>
+        <h2 className="text-fg flex items-center gap-2"><BarChart3 className="w-4 h-4 text-accent" /> Eval Dashboard</h2>
         <button
           onClick={onRun}
           disabled={busy}

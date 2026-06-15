@@ -1,4 +1,5 @@
 import React from 'react'
+import { Link2 } from 'lucide-react'
 
 export default function ChainAuditor({ ledger, onVerify }) {
   const v = ledger.verification
@@ -6,7 +7,7 @@ export default function ChainAuditor({ ledger, onVerify }) {
 
   return (
     <section>
-      <h2 className="text-fg mb-3">☍ Chain Auditor</h2>
+      <h2 className="text-fg mb-3 flex items-center gap-2"><Link2 className="w-4 h-4 text-accent" /> Chain Auditor</h2>
       <div className="glass p-4 space-y-3">
         <div
           className={`p-3 rounded-lg border text-sm ${
