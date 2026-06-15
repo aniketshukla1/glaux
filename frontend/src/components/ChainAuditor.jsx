@@ -6,7 +6,7 @@ export default function ChainAuditor({ ledger, onVerify }) {
 
   return (
     <section>
-      <h2 className="text-slate-300 mb-3">☍ Chain Auditor</h2>
+      <h2 className="text-fg mb-3">☍ Chain Auditor</h2>
       <div className="glass p-4 space-y-3">
         <div
           className={`p-3 rounded-lg border text-sm ${
@@ -22,19 +22,19 @@ export default function ChainAuditor({ ledger, onVerify }) {
               : '— no chain yet —'}
         </div>
 
-        <div className="flex justify-between text-sm text-slate-400">
+        <div className="flex justify-between text-sm text-muted">
           <span>Blocks</span>
-          <span className="text-slate-200">{ledger.count}</span>
+          <span className="text-fg">{ledger.count}</span>
         </div>
 
         <button
           onClick={onVerify}
-          className="w-full px-3 py-2 rounded-lg border border-athena-accent2/40 text-athena-accent2 hover:bg-athena-accent2/10 transition"
+          className="w-full px-3 py-2 rounded-lg border border-accent2/40 text-accent2 hover:bg-accent2/10 transition"
         >
           Re-verify chain
         </button>
 
-        <p className="text-xs text-slate-500 leading-relaxed">
+        <p className="text-xs text-faint leading-relaxed">
           Verification runs natively in Rust (athena_ledger): it recomputes every
           SHA-256, checks each prev-hash link, and validates every Ed25519 signature.
         </p>

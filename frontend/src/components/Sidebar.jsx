@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import {
   Plus, MessageSquarePlus, Folder, FolderPlus, FolderInput, Pencil, Trash2,
   PanelLeftClose, PanelLeft, ChevronDown, MessageSquare, SlidersHorizontal, X,
@@ -6,6 +7,8 @@ import {
 import AthenaMark from './AthenaMark.jsx'
 
 // --- modals (in-app, so they work inside the desktop WebView) -------------
+// Portalled to <body> so they escape the sticky sidebar's stacking context and
+// sit above the whole app.
 
 function Modal({ children, onClose, width = 'max-w-md' }) {
   useEffect(() => {
@@ -13,11 +16,12 @@ function Modal({ children, onClose, width = 'max-w-md' }) {
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose])
-  return (
-    <div className="fixed inset-0 z-[60] grid place-items-center p-5">
+  return createPortal(
+    <div className="fixed inset-0 z-[80] grid place-items-center p-5">
       <div className="absolute inset-0 bg-black/50" onClick={onClose} />
       <div className={`relative card w-full ${width} p-5`}>{children}</div>
-    </div>
+    </div>,
+    document.body,
   )
 }
 

@@ -6,7 +6,7 @@ const STATUS = {
   quarantined: 'text-amber-300 border-amber-500/40 bg-amber-500/10',
   promoted: 'text-emerald-300 border-emerald-500/40 bg-emerald-500/10',
   deprecated: 'text-rose-300 border-rose-500/40 bg-rose-500/10',
-  rejected: 'text-slate-400 border-slate-600/40 bg-slate-700/20',
+  rejected: 'text-muted border-line/15 bg-line/8',
 }
 
 export default function SkillLibrary() {
@@ -56,18 +56,18 @@ export default function SkillLibrary() {
 
   return (
     <section>
-      <h2 className="text-slate-300 mb-3">⚒ Skill Library</h2>
+      <h2 className="text-fg mb-3">⚒ Skill Library</h2>
 
       <form onSubmit={onSynth} className="flex gap-2 mb-2">
         <input
           value={task}
           onChange={(e) => setTask(e.target.value)}
           placeholder="Describe a skill to synthesize…"
-          className="flex-1 glass px-3 py-2 bg-transparent outline-none text-sm text-slate-200 placeholder-slate-500"
+          className="flex-1 glass px-3 py-2 bg-transparent outline-none text-sm text-fg placeholder:text-faint"
         />
         <button
           disabled={busy}
-          className="px-3 py-2 rounded-lg border border-athena-accent/40 text-athena-accent text-sm hover:bg-athena-accent/10 disabled:opacity-50"
+          className="px-3 py-2 rounded-lg border border-accent/40 text-accent text-sm hover:bg-accent/10 disabled:opacity-50"
         >
           {busy ? 'Synthesizing…' : 'Synthesize'}
         </button>
@@ -86,21 +86,21 @@ export default function SkillLibrary() {
             <div className="text-rose-300 mt-1">caps: {result.cap_violations.join('; ')}</div>
           )}
           {result.test_results?.length > 0 && (
-            <div className="text-slate-400 mt-1">
+            <div className="text-muted mt-1">
               tests: {result.test_results.filter((t) => t.ok).length}/{result.test_results.length} passed
             </div>
           )}
         </div>
       )}
 
-      <p className="text-xs text-slate-500 mb-2">
+      <p className="text-xs text-faint mb-2">
         Synthesized skills are sandbox-tested, then <span className="text-amber-300">quarantined</span>{' '}
         → <span className="text-emerald-300">promoted</span> after repeated success.
       </p>
 
       <div className="space-y-2 max-h-[55vh] overflow-auto pr-1">
         {skills.length === 0 && (
-          <div className="glass p-6 text-center text-slate-500 text-sm">
+          <div className="glass p-6 text-center text-faint text-sm">
             No skills yet. Synthesize one above.
           </div>
         )}
@@ -115,13 +115,13 @@ export default function SkillLibrary() {
                   ⚠ sensitive
                 </span>
               )}
-              <span className="text-sm text-slate-200">{s.name}</span>
-              <span className="text-xs text-slate-500">v{s.version}</span>
-              <span className="ml-auto text-xs text-slate-400">
+              <span className="text-sm text-fg">{s.name}</span>
+              <span className="text-xs text-faint">v{s.version}</span>
+              <span className="ml-auto text-xs text-muted">
                 {s.usage_count} uses · {(s.success_rate * 100).toFixed(0)}%
               </span>
             </div>
-            {s.description && <div className="text-xs text-slate-500 mt-1">{s.description}</div>}
+            {s.description && <div className="text-xs text-faint mt-1">{s.description}</div>}
             {s.status === 'pending_approval' ? (
               <div className="flex gap-2 mt-2">
                 <button

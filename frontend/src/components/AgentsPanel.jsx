@@ -20,8 +20,8 @@ export default function AgentsPanel() {
 
   return (
     <section>
-      <h2 className="text-slate-300 mb-3 flex items-center gap-2">
-        ✦ Agent Roster <span className="text-xs text-slate-500">({agents.length})</span>
+      <h2 className="text-fg mb-3 flex items-center gap-2">
+        ✦ Agent Roster <span className="text-xs text-faint">({agents.length})</span>
       </h2>
       <div className="space-y-2">
         {agents.map((a) => {
@@ -38,16 +38,16 @@ export default function AgentsPanel() {
                 <div className="hash" title={a.public_key}>
                   key {short(a.public_key)}
                 </div>
-                <div className="text-xs text-slate-500">namespace: {a.namespace}</div>
+                <div className="text-xs text-faint">namespace: {a.namespace}</div>
               </div>
             </div>
           )
         })}
         {agents.length === 0 && (
-          <div className="glass p-6 text-center text-slate-500 text-sm">No agents.</div>
+          <div className="glass p-6 text-center text-faint text-sm">No agents.</div>
         )}
       </div>
-      <p className="text-xs text-slate-500 mt-3 leading-relaxed">
+      <p className="text-xs text-faint mt-3 leading-relaxed">
         Each agent is an Ed25519 keypair. Its <code>agent_id</code> is the base58 of its public
         key; every action it signs is verifiable against it.
       </p>

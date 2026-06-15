@@ -44,7 +44,7 @@ export default function MemoryPanel() {
 
   return (
     <section>
-      <h2 className="text-slate-300 mb-3 flex items-center gap-2">⛁ Memory</h2>
+      <h2 className="text-fg mb-3 flex items-center gap-2">⛁ Memory</h2>
 
       <div className="flex gap-1 mb-3">
         {LAYERS.map((l) => (
@@ -53,26 +53,26 @@ export default function MemoryPanel() {
             onClick={() => setLayer(l)}
             className={`px-3 py-1 rounded-lg text-xs border transition ${
               layer === l
-                ? 'text-athena-accent border-athena-accent/40 bg-athena-accent/10'
-                : 'text-slate-500 border-slate-700/50 hover:text-slate-300'
+                ? 'text-accent border-accent/40 bg-accent/10'
+                : 'text-faint border-line/15 hover:text-fg'
             }`}
           >
             {l}
           </button>
         ))}
       </div>
-      <p className="text-xs text-slate-500 mb-3">{LAYER_HINT[layer]}</p>
+      <p className="text-xs text-faint mb-3">{LAYER_HINT[layer]}</p>
 
       <form onSubmit={onAdd} className="flex gap-2 mb-2">
         <input
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           placeholder={`Add to ${layer} memory…`}
-          className="flex-1 glass px-3 py-2 bg-transparent outline-none text-sm text-slate-200 placeholder-slate-500"
+          className="flex-1 glass px-3 py-2 bg-transparent outline-none text-sm text-fg placeholder:text-faint"
         />
         <button
           disabled={busy}
-          className="px-3 py-2 rounded-lg border border-athena-accent/40 text-athena-accent text-sm hover:bg-athena-accent/10 disabled:opacity-50"
+          className="px-3 py-2 rounded-lg border border-accent/40 text-accent text-sm hover:bg-accent/10 disabled:opacity-50"
         >
           Add
         </button>
@@ -84,11 +84,11 @@ export default function MemoryPanel() {
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && load(layer, query)}
           placeholder="Search…"
-          className="flex-1 glass px-3 py-2 bg-transparent outline-none text-sm text-slate-200 placeholder-slate-500"
+          className="flex-1 glass px-3 py-2 bg-transparent outline-none text-sm text-fg placeholder:text-faint"
         />
         <button
           onClick={() => load(layer, query)}
-          className="px-3 py-2 rounded-lg border border-slate-600/40 text-slate-400 text-sm hover:text-slate-200"
+          className="px-3 py-2 rounded-lg border border-line/15 text-muted text-sm hover:text-fg"
         >
           Search
         </button>
@@ -96,17 +96,17 @@ export default function MemoryPanel() {
 
       <div className="space-y-2 max-h-[55vh] overflow-auto pr-1">
         {items.length === 0 && (
-          <div className="glass p-6 text-center text-slate-500 text-sm">
+          <div className="glass p-6 text-center text-faint text-sm">
             Nothing in {layer} memory yet.
           </div>
         )}
         {items.map((it) => (
           <div key={it.id} className="glass p-3">
-            <div className="text-sm text-slate-200">{it.text}</div>
+            <div className="text-sm text-fg">{it.text}</div>
             <div className="flex justify-between mt-1">
               <span className="hash">{it.id.slice(0, 12)}…</span>
               {it.similarity > 0 && (
-                <span className="text-xs text-athena-accent">
+                <span className="text-xs text-accent">
                   {(it.similarity * 100).toFixed(0)}% match
                 </span>
               )}

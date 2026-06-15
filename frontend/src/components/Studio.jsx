@@ -25,7 +25,7 @@ const TABS = [
 export default function Studio({ open, onClose, ledger, blocks, onVerify }) {
   const [tab, setTab] = useState('skills')
   return (
-    <Drawer open={open} onClose={onClose} title="Studio" icon={<LayoutGrid className="w-4 h-4 text-muted" />} width={700} dark>
+    <Drawer open={open} onClose={onClose} title="Studio" icon={<LayoutGrid className="w-4 h-4 text-muted" />} width={700}>
       <div className="flex gap-1 flex-wrap mb-4">
         {TABS.map(({ key, label, Icon }) => (
           <button

@@ -9,7 +9,7 @@ const MODES = [
 export default function SafetyControl({ mode, onChange }) {
   return (
     <div className="flex items-center gap-1" title="Global kill switch">
-      <span className="text-xs text-slate-500 mr-1">safety</span>
+      <span className="text-xs text-faint mr-1">safety</span>
       {MODES.map((m) => {
         const active = mode === m.key
         return (
@@ -17,7 +17,7 @@ export default function SafetyControl({ mode, onChange }) {
             key={m.key}
             onClick={() => onChange(m.key)}
             className={`px-2 py-1 rounded text-xs border transition ${
-              active ? m.cls : 'text-slate-500 border-slate-700/50 hover:text-slate-300'
+              active ? m.cls : 'text-faint border-line/15 hover:text-fg'
             }`}
           >
             {m.label}

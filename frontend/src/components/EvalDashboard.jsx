@@ -35,11 +35,11 @@ export default function EvalDashboard() {
   return (
     <section>
       <div className="flex items-center justify-between mb-3">
-        <h2 className="text-slate-300">📊 Eval Dashboard</h2>
+        <h2 className="text-fg">📊 Eval Dashboard</h2>
         <button
           onClick={onRun}
           disabled={busy}
-          className="px-3 py-2 rounded-lg border border-athena-accent/40 text-athena-accent text-sm hover:bg-athena-accent/10 disabled:opacity-50"
+          className="px-3 py-2 rounded-lg border border-accent/40 text-accent text-sm hover:bg-accent/10 disabled:opacity-50"
         >
           {busy ? 'Running…' : 'Run benchmark'}
         </button>
@@ -49,8 +49,8 @@ export default function EvalDashboard() {
         <>
           <div className="glass p-4 mb-3">
             <div className="flex items-end gap-3">
-              <span className="text-xl text-slate-100">{pct(run.pass_rate)}</span>
-              <span className="text-sm text-slate-400 mb-1">
+              <span className="text-xl text-fg">{pct(run.pass_rate)}</span>
+              <span className="text-sm text-muted mb-1">
                 {run.passed}/{run.total} cases passed
               </span>
               {lift && history.length > 1 && lift.delta_pass_rate !== 0 && (
@@ -82,13 +82,13 @@ export default function EvalDashboard() {
                   <span className={c.passed ? 'text-emerald-300' : 'text-rose-300'}>
                     {c.passed ? '✓' : '✗'}
                   </span>
-                  <span className="text-slate-200">{c.name}</span>
-                  <span className="ml-auto text-xs text-slate-500">
+                  <span className="text-fg">{c.name}</span>
+                  <span className="ml-auto text-xs text-faint">
                     {c.duration_ms.toFixed(0)}ms
                   </span>
                 </div>
                 {!c.passed && (
-                  <div className="text-xs text-slate-500 mt-1 pl-6">
+                  <div className="text-xs text-faint mt-1 pl-6">
                     {c.error}
                     {c.got !== null && c.got !== undefined && (
                       <>
@@ -105,14 +105,14 @@ export default function EvalDashboard() {
       )}
 
       {!run && (
-        <div className="glass p-6 text-center text-slate-500 text-sm">
+        <div className="glass p-6 text-center text-faint text-sm">
           Run the benchmark suite to score the skill library. Synthesize skills (Skills tab) and
           re-run to see lift.
         </div>
       )}
 
       {history.length > 1 && (
-        <div className="mt-3 text-xs text-slate-500">
+        <div className="mt-3 text-xs text-faint">
           history: {history.map((h) => pct(h.pass_rate)).join(' → ')}
         </div>
       )}
