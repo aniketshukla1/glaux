@@ -62,6 +62,20 @@ def test_dispatch_builds_a_verifiable_signed_chain():
     assert led["verification"]["valid"] is True
 
 
+def test_task_surfaces_backend_failure_as_502(monkeypatch):
+    """A failing LLM backend (e.g. Ollama can't load the model) must come back as a
+    clean 502 with the real reason — not an opaque HTTP 500."""
+
+    class _BoomSwarm:
+        def run(self, *a, **k):
+            raise RuntimeError("Ollama returned HTTP 500 for model 'x': boom")
+
+    monkeypatch.setattr(STATE, "build_swarm", lambda: _BoomSwarm())
+    r = client.post("/api/task", json={"directive": "say hi"})
+    assert r.status_code == 502
+    assert "boom" in r.json()["detail"]
+
+
 def test_block_detail_and_404():
     client.post("/api/task", json={"directive": "do something"})
     b0 = client.get("/api/block/0").json()

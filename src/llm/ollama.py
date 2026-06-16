@@ -75,8 +75,26 @@ class OllamaClient:
             headers={"Content-Type": "application/json"},
             method="POST",
         )
-        with urllib.request.urlopen(req, timeout=self.timeout) as resp:
-            data = json.loads(resp.read().decode())
+        try:
+            with urllib.request.urlopen(req, timeout=self.timeout) as resp:
+                data = json.loads(resp.read().decode())
+        except urllib.error.HTTPError as e:
+            # Surface Ollama's own error body (e.g. a model that can't load) instead
+            # of a bare "HTTP 500", so the caller can show something actionable.
+            body = e.read().decode("utf-8", "replace") if e.fp else ""
+            detail = body
+            try:
+                detail = json.loads(body).get("error", body)
+            except Exception:  # noqa: BLE001 - body wasn't JSON
+                pass
+            raise RuntimeError(
+                f"Ollama returned HTTP {e.code} for model {self.model!r}: {detail or e.reason}"
+            ) from e
+        except urllib.error.URLError as e:
+            raise RuntimeError(
+                f"Could not reach Ollama at {self.host} (model {self.model!r}): {e.reason}. "
+                f"Is `ollama serve` running?"
+            ) from e
 
         text = (data.get("message") or {}).get("content", "")
         usage = {

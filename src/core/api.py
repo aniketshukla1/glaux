@@ -425,7 +425,17 @@ async def run_task(req: TaskRequest) -> dict:
     if instructions.strip():
         run_directive = f"Project instructions:\n{instructions.strip()}\n\nTask:\n{req.directive}"
     t0 = time.monotonic()
-    result = await run_in_threadpool(lambda: swarm.run(run_directive, budget=budget))
+    try:
+        result = await run_in_threadpool(lambda: swarm.run(run_directive, budget=budget))
+    except Exception as exc:  # noqa: BLE001 - surface any backend/LLM failure cleanly
+        backend = STATE.llm_config.get("backend", "demo")
+        model = STATE.llm_config.get("model") or "(default)"
+        METRICS.inc("swarm_tasks_total", outcome="error")
+        log_json("task", outcome="error", backend=backend, model=model, error=str(exc))
+        raise HTTPException(
+            status_code=502,
+            detail=f"The {backend} model {model!r} failed: {exc}",
+        ) from exc
     elapsed = time.monotonic() - t0
     new_blocks = [STATE.ledger.block(i) for i in range(before, len(STATE.ledger))]
 

@@ -40,7 +40,17 @@ async function request(method, url, bodyObj) {
     opts.body = bodyStr
   }
   const r = await fetch(url, opts)
-  if (!r.ok) throw new Error(`HTTP ${r.status}`)
+  if (!r.ok) {
+    // Prefer the server's explanation (FastAPI `detail`) over a bare status code.
+    let detail = `HTTP ${r.status}`
+    try {
+      const j = await r.json()
+      if (j && j.detail) detail = typeof j.detail === 'string' ? j.detail : JSON.stringify(j.detail)
+    } catch {
+      /* response body wasn't JSON */
+    }
+    throw new Error(detail)
+  }
   return r.json()
 }
 
