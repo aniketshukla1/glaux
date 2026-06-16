@@ -209,6 +209,42 @@ def test_swarm_runs_plan_with_handoffs_and_reflection():
     assert led.verify().valid
 
 
+def test_final_synthesis_tolerates_non_string_step_results():
+    """A specialist that finishes with a structured (dict) result must not crash the
+    final integration pass — it is stringified, and the run still succeeds."""
+    led = Ledger()
+    plan = _swarm_plan(
+        {"id": "s1", "role": "coder", "task": "produce config", "depends_on": []},
+        {"id": "s2", "role": "researcher", "task": "explain it", "depends_on": ["s1"]},
+    )
+    router = Router(
+        identity=AgentIdentity.generate(),
+        llm=ScriptedLLM([plan, "integrated answer"]),
+        ledger=led,
+    )
+    # the coder finishes with a DICT result (the model returned structured JSON)
+    dict_finish = '```json\n{"action": "finish", "result": {"key": "value"}, "success": true}\n```'
+    coder = coder_agent(identity=AgentIdentity.generate(), llm=ScriptedLLM([dict_finish]), ledger=led)
+    researcher = researcher_agent(
+        identity=AgentIdentity.generate(), llm=ScriptedLLM([_finish("explained")]), ledger=led
+    )
+    reflector = Reflector(
+        identity=AgentIdentity.generate(),
+        llm=ScriptedLLM(handler=lambda m, s: '```json\n{"verdict":"accept","reason":"ok"}\n```'),
+        ledger=led,
+    )
+    swarm = Swarm(
+        router=router,
+        specialists={"coder": coder, "researcher": researcher},
+        reflector=reflector,
+        ledger=led,
+    )
+    res = swarm.run("produce and explain")
+    assert res.success
+    assert isinstance(res.final, str)
+    assert res.final == "integrated answer"
+
+
 def test_swarm_retries_on_reflector_rejection():
     plan = _swarm_plan({"id": "s1", "role": "coder", "task": "tricky", "depends_on": []})
     router = Router(identity=AgentIdentity.generate(), llm=ScriptedLLM([plan]))

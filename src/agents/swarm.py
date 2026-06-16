@@ -9,6 +9,7 @@ outputs are threaded into dependents' context.
 
 from __future__ import annotations
 
+import json
 from collections import deque
 from dataclasses import dataclass, field
 from typing import Optional
@@ -28,6 +29,19 @@ FINAL_SYNTH_SYSTEM = (
     "their work into one coherent, complete response that addresses exactly what was "
     "asked. Lead with the answer; do not describe the team or the process."
 )
+
+
+def _as_text(value) -> str:
+    """A step result may be a string, a dict/list (model returned structured JSON),
+    or None. Coerce to readable text so synthesis and display never choke on it."""
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return value
+    try:
+        return json.dumps(value, indent=2, ensure_ascii=False)
+    except (TypeError, ValueError):
+        return str(value)
 
 
 def topo_sort(steps: list[Step]) -> list[Step]:
@@ -190,7 +204,12 @@ class Swarm:
             ):
                 self._synthesize(verdict.synthesize, synthesized)
 
-        final = self._final_answer(directive, order, results, tracker)
+        # Synthesis is presentation-only: it must never turn a completed run into a
+        # failure, so any error here falls back to the last step's output.
+        try:
+            final = self._final_answer(directive, order, results, tracker)
+        except Exception:  # noqa: BLE001
+            final = _as_text(results[order[-1].id].result.result) if order else None
         return SwarmResult(
             plan=plan,
             steps=results,
@@ -208,19 +227,20 @@ class Swarm:
         the tester's notes because testing ran last)."""
         if not order:
             return None
-        done = [results[s.id] for s in order if results[s.id].result and results[s.id].result.result]
+        last = _as_text(results[order[-1].id].result.result)
+        done = [results[s.id] for s in order if results[s.id].result and _as_text(results[s.id].result.result).strip()]
         if len(done) <= 1:
-            return results[order[-1].id].result.result
+            return last
         if tracker.exceeded() is not None:  # no budget left to synthesize — use the last output
-            return results[order[-1].id].result.result
+            return last
         return self._synthesize_final(directive, done, tracker)
 
     def _synthesize_final(self, directive: str, step_results: list, tracker: BudgetTracker):
-        parts = [
-            f"[{sr.step.role}] {sr.result.result.strip()}"
-            for sr in step_results
-            if (sr.result.result or "").strip()
-        ]
+        parts = []
+        for sr in step_results:
+            text = _as_text(sr.result.result).strip()
+            if text:
+                parts.append(f"[{sr.step.role}] {text}")
         content = (
             f"ORIGINAL REQUEST: {directive}\n\n"
             "WORK COMPLETED BY YOUR SPECIALISTS:\n" + "\n\n".join(parts) +
@@ -232,7 +252,7 @@ class Swarm:
                 messages, system=FINAL_SYNTH_SYSTEM, temperature=0.0, max_tokens=1200
             )
         except Exception:  # noqa: BLE001 - synthesis is best-effort; fall back to last output
-            return step_results[-1].result.result
+            return _as_text(step_results[-1].result.result)
         charge_for_response(tracker, resp, FINAL_SYNTH_SYSTEM, messages)
         if self.ledger is not None:
             self.ledger.append(
@@ -240,7 +260,7 @@ class Swarm:
                 Action.OBSERVATION,
                 {"final_synthesis": True, "model_id": resp.model_id},
             )
-        return (resp.text or "").strip() or step_results[-1].result.result
+        return (resp.text or "").strip() or _as_text(step_results[-1].result.result)
 
     def _synthesize(self, task: str, out: list) -> None:
         """Run the synthesis pipeline for a reflector-recommended skill,
