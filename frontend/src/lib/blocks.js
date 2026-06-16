@@ -5,6 +5,12 @@ export const ROLE_META = {
   router: { label: 'Athena', sub: 'orchestrator', color: '#818cf8' },
   coder: { label: 'Coder', sub: 'builds & computes', color: '#f472b6' },
   researcher: { label: 'Researcher', sub: 'gathers & explains', color: '#22d3ee' },
+  web: { label: 'Web Scout', sub: 'reads & cites the web', color: '#38bdf8' },
+  scientist: { label: 'Scientist', sub: 'explains mechanisms', color: '#34d399' },
+  analyst: { label: 'Analyst', sub: 'compares & quantifies', color: '#fbbf24' },
+  engineer: { label: 'Engineer', sub: 'designs systems', color: '#60a5fa' },
+  tester: { label: 'Tester', sub: 'finds the edge cases', color: '#fb7185' },
+  writer: { label: 'Writer', sub: 'turns work into prose', color: '#e879f9' },
   reflector: { label: 'Reviewer', sub: 'verifies the work', color: '#a78bfa' },
   agent: { label: 'Agent', sub: '', color: '#94a3b8' },
 }

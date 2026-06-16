@@ -6,21 +6,21 @@ import { ROLE_META, buildSwarmGraph } from '../lib/blocks.js'
 // Built straight from the signed blocks — the swarm that actually did the work.
 
 const VB_W = 600
-const VB_H = 300
+const VB_H = 324
 const R = 26
 
 function layout(nodes) {
   const pos = {}
   const specialists = nodes.filter((n) => n.id !== 'router' && n.id !== 'reflector')
   const hasReflector = nodes.some((n) => n.id === 'reflector')
-  pos.router = { x: VB_W / 2, y: 56 }
+  pos.router = { x: VB_W / 2, y: 50 }
   const n = specialists.length
-  const spread = Math.min(VB_W - 160, n * 150)
+  const spread = Math.min(VB_W - 150, n * 168)
   const startX = VB_W / 2 - spread / 2 + spread / (2 * Math.max(n, 1))
   specialists.forEach((s, i) => {
-    pos[s.id] = { x: n === 1 ? VB_W / 2 : startX + (i * spread) / n, y: VB_H / 2 + 6 }
+    pos[s.id] = { x: n === 1 ? VB_W / 2 : startX + (i * spread) / n, y: VB_H / 2 + 4 }
   })
-  if (hasReflector) pos.reflector = { x: VB_W / 2, y: VB_H - 64 }
+  if (hasReflector) pos.reflector = { x: VB_W / 2, y: VB_H - 50 }
   return pos
 }
 
@@ -65,8 +65,10 @@ function Node({ node, p }) {
           <path d="M -3.2 0 L -0.8 2.6 L 3.4 -2.6" fill="none" stroke="#34d399" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
         </g>
       )}
-      <text x={p.x} y={p.y + R + 16} textAnchor="middle" fontSize="13" fontWeight="600" fill="rgb(var(--fg))">{meta.label}</text>
-      <text x={p.x} y={p.y + R + 30} textAnchor="middle" fontSize="10" fill="rgb(var(--faint))">{meta.sub}</text>
+      <text x={p.x} y={p.y + R + 17} textAnchor="middle" fontSize="13" fontWeight="600" fill="rgb(var(--fg))"
+        stroke="rgb(var(--surface))" strokeWidth="4" strokeLinejoin="round" style={{ paintOrder: 'stroke' }}>{meta.label}</text>
+      <text x={p.x} y={p.y + R + 31} textAnchor="middle" fontSize="10" fill="rgb(var(--faint))"
+        stroke="rgb(var(--surface))" strokeWidth="3.5" strokeLinejoin="round" style={{ paintOrder: 'stroke' }}>{meta.sub}</text>
     </g>
   )
 }
@@ -104,7 +106,7 @@ export default function SwarmGraph({ blocks, roleOf, running }) {
         )}
         <span className="ml-auto text-faint text-[11px]">{graph.nodes.length} agents · signed hand-offs</span>
       </div>
-      <svg viewBox={`0 0 ${VB_W} ${VB_H}`} className="w-full" style={{ maxHeight: 210 }}>
+      <svg viewBox={`0 0 ${VB_W} ${VB_H}`} className="w-full" style={{ maxHeight: 240 }}>
         <defs>
           <radialGradient id="swarm-bg" cx="50%" cy="38%" r="65%">
             <stop offset="0%" stopColor="rgb(var(--accent))" stopOpacity="0.06" />

@@ -3,6 +3,7 @@ import {
   ArrowUp, Compass, Code2, Search, ShieldCheck, Wrench, Terminal,
   Check, AlertTriangle, ChevronRight, ChevronDown, ArrowDown, Loader2, GraduationCap, BadgeCheck,
   Coins, Cpu, Mic, Volume2, VolumeX, Copy, RotateCcw,
+  Globe, FlaskConical, BarChart3, Server, Bug, PenLine,
 } from 'lucide-react'
 import SwarmGraph from './SwarmGraph.jsx'
 import ConstellationSphere from './ConstellationSphere.jsx'
@@ -10,14 +11,20 @@ import Markdown from './Markdown.jsx'
 import { ROLE_META, short, buildTimeline } from '../lib/blocks.js'
 import { recognitionSupported, createRecognizer, ttsSupported, speak, stopSpeaking } from '../lib/speech.js'
 
-const ROLE_ICON = { router: Compass, coder: Code2, researcher: Search, reflector: ShieldCheck, agent: Cpu }
+const ROLE_ICON = {
+  router: Compass, coder: Code2, researcher: Search, reflector: ShieldCheck,
+  web: Globe, scientist: FlaskConical, analyst: BarChart3, engineer: Server, tester: Bug, writer: PenLine,
+  agent: Cpu,
+}
 const ACT_ICON = { tool: Wrench, skill: Terminal, check: Check, alert: AlertTriangle }
 
 const EXAMPLES = [
-  'Compute the sum of 5, 17 and 100',
-  'Reverse a string and explain how it works',
-  'Summarize how transformers work',
-  'What is 12% of 4,500?',
+  'Explain the mechanism of protein synthesis from transcription to translation, naming the key molecules',
+  'Design a rate limiter for a public API: compare token-bucket vs sliding-window and recommend one with pseudocode',
+  'Compare PostgreSQL and MongoDB for a multi-tenant SaaS and give a justified recommendation',
+  'Implement and stress-test a function that finds the median of two sorted arrays in O(log(m+n))',
+  'Explain how CRISPR-Cas9 edits DNA, then outline the main off-target risks',
+  'Plan a migration from a monolith to microservices for an e-commerce platform, with phases and a rollback strategy',
 ]
 
 function Avatar({ role }) {
