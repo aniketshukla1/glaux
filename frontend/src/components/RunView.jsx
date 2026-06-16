@@ -2,7 +2,7 @@ import React, { useMemo, useRef, useState } from 'react'
 import {
   ArrowUp, Compass, Code2, Search, ShieldCheck, Wrench, Terminal,
   Check, AlertTriangle, ChevronRight, Loader2, GraduationCap, BadgeCheck,
-  Coins, Cpu, Mic, Volume2, VolumeX,
+  Coins, Cpu, Mic, Volume2, VolumeX, Copy, RotateCcw,
 } from 'lucide-react'
 import SwarmGraph from './SwarmGraph.jsx'
 import ConstellationSphere from './ConstellationSphere.jsx'
@@ -110,25 +110,37 @@ function PlanCard({ item }) {
   )
 }
 
-function ResultCard({ result, verification }) {
+function ResultCard({ result, verification, onRegenerate }) {
   const ok = result.success
   const c = result.cost || {}
   const [speaking, setSpeaking] = useState(false)
+  const [copied, setCopied] = useState(false)
   const canSpeak = ttsSupported() && !!result.final
   const toggleSpeak = () => {
     if (speaking) { stopSpeaking(); setSpeaking(false); return }
     if (speak(result.final, { onEnd: () => setSpeaking(false) })) setSpeaking(true)
   }
+  const copy = () => { navigator.clipboard?.writeText(result.final || ''); setCopied(true); setTimeout(() => setCopied(false), 1200) }
   return (
     <div className="card p-4 animate-fade-up" style={{ borderColor: ok ? 'rgb(var(--accent) / 0.4)' : undefined }}>
       <div className="flex items-center gap-2 mb-1.5">
         <BadgeCheck className={`w-4 h-4 ${ok ? 'text-accent' : 'text-amber-400'}`} />
         <span className="text-faint text-[11px] uppercase tracking-wide">{ok ? 'Result' : 'Incomplete'}</span>
-        {canSpeak && (
-          <button onClick={toggleSpeak} className="ml-auto btn p-1" aria-label={speaking ? 'Stop reading' : 'Read aloud'} title={speaking ? 'Stop reading' : 'Read aloud'}>
-            {speaking ? <VolumeX className="w-3.5 h-3.5" /> : <Volume2 className="w-3.5 h-3.5" />}
+        <div className="ml-auto flex items-center gap-0.5">
+          <button onClick={copy} className="btn p-1" aria-label="Copy answer" title="Copy answer">
+            {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
           </button>
-        )}
+          {onRegenerate && (
+            <button onClick={onRegenerate} className="btn p-1" aria-label="Regenerate" title="Ask again">
+              <RotateCcw className="w-3.5 h-3.5" />
+            </button>
+          )}
+          {canSpeak && (
+            <button onClick={toggleSpeak} className="btn p-1" aria-label={speaking ? 'Stop reading' : 'Read aloud'} title={speaking ? 'Stop reading' : 'Read aloud'}>
+              {speaking ? <VolumeX className="w-3.5 h-3.5" /> : <Volume2 className="w-3.5 h-3.5" />}
+            </button>
+          )}
+        </div>
       </div>
       <Markdown className="text-fg text-[13.5px]">{result.final || '—'}</Markdown>
       {result.budget_halt && <div className="mt-2 text-xs text-amber-400">budget guard: {result.budget_halt}</div>}
@@ -153,7 +165,7 @@ function DirectiveBubble({ text }) {
 }
 
 // One run rendered as a conversation turn: the directive, the swarm timeline, the result.
-function Turn({ directive, blocks, roleOf, running, result, verification }) {
+function Turn({ directive, blocks, roleOf, running, result, verification, onDispatch }) {
   const timeline = useMemo(() => buildTimeline(blocks || [], roleOf), [blocks, roleOf])
   const lastStepIdx = (() => {
     for (let i = timeline.length - 1; i >= 0; i--) if (timeline[i].kind === 'step') return i
@@ -174,7 +186,7 @@ function Turn({ directive, blocks, roleOf, running, result, verification }) {
           <span className="text-muted text-sm">Athena is planning…</span>
         </div>
       )}
-      {result && <ResultCard result={result} verification={verification} />}
+      {result && <ResultCard result={result} verification={verification} onRegenerate={onDispatch && directive ? () => onDispatch(directive) : undefined} />}
     </div>
   )
 }
@@ -183,11 +195,26 @@ function Composer({ onDispatch, hero }) {
   const [input, setInput] = useState('')
   const [listening, setListening] = useState(false)
   const recRef = useRef(null)
-  const submit = (e) => { e.preventDefault(); if (input.trim()) { onDispatch(input.trim()); setInput('') } }
+  const taRef = useRef(null)
+
+  const autoGrow = () => {
+    const el = taRef.current
+    if (el) { el.style.height = 'auto'; el.style.height = `${Math.min(el.scrollHeight, 200)}px` }
+  }
+  const send = () => {
+    if (!input.trim()) return
+    onDispatch(input.trim())
+    setInput('')
+    requestAnimationFrame(autoGrow)
+  }
+  const submit = (e) => { e.preventDefault(); send() }
+  const onKeyDown = (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send() }
+  }
   const toggleMic = () => {
     if (listening) { recRef.current?.stop(); return }
     const rec = createRecognizer({
-      onResult: (text, isFinal) => { setInput(text); if (isFinal && text.trim()) { rec.stop(); onDispatch(text.trim()); setInput('') } },
+      onResult: (text, isFinal) => { setInput(text); requestAnimationFrame(autoGrow); if (isFinal && text.trim()) { rec.stop(); onDispatch(text.trim()); setInput('') } },
       onError: () => setListening(false),
       onEnd: () => setListening(false),
     })
@@ -196,22 +223,25 @@ function Composer({ onDispatch, hero }) {
   }
   return (
     <form onSubmit={submit} className={hero ? 'w-full max-w-2xl mt-7' : 'w-full'}>
-      <div className="glass flex items-center gap-1.5 p-1.5 pl-3.5 rounded-xl">
-        <input
+      <div className="glass flex items-end gap-1.5 p-1.5 pl-3.5 rounded-xl">
+        <textarea
+          ref={taRef}
           value={input}
-          onChange={(e) => setInput(e.target.value)}
-          placeholder={listening ? 'Listening…' : hero ? 'e.g. summarize how transformers work' : 'Ask Athena to do something…'}
-          className="flex-1 bg-transparent outline-none text-fg text-sm placeholder-faint py-1.5"
+          rows={1}
+          onChange={(e) => { setInput(e.target.value); autoGrow() }}
+          onKeyDown={onKeyDown}
+          placeholder={listening ? 'Listening…' : hero ? 'e.g. summarize how transformers work' : 'Ask Athena to do something…  (Shift+Enter for a new line)'}
+          className="flex-1 bg-transparent outline-none text-fg text-sm placeholder-faint py-1.5 resize-none leading-relaxed max-h-[200px]"
           autoFocus={hero}
         />
         {recognitionSupported() && (
           <button type="button" onClick={toggleMic}
-            className={`p-2 rounded-lg border transition ${listening ? 'border-rose-500/50 text-rose-400 bg-rose-500/10 animate-pulse' : 'border-line/16 text-muted hover:text-fg'}`}
+            className={`p-2 rounded-lg border transition shrink-0 ${listening ? 'border-rose-500/50 text-rose-400 bg-rose-500/10 animate-pulse' : 'border-line/16 text-muted hover:text-fg'}`}
             aria-label={listening ? 'Stop dictation' : 'Dictate'} title={listening ? 'Stop' : 'Speak your task'}>
             <Mic className="w-4 h-4" />
           </button>
         )}
-        <button type="submit" disabled={!input.trim()} className="btn-accent p-2 disabled:opacity-40" aria-label="Run">
+        <button type="submit" disabled={!input.trim()} className="btn-accent p-2 disabled:opacity-40 shrink-0" aria-label="Run">
           <ArrowUp className="w-4 h-4" />
         </button>
       </div>
@@ -245,10 +275,10 @@ export default function RunView({ session, blocks, roleOf, running, result, goal
       <div className="flex-1 w-full max-w-5xl mx-auto px-5 sm:px-8 pt-4 pb-6 space-y-6">
         {runs.map((run) => (
           <Turn key={run.id} directive={run.directive} blocks={run.blocks} roleOf={roleOf}
-            result={{ success: run.success, final: run.final, cost: run.cost }} verification={run.verification} />
+            result={{ success: run.success, final: run.final, cost: run.cost }} verification={run.verification} onDispatch={onDispatch} />
         ))}
         {liveTurn && (
-          <Turn directive={goal} blocks={blocks} roleOf={roleOf} running={running} result={result} verification={verification} />
+          <Turn directive={goal} blocks={blocks} roleOf={roleOf} running={running} result={result} verification={verification} onDispatch={onDispatch} />
         )}
       </div>
       <div className="sticky bottom-0 w-full max-w-5xl mx-auto px-5 sm:px-8 pb-5 pt-3 bg-gradient-to-t from-[rgb(var(--bg))] via-[rgb(var(--bg))] to-transparent">
