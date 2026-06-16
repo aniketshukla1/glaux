@@ -15,6 +15,7 @@ Run:  PYTHONPATH=src uvicorn core.api:app --port 8000 --reload
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 import shutil
 import tempfile
@@ -73,9 +74,50 @@ def _workspace_path() -> Path:
     return _athena_home() / "workspace.json"
 
 
+def _llm_config_path() -> Path:
+    return _athena_home() / "llm.json"
+
+
+def _load_persisted_llm_config() -> Optional[dict]:
+    """Read the last provider/model the user picked. API keys are NEVER persisted,
+    so a saved provider that needs a key relies on the key being in the env."""
+    try:
+        data = json.loads(_llm_config_path().read_text())
+    except (OSError, ValueError):
+        return None
+    if not isinstance(data, dict) or not data.get("backend"):
+        return None
+    return {
+        "backend": str(data["backend"]),
+        "model": data.get("model"),
+        "api_key": None,
+        "base_url": data.get("base_url"),
+    }
+
+
+def _persist_llm_config(config: dict) -> None:
+    """Remember the selected provider/model across restarts — minus the API key.
+
+    Local model files are deliberately not persisted: the server subprocess is
+    gone after a restart, so its base_url would be dead."""
+    if config.get("backend") == "localmodel":
+        return
+    try:
+        _athena_home().mkdir(parents=True, exist_ok=True)
+        payload = {"backend": config.get("backend"), "model": config.get("model"),
+                   "base_url": config.get("base_url")}
+        _llm_config_path().write_text(json.dumps(payload, indent=2))
+    except OSError:
+        pass  # best-effort; a non-writable home just means no persistence
+
+
 def _default_llm_config() -> dict:
+    # An explicit env override wins; otherwise restore the last UI choice; else default.
     backend = os.environ.get("ATHENA_LLM")
     if backend is None:
+        persisted = _load_persisted_llm_config()
+        if persisted is not None:
+            return persisted
         backend = "anthropic" if os.environ.get("ANTHROPIC_API_KEY") else "demo"
     return {
         "backend": backend,
@@ -679,6 +721,7 @@ def set_llm(req: LLMRequest) -> dict:
         "base_url": req.base_url,
     }
     STATE.llm = _make_llm(STATE.llm_config)
+    _persist_llm_config(STATE.llm_config)  # remember across restarts (no key)
     return {"backend": backend, "model_id": STATE.llm.model_id}
 
 
