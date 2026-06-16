@@ -1,7 +1,7 @@
-import React, { useMemo, useRef, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import {
   ArrowUp, Compass, Code2, Search, ShieldCheck, Wrench, Terminal,
-  Check, AlertTriangle, ChevronRight, Loader2, GraduationCap, BadgeCheck,
+  Check, AlertTriangle, ChevronRight, ChevronDown, ArrowDown, Loader2, GraduationCap, BadgeCheck,
   Coins, Cpu, Mic, Volume2, VolumeX, Copy, RotateCcw,
 } from 'lucide-react'
 import SwarmGraph from './SwarmGraph.jsx'
@@ -47,49 +47,55 @@ function ProofView({ blocks }) {
 
 function StepCard({ step, working }) {
   const [proof, setProof] = useState(false)
+  const [open, setOpen] = useState(true)
   const meta = ROLE_META[step.role] || ROLE_META.agent
   const status = working ? 'working' : step.verdict === 'retry' ? 'revising' : 'verified'
   return (
     <div className="card p-3.5 animate-fade-up">
-      <div className="flex items-center gap-2.5">
+      <button onClick={() => setOpen((o) => !o)} className="w-full flex items-center gap-2.5 text-left">
         <Avatar role={step.role} />
         <div className="min-w-0">
           <div className="text-fg text-sm font-medium leading-tight">{meta.label}</div>
           <div className="text-faint text-xs">{meta.sub}</div>
         </div>
-        <span className="ml-auto">
+        <span className="ml-auto flex items-center gap-2">
           {status === 'working' && <span className="flex items-center gap-1.5 text-xs text-accent"><Loader2 className="w-3.5 h-3.5 animate-spin" /> working</span>}
           {status === 'verified' && <span className="flex items-center gap-1.5 text-xs text-emerald-400"><BadgeCheck className="w-3.5 h-3.5" /> verified</span>}
           {status === 'revising' && <span className="flex items-center gap-1.5 text-xs text-amber-400"><AlertTriangle className="w-3.5 h-3.5" /> revising</span>}
+          <ChevronDown className={`w-3.5 h-3.5 text-faint transition ${open ? '' : '-rotate-90'}`} />
         </span>
-      </div>
-      {(step.activities.length > 0 || working) && (
-        <div className="mt-3 pl-12 space-y-2">
-          {step.activities.map((a, i) => {
-            const Icon = ACT_ICON[a.icon] || Check
-            return (
-              <div key={i} className="flex items-start gap-2.5 text-sm">
-                <Icon className={`w-4 h-4 mt-0.5 shrink-0 ${a.ok ? 'text-muted' : 'text-rose-400'}`} />
-                <div className="min-w-0">
-                  <span className="text-fg">{a.text}</span>
-                  {a.detail && <span className="text-faint font-mono text-xs ml-2">{a.detail}</span>}
-                </div>
-              </div>
-            )
-          })}
-          {working && step.activities.length === 0 && <div className="shimmer h-4 w-40 rounded bg-line/10" />}
-        </div>
-      )}
-      {step.learned && (
-        <div className="mt-3 ml-12 inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-lg bg-accent2/10 border border-accent2/30 text-accent2">
-          <GraduationCap className="w-3.5 h-3.5" /> learned a new skill: {step.learned}
-        </div>
-      )}
-      <button onClick={() => setProof((v) => !v)} className="mt-3 ml-12 flex items-center gap-1 text-xs text-faint hover:text-muted transition">
-        <ShieldCheck className="w-3.5 h-3.5" /> proof
-        <ChevronRight className={`w-3.5 h-3.5 transition ${proof ? 'rotate-90' : ''}`} />
       </button>
-      {proof && <ProofView blocks={step.blocks} />}
+      {open && (
+        <>
+          {(step.activities.length > 0 || working) && (
+            <div className="mt-3 pl-12 space-y-2">
+              {step.activities.map((a, i) => {
+                const Icon = ACT_ICON[a.icon] || Check
+                return (
+                  <div key={i} className="flex items-start gap-2.5 text-sm">
+                    <Icon className={`w-4 h-4 mt-0.5 shrink-0 ${a.ok ? 'text-muted' : 'text-rose-400'}`} />
+                    <div className="min-w-0">
+                      <span className="text-fg">{a.text}</span>
+                      {a.detail && <span className="text-faint font-mono text-xs ml-2 break-words">{a.detail}</span>}
+                    </div>
+                  </div>
+                )
+              })}
+              {working && step.activities.length === 0 && <div className="shimmer h-4 w-40 rounded bg-line/10" />}
+            </div>
+          )}
+          {step.learned && (
+            <div className="mt-3 ml-12 inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-lg bg-accent2/10 border border-accent2/30 text-accent2">
+              <GraduationCap className="w-3.5 h-3.5" /> learned a new skill: {step.learned}
+            </div>
+          )}
+          <button onClick={() => setProof((v) => !v)} className="mt-3 ml-12 flex items-center gap-1 text-xs text-faint hover:text-muted transition">
+            <ShieldCheck className="w-3.5 h-3.5" /> proof
+            <ChevronRight className={`w-3.5 h-3.5 transition ${proof ? 'rotate-90' : ''}`} />
+          </button>
+          {proof && <ProofView blocks={step.blocks} />}
+        </>
+      )}
     </div>
   )
 }
@@ -254,6 +260,20 @@ export default function RunView({ session, blocks, roleOf, running, result, goal
   const liveTurn = running || result || (blocks && blocks.length > 0)
   const hasContent = runs.length > 0 || liveTurn
 
+  const bottomRef = useRef(null)
+  const [atBottom, setAtBottom] = useState(true)
+  useEffect(() => {
+    const onScroll = () => {
+      setAtBottom(window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 160)
+    }
+    window.addEventListener('scroll', onScroll, { passive: true })
+    onScroll()
+    return () => window.removeEventListener('scroll', onScroll)
+  }, [hasContent])
+  useEffect(() => {
+    if (atBottom) bottomRef.current?.scrollIntoView({ block: 'end' })
+  }, [blocks, result, running, session?.id]) // eslint-disable-line react-hooks/exhaustive-deps
+
   if (!hasContent) {
     return (
       <div className="min-h-[72vh] flex flex-col items-center justify-center text-center animate-fade-in px-5">
@@ -280,8 +300,19 @@ export default function RunView({ session, blocks, roleOf, running, result, goal
         {liveTurn && (
           <Turn directive={goal} blocks={blocks} roleOf={roleOf} running={running} result={result} verification={verification} onDispatch={onDispatch} />
         )}
+        <div ref={bottomRef} className="h-px" />
       </div>
       <div className="sticky bottom-0 w-full max-w-5xl mx-auto px-5 sm:px-8 pb-5 pt-3 bg-gradient-to-t from-[rgb(var(--bg))] via-[rgb(var(--bg))] to-transparent">
+        {!atBottom && (
+          <div className="flex justify-center mb-2.5">
+            <button
+              onClick={() => bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })}
+              className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full glass text-muted hover:text-fg shadow-lg animate-fade-in"
+            >
+              <ArrowDown className="w-3.5 h-3.5" /> Latest
+            </button>
+          </div>
+        )}
         <Composer onDispatch={onDispatch} />
       </div>
     </div>
