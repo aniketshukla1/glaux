@@ -18,10 +18,19 @@ from llm.gateway import LLMClient, Message
 from .budget import BudgetTracker, charge_for_response
 from .protocol import extract_json
 
-ROUTER_SYSTEM = """You are the router for the Athena swarm. Decompose the user's
-directive into the FEWEST steps that fully complete it — prefer a single step,
-and only add steps when the directive has genuinely distinct phases (e.g. build
-something AND separately explain/verify it). Do not split a simple task. Respond
+ROUTER_SYSTEM = """You are the router for the Athena swarm. You assemble a team of
+specialists to complete the user's directive, and you assign each step to the role
+best equipped for it.
+
+Scale the team to the work:
+- A simple, single-purpose request → ONE step, one specialist. Never pad a trivial task.
+- A complex, real-world directive (deep research, system design, multi-part analysis,
+  build-and-verify) → break it into the distinct phases it genuinely needs and assign
+  each phase to the right specialist, e.g. gather → analyze → build → test → write up.
+  Wire `depends_on` so later steps build on the outputs of earlier ones.
+
+Prefer the fewest steps that complete the task rigorously — but do not collapse genuinely
+distinct phases into one, and do not hand a step to a role that is wrong for it. Respond
 with a single JSON object in a ```json block of the form:
 {"plan": [{"id": "s1", "role": "<role>", "task": "<what to do>", "depends_on": []}]}
 Use only the provided roles. `depends_on` lists ids of steps that must finish first."""
@@ -63,9 +72,19 @@ class Router:
         self.max_tokens = max_tokens
         self.budget: Optional[BudgetTracker] = None  # set by the Swarm per task
 
-    def plan(self, directive: str, *, roles: Optional[list[str]] = None) -> Plan:
+    def plan(
+        self,
+        directive: str,
+        *,
+        roles: Optional[list[str]] = None,
+        role_catalog: Optional[dict[str, str]] = None,
+    ) -> Plan:
         roles = roles or []
-        content = f"DIRECTIVE: {directive}\nAVAILABLE ROLES: {', '.join(roles) or 'any'}"
+        if role_catalog:
+            roster = "\n".join(f"- {r}: {desc}" for r, desc in role_catalog.items())
+            content = f"DIRECTIVE: {directive}\nAVAILABLE ROLES:\n{roster}"
+        else:
+            content = f"DIRECTIVE: {directive}\nAVAILABLE ROLES: {', '.join(roles) or 'any'}"
         messages = [Message(role="user", content=content)]
         resp = self.llm.complete(
             messages, system=ROUTER_SYSTEM, temperature=self.temperature, max_tokens=self.max_tokens

@@ -106,7 +106,8 @@ class Swarm:
         for agent in self.specialists.values():
             agent.budget = tracker
 
-        plan = self.router.plan(directive, roles=list(self.specialists.keys()))
+        catalog = {role: getattr(agent, "description", "") for role, agent in self.specialists.items()}
+        plan = self.router.plan(directive, roles=list(self.specialists.keys()), role_catalog=catalog)
         order = topo_sort(plan.steps)
         results: dict[str, StepResult] = {}
         success = True

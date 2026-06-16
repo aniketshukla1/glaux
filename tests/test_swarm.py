@@ -108,20 +108,29 @@ def test_router_parses_and_signs_plan():
     assert any(b["action_type"] == "PLAN" for b in led.blocks())
 
 
-def test_demo_router_emits_minimal_plans():
+def test_demo_router_composes_teams_by_directive():
+    """The offline demo router assembles a *team* that fits the directive, so the
+    swarm exercises the full specialist roster rather than just coder/researcher."""
     from llm.demo import DemoLLM
 
     def roles_for(directive):
         r = Router(identity=AgentIdentity.generate(), llm=DemoLLM())
-        return [s.role for s in r.plan(directive, roles=["coder", "researcher"]).steps]
+        return [s.role for s in r.plan(directive).steps]
 
-    # a single specialist when one role covers it
-    assert roles_for("Compute the sum of 12, 30 and 8") == ["coder"]
-    assert roles_for("Reverse a string") == ["coder"]
-    assert roles_for("Summarize how transformers work") == ["researcher"]
-    assert roles_for("What is the capital of France?") == ["researcher"]
-    # split only when the task has distinct do-it + explain-it phases
-    assert roles_for("Reverse a string and explain how it works") == ["coder", "researcher"]
+    # a science question spins up a science lab (explain → write up)
+    assert roles_for("Explain the mechanism of protein synthesis") == ["scientist", "writer"]
+    # a systems build spins up an engineering pod (design → build → verify)
+    assert roles_for("Design a scalable rate limiter architecture") == ["engineer", "coder", "tester"]
+    # a comparison spins up the analysis desk
+    assert roles_for("Compare PostgreSQL vs MongoDB and recommend one") == ["analyst", "writer"]
+    # a plain build still pairs coder with a verifier
+    assert roles_for("Reverse a string") == ["coder", "tester"]
+    # later steps depend on earlier ones so context threads through
+    plan = Router(identity=AgentIdentity.generate(), llm=DemoLLM()).plan(
+        "Design a scalable rate limiter architecture"
+    )
+    assert plan.steps[1].depends_on == ["s1"]
+    assert plan.steps[2].depends_on == ["s2"]
 
 
 def test_topo_sort_orders_dependencies():

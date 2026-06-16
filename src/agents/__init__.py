@@ -17,7 +17,7 @@ from .mcp import (
 from .protocol import CALL_AGENT, CALL_MCP, CALL_SKILL, FINISH, extract_json, parse_action
 from .reflector import Reflector, Verdict
 from .router import Plan, Router, Step
-from .specialists import coder_agent, researcher_agent
+from .specialists import SPECIALISTS, build_specialists, coder_agent, make_specialist, researcher_agent
 from .swarm import StepResult, Swarm, SwarmResult, topo_sort
 
 __all__ = [
@@ -49,6 +49,9 @@ __all__ = [
     "Verdict",
     "coder_agent",
     "researcher_agent",
+    "make_specialist",
+    "build_specialists",
+    "SPECIALISTS",
     "Swarm",
     "SwarmResult",
     "StepResult",

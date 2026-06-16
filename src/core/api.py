@@ -38,12 +38,12 @@ from agents import (
     Budget,
     MCPRegistry,
     MCPServerConfig,
+    SPECIALISTS,
     Reflector,
     Router,
     Swarm,
-    coder_agent,
+    build_specialists,
     default_local_client,
-    researcher_agent,
 )
 from core.ledger import Ledger
 from identity import AgentIdentity
@@ -52,7 +52,7 @@ from llm.demo import DemoLLM
 from memory import MemoryManager
 from skills import SkillLibrary, SkillSynthesizer
 
-ROLES = ["router", "coder", "researcher", "reflector"]
+ROLES = ["router", "reflector", *SPECIALISTS.keys()]
 MEMORY_LAYERS = ("semantic", "episodic", "procedural")
 BENCH_DIR = Path(__file__).resolve().parents[2] / "bench"
 
@@ -206,18 +206,17 @@ class _State:
 
     def build_swarm(self) -> Swarm:
         router = Router(identity=self.identities["router"], llm=self.llm, ledger=self.ledger)
-        coder = coder_agent(
-            identity=self.identities["coder"], llm=self.llm, ledger=self.ledger, mcp_client=self.mcp
-        )
-        researcher = researcher_agent(
-            identity=self.identities["researcher"], llm=self.llm, ledger=self.ledger, mcp_client=self.mcp
+        # Register the full specialist roster; the router composes a team per directive.
+        specialists = build_specialists(
+            identities=self.identities, llm=self.llm, ledger=self.ledger, mcp_client=self.mcp
         )
         reflector = Reflector(identity=self.identities["reflector"], llm=self.llm, ledger=self.ledger)
         return Swarm(
             router=router,
-            specialists={"coder": coder, "researcher": researcher},
+            specialists=specialists,
             reflector=reflector,
             ledger=self.ledger,
+            max_retries=2,  # iterate harder toward an accepted result; budget still bounds it
             synthesizer=SkillSynthesizer(self.llm),
             skill_library=self.skills,
             require_approval=(self.approval_mode == "gated"),

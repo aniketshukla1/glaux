@@ -23,10 +23,50 @@ _CODING_KW = (
 # An "explaining/finding" task (the researcher gathers + synthesizes).
 _RESEARCH_KW = (
     "summarize", "summarise", "explain", "describe", "research", "how it works",
-    "what is", "what are", "document", "compare", "analyze", "analyse",
-    "overview", "report", "why", "pros and cons", "review",
+    "what is", "what are", "document", "overview", "report", "why", "review",
+)
+# Scientific / technical mechanism (scientist explains, writer writes it up).
+_SCIENCE_KW = (
+    "protein", "dna", "rna", "mrna", "cell", "molecule", "molecular", "synthesis",
+    "crispr", "gene", "genetic", "enzyme", "photosynthesis", "atom", "atomic",
+    "quantum", "physics", "chemistry", "chemical", "biology", "biological",
+    "reaction", "neuron", "vaccine", "antibody", "mitochondria", "transcription",
+    "translation", "metabolism", "evolution",
+)
+# Systems / engineering build (engineer designs, coder builds, tester verifies).
+_ENGINEERING_KW = (
+    "architecture", "architect", "microservice", "scalable", "distributed",
+    "rate limiter", "load balanc", "database schema", "design a system",
+    "design an", "migration", "deploy", "infrastructure", "pipeline", "system for",
+    "high availability", "fault tolerant", "monolith",
+)
+# Comparison / quantitative analysis (analyst breaks it down, writer writes up).
+_ANALYSIS_KW = (
+    "compare", "comparison", " vs ", "versus", "trade-off", "tradeoff",
+    "pros and cons", "benchmark", "evaluate", "recommend", "analyze", "analyse",
+    "which is better", "cost-benefit",
+)
+# Live / current-information task (web specialist fetches, writer summarizes).
+_WEB_KW = (
+    "latest", "current", "today", "recent", "news", "search the web", "look up",
+    "find online", "real-time", "this year", "right now", "trending",
 )
 _QUESTION_STARTS = {"what", "why", "how", "who", "when", "which", "explain", "describe", "is", "are"}
+
+
+def _steps(*roles_tasks) -> list:
+    """Build a dependency-chained plan: each step depends on the previous one."""
+    steps = []
+    for i, (role, task) in enumerate(roles_tasks, start=1):
+        steps.append(
+            {
+                "id": f"s{i}",
+                "role": role,
+                "task": task,
+                "depends_on": [f"s{i - 1}"] if i > 1 else [],
+            }
+        )
+    return steps
 
 
 def _has(text: str, keywords) -> bool:
@@ -42,28 +82,54 @@ def _extract_directive(content: str) -> str:
 
 
 def _router_plan(content: str) -> str:
-    """Heuristic planner for the offline demo: emit the FEWEST steps that cover
-    the directive — one specialist when one role suffices, and split into two
-    only when the task has distinct 'do it' + 'explain it' phases."""
+    """Heuristic planner for the offline demo. It composes a *team* that fits the
+    directive — a science lab for a mechanism question, an engineering pod for a
+    build, an analysis desk for a comparison — so the demo exercises the full
+    specialist roster, not just coder/researcher. A real LLM router does this far
+    better; this just makes the offline experience representative."""
     directive = _extract_directive(content)
-    low = directive.lower()
-    coding = _has(low, _CODING_KW)
-    research = _has(low, _RESEARCH_KW)
+    low = f" {directive.lower()} "
 
-    if coding and research:
-        steps = [
-            {"id": "s1", "role": "coder", "task": directive, "depends_on": []},
-            {"id": "s2", "role": "researcher", "task": "Summarize and verify the result",
-             "depends_on": ["s1"]},
-        ]
-    elif research:
-        steps = [{"id": "s1", "role": "researcher", "task": directive, "depends_on": []}]
-    elif coding:
-        steps = [{"id": "s1", "role": "coder", "task": directive, "depends_on": []}]
+    if _has(low, _SCIENCE_KW):
+        # Science lab: a scientist explains the mechanism, a writer writes it up.
+        steps = _steps(
+            ("scientist", directive),
+            ("writer", "Turn the explanation into a clear, well-structured write-up"),
+        )
+    elif _has(low, _ENGINEERING_KW):
+        # Engineering pod: design → build → verify.
+        steps = _steps(
+            ("engineer", directive),
+            ("coder", "Implement the core of the proposed design"),
+            ("tester", "Stress-test the implementation and report edge cases"),
+        )
+    elif _has(low, _ANALYSIS_KW):
+        # Analysis desk: an analyst breaks it down, a writer presents it.
+        steps = _steps(
+            ("analyst", directive),
+            ("writer", "Write up the analysis with a clear recommendation"),
+        )
+    elif _has(low, _WEB_KW):
+        # Web team: fetch live information, then summarize it.
+        steps = _steps(
+            ("web", directive),
+            ("writer", "Summarize the findings and cite the sources"),
+        )
+    elif _has(low, _CODING_KW):
+        # Build + verify.
+        steps = _steps(
+            ("coder", directive),
+            ("tester", "Verify correctness and check edge cases"),
+        )
+    elif _has(low, _RESEARCH_KW):
+        steps = _steps(
+            ("researcher", directive),
+            ("writer", "Synthesize the findings into a clear answer"),
+        )
     else:
         first = low.split()[0] if low.split() else ""
-        role = "researcher" if (low.rstrip().endswith("?") or first in _QUESTION_STARTS) else "coder"
-        steps = [{"id": "s1", "role": role, "task": directive, "depends_on": []}]
+        role = "researcher" if (low.strip().endswith("?") or first in _QUESTION_STARTS) else "coder"
+        steps = _steps((role, directive))
 
     return "```json\n" + json.dumps({"plan": steps}) + "\n```"
 

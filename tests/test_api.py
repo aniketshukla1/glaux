@@ -50,8 +50,8 @@ def test_dispatch_builds_a_verifiable_signed_chain():
     data = r.json()
     assert data["success"] is True
     assert data["verification"]["valid"] is True
-    # the plan and signed trace came back
-    assert [s["role"] for s in data["plan"]] == ["coder", "researcher"]
+    # the plan and signed trace came back — a build pairs the coder with a verifier
+    assert [s["role"] for s in data["plan"]] == ["coder", "tester"]
     assert len(data["new_blocks"]) > 0
     types = {b["action_type"] for b in data["new_blocks"]}
     assert {"PLAN", "CALL_AGENT", "CAPABILITY_GRANT", "THINK"} <= types
@@ -79,7 +79,9 @@ def test_empty_directive_rejected():
 def test_agents_roster_exposes_identities():
     data = client.get("/api/agents").json()
     roles = {a["role"] for a in data["agents"]}
-    assert roles == {"router", "coder", "researcher", "reflector"}
+    # router + reflector + the full specialist roster
+    assert {"router", "reflector", "coder", "researcher"} <= roles
+    assert {"web", "scientist", "analyst", "engineer", "tester", "writer"} <= roles
     for a in data["agents"]:
         # agent_id is base58(public key) — they match for a non-rotated identity
         assert a["agent_id"] == a["public_key"]
