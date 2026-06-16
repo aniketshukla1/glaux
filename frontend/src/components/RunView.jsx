@@ -6,6 +6,7 @@ import {
 } from 'lucide-react'
 import SwarmGraph from './SwarmGraph.jsx'
 import ConstellationSphere from './ConstellationSphere.jsx'
+import Markdown from './Markdown.jsx'
 import { ROLE_META, short, buildTimeline } from '../lib/blocks.js'
 import { recognitionSupported, createRecognizer, ttsSupported, speak, stopSpeaking } from '../lib/speech.js'
 
@@ -129,7 +130,7 @@ function ResultCard({ result, verification }) {
           </button>
         )}
       </div>
-      <p className="text-fg text-[13.5px] leading-relaxed">{result.final || '—'}</p>
+      <Markdown className="text-fg text-[13.5px]">{result.final || '—'}</Markdown>
       {result.budget_halt && <div className="mt-2 text-xs text-amber-400">budget guard: {result.budget_halt}</div>}
       <div className="mt-4 pt-3 border-t border-line/10 flex flex-wrap items-center gap-x-5 gap-y-1 text-xs text-faint">
         {verification?.valid && <span className="flex items-center gap-1.5 text-emerald-400"><ShieldCheck className="w-3.5 h-3.5" /> chain verified</span>}
