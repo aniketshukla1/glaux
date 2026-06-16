@@ -974,6 +974,19 @@ def _frontend_dist() -> Path:
 
 _DIST = _frontend_dist()
 if _DIST.is_dir():
+    from fastapi.responses import FileResponse
     from fastapi.staticfiles import StaticFiles
 
+    _INDEX = _DIST / "index.html"
+    _NO_CACHE = {"Cache-Control": "no-cache, no-store, must-revalidate", "Pragma": "no-cache"}
+
+    # index.html must NEVER be cached: a WebView/browser that caches it keeps
+    # booting an old build that points at stale (now-deleted) hashed bundles, so
+    # the app looks "not updated" after a rebuild. The /assets/* files are
+    # content-hashed and immutable, so StaticFiles may cache those freely.
+    @app.get("/", include_in_schema=False)
+    def _spa_index() -> FileResponse:
+        return FileResponse(_INDEX, headers=_NO_CACHE)
+
+    # Mounted last so /api/*, /ws and /metrics keep precedence over the catch-all.
     app.mount("/", StaticFiles(directory=str(_DIST), html=True), name="frontend")

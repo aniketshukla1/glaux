@@ -82,7 +82,10 @@
           const r = await fetch(BACKEND + '/api/health', { cache: 'no-store' })
           if (r.ok) {
             statusEl.textContent = 'Connected — opening the console…'
-            window.location.replace(BACKEND)
+            // Cache-bust the entry so the WebView always loads the latest build
+            // (paired with no-cache index.html on the backend) instead of a
+            // stale cached page after a rebuild.
+            window.location.replace(BACKEND + '/?b=' + Date.now())
             return
           }
         } catch (_) {
