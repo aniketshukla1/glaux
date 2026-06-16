@@ -135,17 +135,69 @@ def _router_plan(content: str) -> str:
 
 
 _ACCEPT = '```json\n{"verdict": "accept", "reason": "meets the task (demo mode)"}\n```'
-_SKILL = (
-    "```json\n"
-    "{"
-    '"name": "reverse_string", '
-    '"description": "Reverse a string", '
-    '"entrypoint": "run", '
-    '"caps": {"time_limit_s": 5}, '
-    '"code": "def run(s):\\n    return s[::-1]\\n", '
-    '"tests": ["assert run(\\"abc\\") == \\"cba\\"", "assert run(\\"\\") == \\"\\""]'
-    "}\n```"
+
+# Genuine "build" steps the demo reflector will recommend a skill for (word-boundary
+# matched, so "implementation" in a review step does NOT trigger another synthesis).
+_BUILD_VERBS = (
+    "implement", "build", "write", "create", "compute", "calculate", "parse",
+    "sort", "reverse", "generate", "encode", "decode", "convert", "format",
 )
+_SKILL_STOP = {
+    "the", "a", "an", "of", "to", "and", "for", "with", "into", "from", "its",
+    "this", "that", "on", "in", "at", "by",
+}
+
+
+def _first_field(content: str, label: str) -> str:
+    for line in content.splitlines():
+        if line.strip().upper().startswith(label.upper() + ":"):
+            return line.split(":", 1)[1].strip()
+    return content.strip()
+
+
+# Small catalog of real, tested skills the offline demo can "synthesize" for common
+# patterns. Keyed by substrings in the task; first match wins. A real model writes
+# arbitrary skills — this just keeps the demo honest (the skill actually works) and
+# varied (different tasks → different skills) instead of one hardcoded constant.
+_SKILL_CATALOG = (
+    (("reverse",), "reverse_string", "Reverse a sequence",
+     "def run(s):\n    return s[::-1]\n",
+     ['assert run("abc") == "cba"', "assert run([1, 2]) == [2, 1]"]),
+    (("sum", "total", "add up"), "sum_numbers", "Sum a list of numbers",
+     "def run(nums):\n    return sum(nums)\n",
+     ["assert run([1, 2, 3]) == 6", "assert run([]) == 0"]),
+    (("sort", "order"), "sort_list", "Sort a list ascending",
+     "def run(xs):\n    return sorted(xs)\n",
+     ["assert run([3, 1, 2]) == [1, 2, 3]", "assert run([]) == []"]),
+    (("count", "length", "word"), "count_words", "Count whitespace-separated words",
+     "def run(text):\n    return len(str(text).split())\n",
+     ['assert run("a b c") == 3', 'assert run("") == 0']),
+    (("upper", "capital"), "to_upper", "Uppercase a string",
+     "def run(s):\n    return str(s).upper()\n",
+     ['assert run("ab") == "AB"', 'assert run("") == ""']),
+)
+
+
+def _demo_skill(task: str) -> str:
+    """Offline synthesis returns a small, real, *task-appropriate* skill — a known
+    one for a recognizable pattern, otherwise a task-named passthrough helper."""
+    low = task.lower()
+    for keys, name, desc, code, tests in _SKILL_CATALOG:
+        if any(k in low for k in keys):
+            skill = {"name": name, "description": desc, "entrypoint": "run",
+                     "caps": {"time_limit_s": 5}, "code": code, "tests": tests}
+            return "```json\n" + json.dumps(skill) + "\n```"
+    words = [w for w in re.findall(r"[a-z]+", low) if w not in _SKILL_STOP]
+    name = "_".join(words[:2]) or "helper"
+    skill = {
+        "name": name,
+        "description": f"(demo) reusable helper distilled from: {task[:60]}",
+        "entrypoint": "run",
+        "caps": {"time_limit_s": 5},
+        "code": 'def run(value=None):\n    """(demo) sample skill synthesized offline."""\n    return value\n',
+        "tests": ["assert run(1) == 1", "assert run('x') == 'x'", "assert run() is None"],
+    }
+    return "```json\n" + json.dumps(skill) + "\n```"
 
 
 class DemoLLM:
@@ -165,17 +217,19 @@ class DemoLLM:
         if "router for the athena swarm" in sys:
             text = _router_plan(goal)
         elif "you review whether" in sys:
-            low = goal.lower()
-            if any(k in low for k in ("implement", "function", "code", "build", "reverse", "compute", "parse")):
+            task = _first_field(goal, "TASK")
+            # Only recommend a skill for a genuine build step, and name the recommendation
+            # after the task so the synthesized skill isn't a generic constant.
+            if _has(task.lower(), _BUILD_VERBS):
                 text = (
                     "```json\n"
                     '{"verdict": "accept", "reason": "meets the task (demo mode)", '
-                    '"synthesize": "a small reusable utility for this kind of task"}\n```'
+                    '"synthesize": ' + json.dumps(task) + "}\n```"
                 )
             else:
                 text = _ACCEPT
         elif "synthesize a reusable python skill" in sys:
-            text = _SKILL
+            text = _demo_skill(_first_field(goal, "TASK"))
         else:
             snippet = goal.splitlines()[0][:80] if goal else "the task"
             text = (
