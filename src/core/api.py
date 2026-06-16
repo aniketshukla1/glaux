@@ -470,10 +470,14 @@ async def run_task(req: TaskRequest) -> dict:
     try:
         result = await run_in_threadpool(lambda: swarm.run(run_directive, budget=budget))
     except Exception as exc:  # noqa: BLE001 - surface any backend/LLM failure cleanly
+        import traceback
         backend = STATE.llm_config.get("backend", "demo")
         model = STATE.llm_config.get("model") or "(default)"
         METRICS.inc("swarm_tasks_total", outcome="error")
-        log_json("task", outcome="error", backend=backend, model=model, error=str(exc))
+        log_json(
+            "task", outcome="error", backend=backend, model=model,
+            error=str(exc), traceback=traceback.format_exc(),
+        )
         raise HTTPException(
             status_code=502,
             detail=f"The {backend} model {model!r} failed: {exc}",
