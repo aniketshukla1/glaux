@@ -177,7 +177,12 @@ def test_swarm_runs_plan_with_handoffs_and_reflection():
         {"id": "s1", "role": "coder", "task": "write code", "depends_on": []},
         {"id": "s2", "role": "researcher", "task": "summarize", "depends_on": ["s1"]},
     )
-    router = Router(identity=AgentIdentity.generate(), llm=ScriptedLLM([plan]), ledger=led)
+    # the router LLM is called twice: first to plan, then to integrate the final answer
+    router = Router(
+        identity=AgentIdentity.generate(),
+        llm=ScriptedLLM([plan, "code written and summarized"]),
+        ledger=led,
+    )
     coder = coder_agent(identity=AgentIdentity.generate(), llm=ScriptedLLM([_finish("code written")]), ledger=led)
     researcher = researcher_agent(
         identity=AgentIdentity.generate(), llm=ScriptedLLM([_finish("summary done")]), ledger=led
@@ -196,7 +201,8 @@ def test_swarm_runs_plan_with_handoffs_and_reflection():
     res = swarm.run("build and summarize")
     assert res.success
     assert res.steps["s1"].accepted and res.steps["s2"].accepted
-    assert res.final == "summary done"
+    # the final answer integrates the team's work (not just the last step's output)
+    assert res.final == "code written and summarized"
     # one signed handoff per step
     assert sum(1 for b in led.blocks() if b["action_type"] == "CALL_AGENT") == 2
     # whole mixed-signer chain (router + specialists + reflector) verifies

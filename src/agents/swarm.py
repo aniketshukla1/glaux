@@ -14,12 +14,20 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 from core.ledger import Action, Ledger
+from llm.gateway import Message
 
 from .base import AgentResult, HandoffRejected
-from .budget import Budget, BudgetTracker
+from .budget import Budget, BudgetTracker, charge_for_response
 from .handoff import delegate
 from .reflector import Reflector
 from .router import Plan, Router, Step
+
+FINAL_SYNTH_SYSTEM = (
+    "You are the lead of the Athena swarm. Your specialists each completed part of "
+    "the user's request. Write the final answer to the ORIGINAL request, integrating "
+    "their work into one coherent, complete response that addresses exactly what was "
+    "asked. Lead with the answer; do not describe the team or the process."
+)
 
 
 def topo_sort(steps: list[Step]) -> list[Step]:
@@ -182,7 +190,7 @@ class Swarm:
             ):
                 self._synthesize(verdict.synthesize, synthesized)
 
-        final = results[order[-1].id].result.result if order else None
+        final = self._final_answer(directive, order, results, tracker)
         return SwarmResult(
             plan=plan,
             steps=results,
@@ -192,6 +200,47 @@ class Swarm:
             budget_halt=budget_halt,
             synthesized=synthesized,
         )
+
+    def _final_answer(self, directive: str, order, results: dict, tracker: BudgetTracker):
+        """The swarm's answer to the ORIGINAL directive — not just whatever the last
+        step happened to produce. With one step the step's result IS the answer; with
+        a team, integrate their outputs so a plan request gets the plan (and not, say,
+        the tester's notes because testing ran last)."""
+        if not order:
+            return None
+        done = [results[s.id] for s in order if results[s.id].result and results[s.id].result.result]
+        if len(done) <= 1:
+            return results[order[-1].id].result.result
+        if tracker.exceeded() is not None:  # no budget left to synthesize — use the last output
+            return results[order[-1].id].result.result
+        return self._synthesize_final(directive, done, tracker)
+
+    def _synthesize_final(self, directive: str, step_results: list, tracker: BudgetTracker):
+        parts = [
+            f"[{sr.step.role}] {sr.result.result.strip()}"
+            for sr in step_results
+            if (sr.result.result or "").strip()
+        ]
+        content = (
+            f"ORIGINAL REQUEST: {directive}\n\n"
+            "WORK COMPLETED BY YOUR SPECIALISTS:\n" + "\n\n".join(parts) +
+            "\n\nWrite the complete final answer to the original request now."
+        )
+        messages = [Message(role="user", content=content)]
+        try:
+            resp = self.router.llm.complete(
+                messages, system=FINAL_SYNTH_SYSTEM, temperature=0.0, max_tokens=1200
+            )
+        except Exception:  # noqa: BLE001 - synthesis is best-effort; fall back to last output
+            return step_results[-1].result.result
+        charge_for_response(tracker, resp, FINAL_SYNTH_SYSTEM, messages)
+        if self.ledger is not None:
+            self.ledger.append(
+                self.router.identity,
+                Action.OBSERVATION,
+                {"final_synthesis": True, "model_id": resp.model_id},
+            )
+        return (resp.text or "").strip() or step_results[-1].result.result
 
     def _synthesize(self, task: str, out: list) -> None:
         """Run the synthesis pipeline for a reflector-recommended skill,

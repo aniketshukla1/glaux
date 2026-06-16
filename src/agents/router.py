@@ -29,6 +29,13 @@ Scale the team to the work:
   each phase to the right specialist, e.g. gather → analyze → build → test → write up.
   Wire `depends_on` so later steps build on the outputs of earlier ones.
 
+Match the phases to what is actually asked: only add a build/implement step when the
+request is to build something, and only add a test step when there is something built to
+verify. A request to PLAN, EXPLAIN, COMPARE, or RESEARCH needs analysis and a write-up —
+not implementation or testing. End a multi-step plan with the role that produces the
+deliverable the user asked for (e.g. the planner/analyst/writer), so the final answer is
+the answer — not a side artifact.
+
 Prefer the fewest steps that complete the task rigorously — but do not collapse genuinely
 distinct phases into one, and do not hand a step to a role that is wrong for it. Respond
 with a single JSON object in a ```json block of the form:

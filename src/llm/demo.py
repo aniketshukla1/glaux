@@ -230,6 +230,14 @@ class DemoLLM:
                 text = _ACCEPT
         elif "synthesize a reusable python skill" in sys:
             text = _demo_skill(_first_field(goal, "TASK"))
+        elif "lead of the athena swarm" in sys:
+            # Final integration pass — return plain prose, not a JSON action.
+            directive = _first_field(goal, "ORIGINAL REQUEST")
+            text = (
+                f"(demo) Here is the swarm's combined result for: {directive}\n\n"
+                "Connect a real model (Ollama or a provider) for a full answer — "
+                "in offline demo mode this just confirms every step ran and was verified."
+            )
         else:
             snippet = goal.splitlines()[0][:80] if goal else "the task"
             text = (
