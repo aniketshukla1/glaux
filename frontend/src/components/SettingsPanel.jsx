@@ -29,8 +29,20 @@ function Input(props) {
   return (
     <input
       {...props}
-      className="w-full glass px-3 py-2 rounded-lg bg-transparent outline-none text-sm text-fg placeholder-faint"
+      className="w-full glass px-3.5 py-2.5 rounded-lg bg-transparent outline-none text-sm text-fg placeholder-faint focus:border-line/30"
     />
+  )
+}
+
+// A titled block with a hairline divider above it (except the first), for clear
+// separation between Account sections.
+function Section({ title, hint, children, first }) {
+  return (
+    <div className={first ? '' : 'mt-7 pt-7 border-t border-line/10'}>
+      <div className="text-fg text-sm font-medium">{title}</div>
+      {hint && <p className="text-faint text-xs mt-1 mb-4">{hint}</p>}
+      {children}
+    </div>
   )
 }
 
@@ -93,44 +105,48 @@ function AccountTab({ user, onUpdateProfile, onChangePassword, onSignOut, onSign
 
   return (
     <div>
-      <div className="flex items-center gap-3 mb-5">
-        <UserAvatar user={{ ...user, name, email }} size={48} />
+      <div className="flex items-center gap-3.5 pb-6 mb-1 border-b border-line/10">
+        <UserAvatar user={{ ...user, name, email }} size={52} />
         <div className="min-w-0">
-          <div className="text-fg text-sm font-medium truncate">{name || email}</div>
-          <div className="text-faint text-xs truncate">{email}</div>
+          <div className="text-fg text-[15px] font-medium truncate">{name || email}</div>
+          <div className="text-faint text-xs truncate mt-0.5">{email}</div>
         </div>
       </div>
 
-      <Field title="Profile" hint="Your display name and email.">
-        <div className="space-y-2">
+      <Section title="Profile" hint="Your display name and email." first>
+        <div className="space-y-2.5">
           <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Name" />
           <Input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email" type="email" />
+        </div>
+        <div className="mt-3.5 flex items-center gap-3">
           <Btn onClick={saveProfile} busy={profileBusy} disabled={!dirty} kind="accent">Save changes</Btn>
           <Notice msg={profileMsg} />
         </div>
-      </Field>
+      </Section>
 
-      <Field title="Change password" hint="You'll stay signed in on this device.">
-        <div className="space-y-2">
+      <Section title="Change password" hint="You'll stay signed in on this device.">
+        <div className="space-y-2.5">
           <Input type="password" value={cur} onChange={(e) => setCur(e.target.value)} placeholder="Current password" autoComplete="current-password" />
           <Input type="password" value={next} onChange={(e) => setNext(e.target.value)} placeholder="New password" autoComplete="new-password" />
           <Input type="password" value={confirm} onChange={(e) => setConfirm(e.target.value)} placeholder="Confirm new password" autoComplete="new-password" />
+        </div>
+        <div className="mt-3.5 flex items-center gap-3">
           <Btn onClick={savePassword} busy={pwBusy} disabled={!cur || !next}><KeyRound className="w-3.5 h-3.5" /> Update password</Btn>
           <Notice msg={pwMsg} />
         </div>
-      </Field>
+      </Section>
 
-      <Field title="Danger zone" hint="Sign out, or permanently delete your account and all its data.">
+      <Section title="Danger zone" hint="Sign out, or permanently delete your account and all its data.">
         <div className="flex flex-wrap gap-2">
           <Btn onClick={onSignOut}><LogOut className="w-3.5 h-3.5" /> Sign out</Btn>
           <Btn onClick={onSignOutEverywhere}>Sign out everywhere</Btn>
           {!confirmDelete ? (
             <Btn danger onClick={() => setConfirmDelete(true)}><Trash2 className="w-3.5 h-3.5" /> Delete account</Btn>
           ) : (
-            <Btn danger onClick={onDeleteAccount}><Trash2 className="w-3.5 h-3.5" /> Confirm delete — this is permanent</Btn>
+            <Btn danger onClick={onDeleteAccount}><Trash2 className="w-3.5 h-3.5" /> Confirm delete — permanent</Btn>
           )}
         </div>
-      </Field>
+      </Section>
     </div>
   )
 }
