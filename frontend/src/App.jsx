@@ -1,9 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
-import { MessageSquarePlus, MessageSquare, LayoutGrid, Settings as SettingsIcon, Palette, PanelLeft } from 'lucide-react'
+import { MessageSquarePlus, MessageSquare, LayoutGrid, Settings as SettingsIcon, Palette, PanelLeft, Loader2 } from 'lucide-react'
 import {
   getHealth, getLedger, getAgents, getSafety, setSafety, getApproval, setApproval,
   getAuth, dispatchTask, getWorkspace, getSession, createSession, activateSession,
   updateSession, deleteSession, createProject, updateProject, deleteProject,
+  getAuthState, updateProfile, changePassword, logoutEverywhere, deleteAccount,
+  getToken, setToken, clearToken,
 } from './api.js'
 import TopBar from './components/TopBar.jsx'
 import Sidebar from './components/Sidebar.jsx'
@@ -11,6 +13,7 @@ import RunView from './components/RunView.jsx'
 import Studio from './components/Studio.jsx'
 import SettingsPanel from './components/SettingsPanel.jsx'
 import CommandPalette from './components/CommandPalette.jsx'
+import AuthScreen from './components/AuthScreen.jsx'
 
 const PALETTE_THEMES = ['dark', 'light', 'oled', 'midnight', 'nord', 'ember']
 
@@ -24,7 +27,13 @@ export default function App() {
   const [collapsed, setCollapsed] = useState(() => localStorage.getItem('athena-sidebar') === 'collapsed')
   const [studioOpen, setStudioOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [settingsTab, setSettingsTab] = useState('appearance')
   const [paletteOpen, setPaletteOpen] = useState(false)
+
+  // accounts / auth
+  const [user, setUser] = useState(null)
+  const [hasUsers, setHasUsers] = useState(true)
+  const [authReady, setAuthReady] = useState(false)
 
   const [health, setHealth] = useState(null)
   const [ledger, setLedger] = useState({ count: 0, blocks: [], verification: null })
@@ -45,6 +54,53 @@ export default function App() {
     document.documentElement.setAttribute('data-theme', theme)
     localStorage.setItem('athena-theme', theme)
   }, [theme])
+
+  // bootstrap auth: who's signed in, and does any account exist yet?
+  useEffect(() => {
+    (async () => {
+      try {
+        const s = await getAuthState()
+        setHasUsers(s.has_users)
+        if (s.authenticated && s.user) { setUser(s.user); if (s.user.settings?.theme) setTheme(s.user.settings.theme) }
+      } catch { /* backend down — AuthScreen still shows */ }
+      setAuthReady(true)
+    })()
+  }, [])
+
+  // a 401 anywhere drops us back to the sign-in screen
+  useEffect(() => {
+    const onUnauth = () => setUser(null)
+    window.addEventListener('athena-unauthorized', onUnauth)
+    return () => window.removeEventListener('athena-unauthorized', onUnauth)
+  }, [])
+
+  const onAuthed = useCallback((u) => {
+    setUser(u); setHasUsers(true)
+    if (u?.settings?.theme) setTheme(u.settings.theme)
+  }, [])
+
+  const applyTheme = (t) => {
+    setTheme(t)
+    if (user) updateProfile({ settings: { theme: t } }).then((r) => setUser(r.user)).catch(() => {})
+  }
+
+  const openSettings = (tab = 'appearance') => { setSettingsTab(tab); setSettingsOpen(true) }
+
+  // account actions
+  const onSignOut = () => { clearToken(); setUser(null); setSettingsOpen(false) }
+  const onSignOutEverywhere = async () => { try { await logoutEverywhere() } catch { /* ignore */ } finally { onSignOut() } }
+  const onUpdateProfile = async (patch) => {
+    const r = await updateProfile(patch); setUser(r.user)
+    if (patch.settings?.theme) setTheme(patch.settings.theme)
+    return r.user
+  }
+  const onChangePassword = async (current, next) => {
+    const out = await changePassword(current, next)
+    if (out.token) setToken(out.token)  // password change rotated the token; keep this session alive
+    if (out.user) setUser(out.user)
+    return out
+  }
+  const onDeleteAccount = async () => { try { await deleteAccount() } catch { /* ignore */ } finally { onSignOut() } }
 
   useEffect(() => {
     const onKey = (e) => {
@@ -83,21 +139,25 @@ export default function App() {
   }, [])
 
   useEffect(() => {
+    if (!user) return
     refresh()
     const id = setInterval(refresh, 4000)
     return () => clearInterval(id)
-  }, [refresh])
+  }, [refresh, user])
 
   useEffect(() => {
+    if (!user) return
     (async () => { const w = await loadWorkspace(); if (w?.active_id) loadSession(w.active_id) })()
-  }, [loadWorkspace, loadSession])
+  }, [loadWorkspace, loadSession, user])
 
   // live block streaming
   useEffect(() => {
+    if (!user) return
     let ws, retry, closed = false
     const connect = () => {
       const proto = location.protocol === 'https:' ? 'wss' : 'ws'
-      ws = new WebSocket(`${proto}://${location.host}/ws`)
+      const tok = getToken()
+      ws = new WebSocket(`${proto}://${location.host}/ws${tok ? `?token=${encodeURIComponent(tok)}` : ''}`)
       ws.onmessage = (e) => {
         let msg
         try { msg = JSON.parse(e.data) } catch { return }
@@ -108,7 +168,7 @@ export default function App() {
     }
     connect()
     return () => { closed = true; clearTimeout(retry); if (ws) ws.close() }
-  }, [])
+  }, [user])
 
   const roleOf = useCallback((id) => agentsMap[id], [agentsMap])
   const clearLive = () => { setGoal(null); setResult(null); setLiveBlocks([]) }
@@ -178,6 +238,13 @@ export default function App() {
     return cmds
   }, [workspace, collapsed])
 
+  if (!authReady) {
+    return <div className="min-h-screen grid place-items-center"><Loader2 className="w-6 h-6 animate-spin text-muted" /></div>
+  }
+  if (!user) {
+    return <AuthScreen firstRun={!hasUsers} onAuthed={onAuthed} />
+  }
+
   return (
     <div className="flex min-h-screen">
       <Sidebar
@@ -199,12 +266,14 @@ export default function App() {
           <TopBar
             title={activeSession?.title}
             theme={theme}
-            onToggleTheme={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))}
+            onToggleTheme={() => applyTheme(theme === 'dark' ? 'light' : 'dark')}
             onOpenStudio={() => setStudioOpen(true)}
-            onOpenSettings={() => setSettingsOpen(true)}
+            onOpenSettings={() => openSettings('appearance')}
             onOpenPalette={() => setPaletteOpen(true)}
             verified={ledger.verification ? ledger.verification.valid : null}
             health={health}
+            user={user}
+            onOpenAccount={() => openSettings('account')}
           />
           {error && (
             <div className="glass p-3 mb-4 text-sm" style={{ borderColor: 'rgb(244 63 94 / 0.4)', color: 'rgb(251 113 133)' }}>
@@ -231,10 +300,17 @@ export default function App() {
       <Studio open={studioOpen} onClose={() => setStudioOpen(false)} ledger={ledger} blocks={liveBlocks} onVerify={refresh} />
       <SettingsPanel
         open={settingsOpen} onClose={() => setSettingsOpen(false)}
-        theme={theme} onSetTheme={setTheme}
+        initialTab={settingsTab}
+        theme={theme} onSetTheme={applyTheme}
         safety={safety} onSafety={onSafety}
         approval={approval} onApproval={onApproval}
         auth={auth}
+        user={user}
+        onUpdateProfile={onUpdateProfile}
+        onChangePassword={onChangePassword}
+        onSignOut={onSignOut}
+        onSignOutEverywhere={onSignOutEverywhere}
+        onDeleteAccount={onDeleteAccount}
       />
     </div>
   )

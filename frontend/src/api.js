@@ -6,6 +6,16 @@
 const SECRET = import.meta.env.VITE_ATHENA_API_SECRET || ''
 const enc = new TextEncoder()
 
+// --- session token (account auth) ---------------------------------------
+const TOKEN_KEY = 'athena-token'
+export const getToken = () => {
+  try { return localStorage.getItem(TOKEN_KEY) || '' } catch { return '' }
+}
+export const setToken = (t) => {
+  try { t ? localStorage.setItem(TOKEN_KEY, t) : localStorage.removeItem(TOKEN_KEY) } catch { /* ignore */ }
+}
+export const clearToken = () => setToken('')
+
 const hex = (buf) =>
   [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, '0')).join('')
 
@@ -34,6 +44,8 @@ async function request(method, url, bodyObj) {
   const hasBody = bodyObj !== undefined
   const bodyStr = hasBody ? JSON.stringify(bodyObj) : ''
   const headers = await authHeaders(method, path, bodyStr)
+  const token = getToken()
+  if (token) headers['Authorization'] = `Bearer ${token}`
   const opts = { method, headers }
   if (hasBody) {
     opts.headers = { 'Content-Type': 'application/json', ...headers }
@@ -41,6 +53,13 @@ async function request(method, url, bodyObj) {
   }
   const r = await fetch(url, opts)
   if (!r.ok) {
+    // A 401 means our token is missing/expired — drop it and tell the app to
+    // bounce to the sign-in screen (but not for the auth endpoints themselves,
+    // where 401 is an expected "wrong password" result).
+    if (r.status === 401 && !path.startsWith('/api/auth')) {
+      clearToken()
+      try { window.dispatchEvent(new CustomEvent('athena-unauthorized')) } catch { /* non-browser */ }
+    }
     // Prefer the server's explanation (FastAPI `detail`) over a bare status code.
     let detail = `HTTP ${r.status}`
     try {
@@ -58,6 +77,18 @@ async function request(method, url, bodyObj) {
 export const getHealth = () => request('GET', '/api/health')
 export const getAgents = () => request('GET', '/api/agents')
 export const getAuth = () => request('GET', '/api/auth')
+
+// accounts (signup / login / profile)
+export const getAuthState = () => request('GET', '/api/auth/state')
+export const signup = (email, password, name) =>
+  request('POST', '/api/auth/signup', { email, password, name: name || '' })
+export const login = (email, password) => request('POST', '/api/auth/login', { email, password })
+export const getMe = () => request('GET', '/api/auth/me')
+export const updateProfile = (patch) => request('PATCH', '/api/auth/me', patch)
+export const changePassword = (current, next) =>
+  request('POST', '/api/auth/password', { current, new: next })
+export const logoutEverywhere = () => request('POST', '/api/auth/logout', {})
+export const deleteAccount = () => request('DELETE', '/api/auth/me')
 
 // swarm / ledger
 export const getLedger = () => request('GET', '/api/ledger')

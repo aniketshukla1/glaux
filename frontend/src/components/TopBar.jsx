@@ -1,7 +1,8 @@
 import React from 'react'
 import { Sun, Moon, Settings, LayoutGrid, ShieldCheck, Cpu, Search } from 'lucide-react'
+import UserAvatar from './UserAvatar.jsx'
 
-export default function TopBar({ title, theme, onToggleTheme, onOpenStudio, onOpenSettings, onOpenPalette, verified, health }) {
+export default function TopBar({ title, theme, onToggleTheme, onOpenStudio, onOpenSettings, onOpenPalette, verified, health, user, onOpenAccount }) {
   const backend = health?.llm || '—'
   const live = health?.live
 
@@ -44,6 +45,12 @@ export default function TopBar({ title, theme, onToggleTheme, onOpenStudio, onOp
         <button onClick={onOpenSettings} className="btn p-2" aria-label="Settings">
           <Settings className="w-4 h-4" />
         </button>
+        {user && (
+          <button onClick={onOpenAccount} className="rounded-full ring-1 ring-line/20 hover:ring-line/40 transition"
+            aria-label="Account" title={`${user.name || user.email} — account`}>
+            <UserAvatar user={user} size={32} />
+          </button>
+        )}
       </div>
     </header>
   )
