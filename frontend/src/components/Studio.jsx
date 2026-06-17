@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { Hammer, Plug, BarChart3, Activity, Database, Users, Link2, LayoutGrid, CalendarClock } from 'lucide-react'
+import { Hammer, Plug, BarChart3, Activity, Database, Users, Link2, LayoutGrid, CalendarClock, UsersRound } from 'lucide-react'
 import Drawer from './Drawer.jsx'
 import SkillLibrary from './SkillLibrary.jsx'
 import McpPanel from './McpPanel.jsx'
@@ -10,6 +10,7 @@ import MemoryPanel from './MemoryPanel.jsx'
 import AgentsPanel from './AgentsPanel.jsx'
 import ChainAuditor from './ChainAuditor.jsx'
 import SwarmFeed from './SwarmFeed.jsx'
+import AdminPanel from './AdminPanel.jsx'
 
 const TABS = [
   { key: 'skills', label: 'Skills', Icon: Hammer },
@@ -22,12 +23,13 @@ const TABS = [
   { key: 'ledger', label: 'Ledger', Icon: Link2 },
 ]
 
-export default function Studio({ open, onClose, ledger, blocks, onVerify }) {
+export default function Studio({ open, onClose, ledger, blocks, onVerify, user }) {
   const [tab, setTab] = useState('skills')
+  const tabs = user?.is_admin ? [...TABS, { key: 'team', label: 'Team', Icon: UsersRound }] : TABS
   return (
     <Drawer open={open} onClose={onClose} title="Studio" icon={<LayoutGrid className="w-4 h-4 text-muted" />} width={700}>
       <div className="flex gap-1 flex-wrap mb-4">
-        {TABS.map(({ key, label, Icon }) => (
+        {tabs.map(({ key, label, Icon }) => (
           <button
             key={key}
             onClick={() => setTab(key)}
@@ -52,6 +54,7 @@ export default function Studio({ open, onClose, ledger, blocks, onVerify }) {
           <SwarmFeed blocks={blocks} />
         </div>
       )}
+      {tab === 'team' && user?.is_admin && <AdminPanel currentUserId={user.id} />}
     </Drawer>
   )
 }

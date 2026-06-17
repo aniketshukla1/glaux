@@ -90,6 +90,23 @@ export const changePassword = (current, next) =>
 export const logoutEverywhere = () => request('POST', '/api/auth/logout', {})
 export const deleteAccount = () => request('DELETE', '/api/auth/me')
 
+// email verification + password reset
+export const verifyEmail = (token) => request('POST', '/api/auth/verify', { token })
+export const resendVerification = () => request('POST', '/api/auth/resend-verification', {})
+export const forgotPassword = (email) => request('POST', '/api/auth/forgot', { email })
+export const resetPassword = (token, password) => request('POST', '/api/auth/reset', { token, password })
+
+// social login
+export const oauthStart = (provider) => request('GET', `/api/auth/oauth/${provider}/start`)
+export const signupWithInvite = (email, password, name, invite) =>
+  request('POST', '/api/auth/signup', { email, password, name: name || '', invite: invite || null })
+
+// team / admin
+export const getAdminUsers = () => request('GET', '/api/admin/users')
+export const updateAdminUser = (id, patch) => request('PATCH', `/api/admin/users/${encodeURIComponent(id)}`, patch)
+export const deleteAdminUser = (id) => request('DELETE', `/api/admin/users/${encodeURIComponent(id)}`)
+export const createInvite = () => request('POST', '/api/admin/invites', {})
+
 // swarm / ledger
 export const getLedger = () => request('GET', '/api/ledger')
 export const getBlock = (i) => request('GET', `/api/block/${i}`)

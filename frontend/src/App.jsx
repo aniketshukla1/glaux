@@ -5,7 +5,7 @@ import {
   getAuth, dispatchTask, getWorkspace, getSession, createSession, activateSession,
   updateSession, deleteSession, createProject, updateProject, deleteProject,
   getAuthState, updateProfile, changePassword, logoutEverywhere, deleteAccount,
-  getToken, setToken, clearToken,
+  getToken, setToken, clearToken, verifyEmail, resendVerification,
 } from './api.js'
 import TopBar from './components/TopBar.jsx'
 import Sidebar from './components/Sidebar.jsx'
@@ -34,6 +34,9 @@ export default function App() {
   const [user, setUser] = useState(null)
   const [hasUsers, setHasUsers] = useState(true)
   const [authReady, setAuthReady] = useState(false)
+  const [authState, setAuthState] = useState({ oauth: [], signup: 'open' })
+  const [urlCtx, setUrlCtx] = useState({ reset: '', invite: '', oauthError: '' })
+  const [verifyMsg, setVerifyMsg] = useState('')
 
   const [health, setHealth] = useState(null)
   const [ledger, setLedger] = useState({ count: 0, blocks: [], verification: null })
@@ -55,17 +58,41 @@ export default function App() {
     localStorage.setItem('athena-theme', theme)
   }, [theme])
 
-  // bootstrap auth: who's signed in, and does any account exist yet?
+  // bootstrap auth: handle any auth links (oauth callback, verify, reset, invite),
+  // then figure out who's signed in and what login options exist.
   useEffect(() => {
     (async () => {
+      const params = new URLSearchParams(window.location.search)
+      const tokenParam = params.get('token')      // returned by the OAuth callback
+      const verifyParam = params.get('verify')
+      const resetParam = params.get('reset')
+      const inviteParam = params.get('invite')
+      const oauthError = params.get('oauth_error')
+      if (tokenParam) setToken(tokenParam)
+      setUrlCtx({ reset: resetParam || '', invite: inviteParam || '', oauthError: oauthError ? decodeURIComponent(oauthError) : '' })
+      if (tokenParam || verifyParam || resetParam || inviteParam || oauthError) {
+        window.history.replaceState({}, document.title, window.location.pathname)  // tidy the URL
+      }
       try {
         const s = await getAuthState()
-        setHasUsers(s.has_users)
+        setAuthState(s); setHasUsers(s.has_users)
         if (s.authenticated && s.user) { setUser(s.user); if (s.user.settings?.theme) setTheme(s.user.settings.theme) }
       } catch { /* backend down — AuthScreen still shows */ }
+      if (verifyParam) {
+        try { const r = await verifyEmail(verifyParam); setUser((u) => (u ? r.user : u)); setVerifyMsg('Email verified ✓') }
+        catch { /* invalid/expired link */ }
+      }
       setAuthReady(true)
     })()
   }, [])
+
+  const onResendVerification = async () => {
+    try {
+      const out = await resendVerification()
+      if (out.dev_link) { window.location.href = out.dev_link; return }  // dev mode: link verifies on reload
+      setVerifyMsg('Verification email sent — check your inbox.')
+    } catch { /* ignore */ }
+  }
 
   // a 401 anywhere drops us back to the sign-in screen
   useEffect(() => {
@@ -242,7 +269,16 @@ export default function App() {
     return <div className="min-h-screen grid place-items-center"><Loader2 className="w-6 h-6 animate-spin text-muted" /></div>
   }
   if (!user) {
-    return <AuthScreen firstRun={!hasUsers} onAuthed={onAuthed} />
+    return (
+      <AuthScreen
+        firstRun={!hasUsers}
+        onAuthed={onAuthed}
+        oauthProviders={authState.oauth}
+        invite={urlCtx.invite}
+        resetToken={urlCtx.reset}
+        initialError={urlCtx.oauthError}
+      />
+    )
   }
 
   return (
@@ -280,6 +316,13 @@ export default function App() {
               {error}
             </div>
           )}
+          {user && !user.email_verified && (
+            <div className="glass p-2.5 mb-4 text-xs flex items-center gap-2 flex-wrap" style={{ borderColor: 'rgb(251 191 36 / 0.4)' }}>
+              <span className="text-amber-300">Verify your email to secure your account — we sent a link to {user.email}.</span>
+              <button onClick={onResendVerification} className="text-accent underline underline-offset-2">Resend</button>
+              {verifyMsg && <span className="text-emerald-400">{verifyMsg}</span>}
+            </div>
+          )}
         </div>
 
         <main className="flex-1">
@@ -297,7 +340,7 @@ export default function App() {
       </div>
 
       <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} commands={commands} />
-      <Studio open={studioOpen} onClose={() => setStudioOpen(false)} ledger={ledger} blocks={liveBlocks} onVerify={refresh} />
+      <Studio open={studioOpen} onClose={() => setStudioOpen(false)} ledger={ledger} blocks={liveBlocks} onVerify={refresh} user={user} />
       <SettingsPanel
         open={settingsOpen} onClose={() => setSettingsOpen(false)}
         initialTab={settingsTab}
