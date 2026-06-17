@@ -295,6 +295,16 @@ class UserStore:
     def admin_count(self) -> int:
         return sum(1 for u in self.users.values() if u.is_admin)
 
+    def ensure_admin(self) -> None:
+        """Migration safety net: an existing install that predates roles (no admin
+        on any account) gets its earliest account promoted, so the owner keeps
+        access instead of being locked out of team management."""
+        if self.users and self.admin_count() == 0:
+            oldest = min(self.users.values(), key=lambda u: u.created_at or "")
+            oldest.is_admin = True
+            oldest.email_verified = True  # trust the original bootstrap account
+            self.save()
+
     def delete(self, user_id: str) -> bool:
         user = self.users.pop(user_id, None)
         if user is None:

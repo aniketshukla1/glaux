@@ -276,6 +276,7 @@ class _State:
         self._default_store.load()
         self._user_stores: dict[str, "SessionStore"] = {}
         self.users = users.UserStore(_users_path())
+        self.users.ensure_admin()  # keep an existing single-user install's owner as admin
         self.auth_secret = _auth_secret()
         self.eval_runs: list[EvalRun] = []
         self.approval_mode = "auto"  # auto | gated (gated => human approves synthesized skills)
