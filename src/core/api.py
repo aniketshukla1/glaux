@@ -17,10 +17,12 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import secrets
 import shutil
 import tempfile
 import time
 from contextlib import asynccontextmanager
+from contextvars import ContextVar
 from pathlib import Path
 from typing import Optional
 
@@ -31,7 +33,7 @@ from pydantic import BaseModel
 from starlette.concurrency import run_in_threadpool
 from starlette.middleware.base import BaseHTTPMiddleware
 
-from core import auth
+from core import auth, users
 from core.observability import METRICS, log_json
 
 import safety
@@ -76,6 +78,43 @@ def _workspace_path() -> Path:
 
 def _llm_config_path() -> Path:
     return _athena_home() / "llm.json"
+
+
+def _users_path() -> Path:
+    return _athena_home() / "users.json"
+
+
+def _user_workspace_path(uid: str) -> Path:
+    return _athena_home() / "users" / uid / "workspace.json"
+
+
+def _auth_secret() -> str:
+    """A stable server-side secret for signing session tokens, generated once and
+    persisted (0600). Distinct from the agents' Ed25519 keys and the HMAC API
+    secret. ATHENA_AUTH_SECRET overrides it (e.g. to share across replicas)."""
+    override = os.environ.get("ATHENA_AUTH_SECRET")
+    if override:
+        return override
+    path = _athena_home() / "auth_secret"
+    try:
+        existing = path.read_text().strip()
+        if existing:
+            return existing
+    except OSError:
+        pass
+    secret = secrets.token_hex(32)
+    try:
+        _athena_home().mkdir(parents=True, exist_ok=True)
+        path.write_text(secret)
+        os.chmod(path, 0o600)
+    except OSError:
+        pass  # non-writable home: a fresh secret per boot still works for this run
+    return secret
+
+
+# Set per-request by UserAuthMiddleware; read by STATE.sessions to pick the
+# signed-in user's private workspace. None => the shared/default workspace.
+_current_user_id: ContextVar[Optional[str]] = ContextVar("athena_current_user", default=None)
 
 
 def _load_persisted_llm_config() -> Optional[dict]:
@@ -216,8 +255,14 @@ class _State:
         self.scheduler.load()
         from core.sessions import SessionStore
 
-        self.sessions = SessionStore(store_path=_workspace_path())
-        self.sessions.load()
+        self._SessionStore = SessionStore
+        # The shared/default workspace — used before login, by the scheduler, and
+        # in system contexts. Each signed-in user gets their own private workspace.
+        self._default_store = SessionStore(store_path=_workspace_path())
+        self._default_store.load()
+        self._user_stores: dict[str, "SessionStore"] = {}
+        self.users = users.UserStore(_users_path())
+        self.auth_secret = _auth_secret()
         self.eval_runs: list[EvalRun] = []
         self.approval_mode = "auto"  # auto | gated (gated => human approves synthesized skills)
         self.llm_config = _default_llm_config()
@@ -227,6 +272,38 @@ class _State:
         self.ledger = Ledger(on_append=lambda block: WS.publish({"type": "block", "block": block}))
         self.identities = {role: AgentIdentity.generate() for role in ROLES}
         self.llm = _make_llm(self.llm_config)
+
+    @property
+    def sessions(self):
+        """The workspace for the current request's signed-in user (resolved from a
+        contextvar), or the shared default workspace when there's no user."""
+        return self.store_for(_current_user_id.get())
+
+    def store_for(self, uid: Optional[str]):
+        if not uid:
+            return self._default_store
+        store = self._user_stores.get(uid)
+        if store is None:
+            store = self._SessionStore(store_path=_user_workspace_path(uid))
+            store.load()
+            self._user_stores[uid] = store
+        return store
+
+    def current_user(self):
+        return self.users.by_id(_current_user_id.get())
+
+    def resolve_user_id(self, token: Optional[str]) -> Optional[str]:
+        """Validate a session token and return its user id (or None). Rejects
+        tokens whose version no longer matches (signed out / password changed)."""
+        if not token:
+            return None
+        payload = users.verify_token(self.auth_secret, token)
+        if not payload:
+            return None
+        user = self.users.by_id(payload.get("uid"))
+        if user is None or user.token_version != payload.get("ver"):
+            return None
+        return user.id
 
     def reset_memory(self) -> None:
         shutil.rmtree(self.memory_dir, ignore_errors=True)
@@ -279,8 +356,53 @@ async def _lifespan(_app):
 
 app = FastAPI(title="Athena Swarm API", version="0.2.0", lifespan=_lifespan)
 
-# Public (never signed): liveness + auth-state discovery so a client can bootstrap.
-_AUTH_EXEMPT = {"/api/auth", "/api/health"}
+# Public /api endpoints (no user token / HMAC needed): liveness + the auth
+# endpoints themselves, so a client can bootstrap and sign in.
+def _is_public_api(path: str) -> bool:
+    return path == "/api/health" or path == "/api/auth" or path.startswith("/api/auth/")
+
+
+def _bearer_from_scope(scope) -> Optional[str]:
+    for k, v in scope.get("headers", []):
+        if k == b"authorization":
+            val = v.decode("latin-1")
+            if val.lower().startswith("bearer "):
+                return val[7:].strip()
+    return None
+
+
+class UserAuthMiddleware:
+    """Resolve the signed-in user from the Bearer token into a contextvar (so
+    per-user workspaces work with no change to the route handlers), and require
+    auth on /api/* once at least one account exists. A fresh server with no
+    accounts stays open so the first signup can happen.
+
+    Pure-ASGI (not BaseHTTPMiddleware) so the contextvar reliably reaches the
+    endpoint regardless of downstream task boundaries."""
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            return await self.app(scope, receive, send)
+        path = scope["path"]
+        uid = STATE.resolve_user_id(_bearer_from_scope(scope))
+        ctx = _current_user_id.set(uid)
+        try:
+            if (
+                scope["method"] != "OPTIONS"
+                and path.startswith("/api/")
+                and not _is_public_api(path)
+                and uid is None
+                and STATE.users.count() > 0
+            ):
+                resp = JSONResponse({"detail": "authentication required"}, status_code=401)
+                await resp(scope, receive, send)
+                return
+            await self.app(scope, receive, send)
+        finally:
+            _current_user_id.reset(ctx)
 
 
 class HMACAuthMiddleware(BaseHTTPMiddleware):
@@ -293,7 +415,7 @@ class HMACAuthMiddleware(BaseHTTPMiddleware):
             secret
             and request.method != "OPTIONS"
             and path.startswith("/api/")
-            and path not in _AUTH_EXEMPT
+            and not _is_public_api(path)
         ):
             body = await request.body()
             ok = auth.verify(
@@ -318,6 +440,121 @@ app.add_middleware(HMACAuthMiddleware)
 app.add_middleware(
     CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"]
 )
+app.add_middleware(UserAuthMiddleware)  # outermost: sets the user contextvar first
+
+
+# --- auth / accounts -----------------------------------------------------
+
+
+class SignupRequest(BaseModel):
+    email: str
+    password: str
+    name: str = ""
+
+
+class LoginRequest(BaseModel):
+    email: str
+    password: str
+
+
+class ProfileRequest(BaseModel):
+    name: Optional[str] = None
+    email: Optional[str] = None
+    settings: Optional[dict] = None
+
+
+class PasswordRequest(BaseModel):
+    current: str
+    new: str
+
+
+def _auth_payload(user) -> dict:
+    token = users.issue_token(STATE.auth_secret, user.id, user.token_version)
+    return {"token": token, "user": user.public()}
+
+
+@app.get("/api/auth/state")
+def auth_state() -> dict:
+    """Bootstrap: does any account exist yet, and is this caller signed in?"""
+    user = STATE.current_user()
+    return {
+        "has_users": STATE.users.count() > 0,
+        "authenticated": user is not None,
+        "user": user.public() if user else None,
+    }
+
+
+@app.post("/api/auth/signup")
+def auth_signup(req: SignupRequest) -> dict:
+    try:
+        user = STATE.users.create(req.email, req.password, req.name)
+    except users.UserError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    log_json("auth", action="signup", user=user.id)
+    return _auth_payload(user)
+
+
+@app.post("/api/auth/login")
+def auth_login(req: LoginRequest) -> dict:
+    user = STATE.users.authenticate(req.email, req.password)
+    if user is None:
+        raise HTTPException(status_code=401, detail="Incorrect email or password.")
+    return _auth_payload(user)
+
+
+@app.get("/api/auth/me")
+def auth_me() -> dict:
+    user = STATE.current_user()
+    if user is None:
+        raise HTTPException(status_code=401, detail="Not signed in.")
+    return {"user": user.public()}
+
+
+@app.patch("/api/auth/me")
+def auth_update_me(req: ProfileRequest) -> dict:
+    user = STATE.current_user()
+    if user is None:
+        raise HTTPException(status_code=401, detail="Not signed in.")
+    try:
+        STATE.users.update_profile(user, name=req.name, email=req.email, settings=req.settings)
+    except users.UserError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return {"user": user.public()}
+
+
+@app.post("/api/auth/password")
+def auth_change_password(req: PasswordRequest) -> dict:
+    user = STATE.current_user()
+    if user is None:
+        raise HTTPException(status_code=401, detail="Not signed in.")
+    try:
+        STATE.users.change_password(user, req.current, req.new)
+    except users.UserError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    # changing the password rotated token_version — hand back a fresh token so the
+    # caller's current session keeps working while older tokens are invalidated.
+    return _auth_payload(user)
+
+
+@app.post("/api/auth/logout")
+def auth_logout() -> dict:
+    """Sign out everywhere by rotating the token version (all old tokens die)."""
+    user = STATE.current_user()
+    if user is not None:
+        STATE.users.bump_token_version(user)
+    return {"ok": True}
+
+
+@app.delete("/api/auth/me")
+def auth_delete_me() -> dict:
+    user = STATE.current_user()
+    if user is None:
+        raise HTTPException(status_code=401, detail="Not signed in.")
+    STATE._user_stores.pop(user.id, None)
+    shutil.rmtree(_user_workspace_path(user.id).parent, ignore_errors=True)
+    STATE.users.delete(user.id)
+    log_json("auth", action="delete", user=user.id)
+    return {"ok": True}
 
 
 # --- models --------------------------------------------------------------
@@ -388,6 +625,11 @@ def _hit(h) -> dict:
 
 @app.websocket("/ws")
 async def ws_feed(websocket: WebSocket) -> None:
+    # Browsers can't set headers on a WS handshake, so the session token arrives
+    # as a query param (?token=…). Require it once any account exists.
+    if STATE.users.count() > 0 and STATE.resolve_user_id(websocket.query_params.get("token")) is None:
+        await websocket.close(code=4401)
+        return
     await WS.connect(websocket)
     try:
         while True:

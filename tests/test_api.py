@@ -27,6 +27,12 @@ def _fresh_state():
     STATE.sessions.sessions.clear()
     STATE.sessions.active_id = None
     STATE.sessions.ensure_active()
+    # reset accounts so each test starts with an open (no-users) API; auth tests
+    # create their own users and carry their own tokens
+    STATE.users.users.clear()
+    STATE.users._by_email.clear()
+    STATE._user_stores.clear()
+    client.headers.pop("Authorization", None)
     client.post("/api/safety", json={"mode": "live"})
     client.post("/api/approval", json={"mode": "auto"})
     client.post("/api/llm", json={"backend": "demo"})
@@ -100,6 +106,91 @@ def test_agents_roster_exposes_identities():
         # agent_id is base58(public key) — they match for a non-rotated identity
         assert a["agent_id"] == a["public_key"]
         assert a["namespace"] == "default"
+
+
+# --- accounts / auth -----------------------------------------------------
+
+
+def _signup(email="ada@example.com", password="password123", name="Ada"):
+    r = client.post("/api/auth/signup", json={"email": email, "password": password, "name": name})
+    assert r.status_code == 200, r.text
+    return r.json()
+
+
+def _auth(token):
+    return {"Authorization": f"Bearer {token}"}
+
+
+def test_auth_state_starts_open_then_signup_locks_it():
+    state = client.get("/api/auth/state").json()
+    assert state == {"has_users": False, "authenticated": False, "user": None}
+    # open before any account exists: a protected route works without a token
+    assert client.get("/api/agents").status_code == 200
+
+    out = _signup()
+    assert out["token"] and out["user"]["email"] == "ada@example.com"
+    assert "password" not in str(out["user"]) and "hash" not in str(out["user"])
+
+    # now that an account exists, the same route needs a token
+    assert client.get("/api/agents").status_code == 401
+    assert client.get("/api/agents", headers=_auth(out["token"])).status_code == 200
+    assert client.get("/api/auth/state").json()["has_users"] is True
+
+
+def test_login_and_me():
+    _signup(email="b@b.com", password="password123", name="Bee")
+    assert client.post("/api/auth/login", json={"email": "b@b.com", "password": "nope"}).status_code == 401
+    out = client.post("/api/auth/login", json={"email": "b@b.com", "password": "password123"}).json()
+    me = client.get("/api/auth/me", headers=_auth(out["token"])).json()
+    assert me["user"]["name"] == "Bee"
+
+
+def test_signup_validation_and_duplicates():
+    assert client.post("/api/auth/signup", json={"email": "bad", "password": "password123"}).status_code == 400
+    assert client.post("/api/auth/signup", json={"email": "a@b.com", "password": "short"}).status_code == 400
+    _signup(email="dup@b.com")
+    assert client.post("/api/auth/signup", json={"email": "dup@b.com", "password": "password123"}).status_code == 400
+
+
+def test_workspaces_are_isolated_per_user():
+    a = _signup(email="a@x.com")
+    b = _signup(email="b@x.com")
+    client.post("/api/projects", json={"name": "A-only project"}, headers=_auth(a["token"]))
+    a_names = [p["name"] for p in client.get("/api/workspace", headers=_auth(a["token"])).json()["projects"]]
+    b_names = [p["name"] for p in client.get("/api/workspace", headers=_auth(b["token"])).json()["projects"]]
+    assert "A-only project" in a_names
+    assert "A-only project" not in b_names  # B can't see A's workspace
+
+
+def test_update_profile_and_preferences():
+    out = _signup(email="p@x.com")
+    h = _auth(out["token"])
+    client.patch("/api/auth/me", json={"name": "Ada L.", "settings": {"theme": "oled"}}, headers=h)
+    client.patch("/api/auth/me", json={"settings": {"default_model": "qwen"}}, headers=h)
+    me = client.get("/api/auth/me", headers=h).json()["user"]
+    assert me["name"] == "Ada L."
+    assert me["settings"] == {"theme": "oled", "default_model": "qwen"}  # merged
+
+
+def test_change_password_rotates_token():
+    out = _signup(email="pw@x.com")
+    old = out["token"]
+    r = client.post("/api/auth/password", json={"current": "password123", "new": "newpassword1"}, headers=_auth(old))
+    assert r.status_code == 200
+    new = r.json()["token"]
+    assert client.get("/api/auth/me", headers=_auth(old)).status_code == 401   # old token invalidated
+    assert client.get("/api/auth/me", headers=_auth(new)).status_code == 200   # fresh token works
+
+
+def test_logout_everywhere_and_delete_account():
+    out = _signup(email="z@x.com")
+    h = _auth(out["token"])
+    assert client.post("/api/auth/logout", headers=h).json()["ok"] is True
+    assert client.get("/api/auth/me", headers=h).status_code == 401  # token revoked
+    # log back in, then delete the account
+    tok = client.post("/api/auth/login", json={"email": "z@x.com", "password": "password123"}).json()["token"]
+    assert client.delete("/api/auth/me", headers=_auth(tok)).json()["ok"] is True
+    assert client.post("/api/auth/login", json={"email": "z@x.com", "password": "password123"}).status_code == 401
 
 
 # --- safety / kill switch ------------------------------------------------
