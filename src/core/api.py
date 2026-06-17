@@ -26,15 +26,29 @@ from contextvars import ContextVar
 from pathlib import Path
 from typing import Optional
 
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+import urllib.parse
+
+from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, PlainTextResponse
+from fastapi.responses import JSONResponse, PlainTextResponse, RedirectResponse
 from pydantic import BaseModel
 from starlette.concurrency import run_in_threadpool
 from starlette.middleware.base import BaseHTTPMiddleware
 
-from core import auth, users
+from core import auth, mailer, oauth, users
 from core.observability import METRICS, log_json
+
+# auth action-token lifetimes
+VERIFY_TTL = 2 * 24 * 3600      # email verification link
+RESET_TTL = 60 * 60            # password reset link
+INVITE_TTL = 7 * 24 * 3600     # team invite link
+OAUTH_STATE_TTL = 10 * 60      # CSRF state for the OAuth round-trip
+
+
+def _signup_policy() -> str:
+    # open | invite | closed (after the first/bootstrap account exists)
+    val = os.environ.get("ATHENA_SIGNUP", "open").lower()
+    return val if val in ("open", "invite", "closed") else "open"
 
 import safety
 from agents import (
@@ -301,7 +315,7 @@ class _State:
         if not payload:
             return None
         user = self.users.by_id(payload.get("uid"))
-        if user is None or user.token_version != payload.get("ver"):
+        if user is None or not user.is_active or user.token_version != payload.get("ver"):
             return None
         return user.id
 
@@ -450,6 +464,7 @@ class SignupRequest(BaseModel):
     email: str
     password: str
     name: str = ""
+    invite: Optional[str] = None
 
 
 class LoginRequest(BaseModel):
@@ -473,25 +488,58 @@ def _auth_payload(user) -> dict:
     return {"token": token, "user": user.public()}
 
 
+def _app_base_url(request: Request) -> str:
+    """The public origin for building links (verify / reset / oauth callback).
+    ATHENA_PUBLIC_URL overrides it for deployments behind a proxy."""
+    override = os.environ.get("ATHENA_PUBLIC_URL")
+    if override:
+        return override.rstrip("/")
+    return str(request.base_url).rstrip("/")
+
+
+def _send_verification(user, base_url: str) -> Optional[str]:
+    token = users.issue_action_token(STATE.auth_secret, user.id, "verify", ttl=VERIFY_TTL)
+    res = mailer.deliver_link(
+        user.email, "Verify your Athena email",
+        "Confirm your email to finish setting up your account:",
+        f"{base_url}/?verify={urllib.parse.quote(token)}",
+    )
+    return res.get("dev_link")
+
+
 @app.get("/api/auth/state")
 def auth_state() -> dict:
-    """Bootstrap: does any account exist yet, and is this caller signed in?"""
+    """Bootstrap: accounts exist? who's signed in? what login options are on?"""
     user = STATE.current_user()
     return {
         "has_users": STATE.users.count() > 0,
         "authenticated": user is not None,
         "user": user.public() if user else None,
+        "oauth": oauth.configured_providers(),
+        "signup": _signup_policy(),
+        "email_delivery": "smtp" if mailer.smtp_configured() else ("dev" if mailer.dev_mode() else "off"),
     }
 
 
 @app.post("/api/auth/signup")
-def auth_signup(req: SignupRequest) -> dict:
+def auth_signup(req: SignupRequest, request: Request) -> dict:
+    # Registration policy applies only once the bootstrap account exists.
+    if STATE.users.count() > 0:
+        policy = _signup_policy()
+        if policy == "closed":
+            raise HTTPException(status_code=403, detail="Sign-ups are closed on this server.")
+        if policy == "invite":
+            if not (req.invite and users.verify_action_token(STATE.auth_secret, req.invite, "invite")):
+                raise HTTPException(status_code=403, detail="A valid invite is required to sign up.")
     try:
         user = STATE.users.create(req.email, req.password, req.name)
     except users.UserError as e:
         raise HTTPException(status_code=400, detail=str(e))
     log_json("auth", action="signup", user=user.id)
-    return _auth_payload(user)
+    out = _auth_payload(user)
+    if not user.email_verified:
+        out["dev_link"] = _send_verification(user, _app_base_url(request))
+    return out
 
 
 @app.post("/api/auth/login")
@@ -499,6 +547,8 @@ def auth_login(req: LoginRequest) -> dict:
     user = STATE.users.authenticate(req.email, req.password)
     if user is None:
         raise HTTPException(status_code=401, detail="Incorrect email or password.")
+    if not user.is_active:
+        raise HTTPException(status_code=403, detail="This account has been deactivated.")
     return _auth_payload(user)
 
 
@@ -555,6 +605,185 @@ def auth_delete_me() -> dict:
     STATE.users.delete(user.id)
     log_json("auth", action="delete", user=user.id)
     return {"ok": True}
+
+
+# --- email verification + password reset ---------------------------------
+
+
+class TokenRequest(BaseModel):
+    token: str
+
+
+class ForgotRequest(BaseModel):
+    email: str
+
+
+class ResetRequest(BaseModel):
+    token: str
+    password: str
+
+
+@app.post("/api/auth/verify")
+def auth_verify(req: TokenRequest) -> dict:
+    payload = users.verify_action_token(STATE.auth_secret, req.token, "verify")
+    if not payload:
+        raise HTTPException(status_code=400, detail="This verification link is invalid or has expired.")
+    user = STATE.users.by_id(payload.get("sub"))
+    if user is None:
+        raise HTTPException(status_code=404, detail="Account not found.")
+    STATE.users.mark_verified(user)
+    return {"ok": True, "user": user.public()}
+
+
+@app.post("/api/auth/resend-verification")
+def auth_resend_verification(request: Request) -> dict:
+    user = STATE.current_user()
+    if user is None:
+        raise HTTPException(status_code=401, detail="Not signed in.")
+    if user.email_verified:
+        return {"ok": True, "already_verified": True}
+    return {"ok": True, "dev_link": _send_verification(user, _app_base_url(request))}
+
+
+@app.post("/api/auth/forgot")
+def auth_forgot(req: ForgotRequest, request: Request) -> dict:
+    """Always returns ok (never reveals whether an email is registered)."""
+    user = STATE.users.by_email(req.email)
+    dev_link = None
+    if user is not None and user.password_hash:
+        token = users.issue_action_token(STATE.auth_secret, user.id, "reset", ttl=RESET_TTL)
+        res = mailer.deliver_link(
+            user.email, "Reset your Athena password",
+            "Use this link to choose a new password:",
+            f"{_app_base_url(request)}/?reset={urllib.parse.quote(token)}",
+        )
+        dev_link = res.get("dev_link")
+    return {"ok": True, "dev_link": dev_link}
+
+
+@app.post("/api/auth/reset")
+def auth_reset(req: ResetRequest) -> dict:
+    payload = users.verify_action_token(STATE.auth_secret, req.token, "reset")
+    if not payload:
+        raise HTTPException(status_code=400, detail="This reset link is invalid or has expired.")
+    user = STATE.users.by_id(payload.get("sub"))
+    if user is None:
+        raise HTTPException(status_code=404, detail="Account not found.")
+    try:
+        STATE.users.set_password(user, req.password)
+    except users.UserError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return _auth_payload(user)  # sign them straight in with a fresh token
+
+
+# --- social login (OAuth) ------------------------------------------------
+
+
+def _oauth_redirect_uri(request: Request, provider: str) -> str:
+    return f"{_app_base_url(request)}/api/auth/oauth/{provider}/callback"
+
+
+@app.get("/api/auth/oauth/{provider}/start")
+def oauth_start(provider: str, request: Request) -> dict:
+    if not oauth.is_configured(provider):
+        raise HTTPException(status_code=404, detail=f"{provider} login isn't configured on this server.")
+    state = users.issue_action_token(STATE.auth_secret, provider, "oauth", ttl=OAUTH_STATE_TTL)
+    return {"url": oauth.authorize_url(provider, _oauth_redirect_uri(request, provider), state)}
+
+
+@app.get("/api/auth/oauth/{provider}/callback")
+def oauth_callback(provider: str, request: Request, code: str = "", state: str = "", error: str = ""):
+    base = _app_base_url(request)
+
+    def back(fragment: str):
+        return RedirectResponse(f"{base}/?{fragment}")
+
+    if error or not code:
+        return back(f"oauth_error={urllib.parse.quote(error or 'cancelled')}")
+    payload = users.verify_action_token(STATE.auth_secret, state, "oauth")
+    if not payload or payload.get("sub") != provider:
+        return back("oauth_error=bad_state")
+    try:
+        access = oauth.exchange_code(provider, code, _oauth_redirect_uri(request, provider))
+        subject, email, name = oauth.fetch_identity(provider, access)
+    except oauth.OAuthError as e:
+        return back(f"oauth_error={urllib.parse.quote(str(e))}")
+    user = STATE.users.by_oauth(provider, subject)
+    if user is None and email:
+        user = STATE.users.by_email(email)
+        if user is not None:
+            STATE.users.link_oauth(user, provider, subject)  # link to an existing account
+    if user is None:
+        user = STATE.users.create_oauth(provider, subject, email or "", name or "")
+        log_json("auth", action="oauth_signup", provider=provider, user=user.id)
+    if not user.is_active:
+        return back("oauth_error=account_disabled")
+    token = users.issue_token(STATE.auth_secret, user.id, user.token_version)
+    return back(f"token={urllib.parse.quote(token)}")
+
+
+# --- team / admin user management ----------------------------------------
+
+
+def _require_admin():
+    user = STATE.current_user()
+    if user is None:
+        raise HTTPException(status_code=401, detail="Not signed in.")
+    if not user.is_admin:
+        raise HTTPException(status_code=403, detail="Admin access required.")
+    return user
+
+
+class AdminUserPatch(BaseModel):
+    is_admin: Optional[bool] = None
+    is_active: Optional[bool] = None
+
+
+@app.get("/api/admin/users")
+def admin_list_users() -> dict:
+    _require_admin()
+    return {"users": STATE.users.list_public()}
+
+
+@app.patch("/api/admin/users/{user_id}")
+def admin_update_user(user_id: str, patch: AdminUserPatch) -> dict:
+    admin = _require_admin()
+    target = STATE.users.by_id(user_id)
+    if target is None:
+        raise HTTPException(status_code=404, detail="User not found.")
+    if patch.is_admin is not None:
+        if not patch.is_admin and target.is_admin and STATE.users.admin_count() <= 1:
+            raise HTTPException(status_code=400, detail="There must be at least one admin.")
+        STATE.users.set_admin(target, patch.is_admin)
+    if patch.is_active is not None:
+        if not patch.is_active and target.id == admin.id:
+            raise HTTPException(status_code=400, detail="You can't deactivate your own account.")
+        STATE.users.set_active(target, patch.is_active)
+    return {"user": target.public()}
+
+
+@app.delete("/api/admin/users/{user_id}")
+def admin_delete_user(user_id: str) -> dict:
+    admin = _require_admin()
+    target = STATE.users.by_id(user_id)
+    if target is None:
+        raise HTTPException(status_code=404, detail="User not found.")
+    if target.id == admin.id:
+        raise HTTPException(status_code=400, detail="Delete your own account from Settings.")
+    if target.is_admin and STATE.users.admin_count() <= 1:
+        raise HTTPException(status_code=400, detail="There must be at least one admin.")
+    STATE._user_stores.pop(target.id, None)
+    shutil.rmtree(_user_workspace_path(target.id).parent, ignore_errors=True)
+    STATE.users.delete(target.id)
+    log_json("auth", action="admin_delete", user=target.id)
+    return {"ok": True}
+
+
+@app.post("/api/admin/invites")
+def admin_create_invite(request: Request) -> dict:
+    _require_admin()
+    token = users.issue_action_token(STATE.auth_secret, "team", "invite", ttl=INVITE_TTL)
+    return {"link": f"{_app_base_url(request)}/?invite={urllib.parse.quote(token)}", "expires_in": INVITE_TTL}
 
 
 # --- models --------------------------------------------------------------

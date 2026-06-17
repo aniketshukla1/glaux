@@ -90,6 +90,33 @@ def verify_token(secret: str, token: str) -> Optional[dict]:
     return payload
 
 
+def issue_action_token(secret: str, subject: str, purpose: str, *, ttl: int, extra: Optional[dict] = None) -> str:
+    """A short-lived, single-purpose signed token — for email verification, a
+    password reset, or an invite. `purpose` is bound into the signature."""
+    payload = {"sub": subject, "purpose": purpose, "exp": int(time.time()) + ttl, **(extra or {})}
+    body = _b64(json.dumps(payload, separators=(",", ":")).encode("utf-8"))
+    sig = _b64(hmac.new(secret.encode("utf-8"), body.encode("ascii"), hashlib.sha256).digest())
+    return f"{body}.{sig}"
+
+
+def verify_action_token(secret: str, token: str, purpose: str) -> Optional[dict]:
+    """Return the token payload if the signature is valid, unexpired, and the
+    purpose matches; else None."""
+    try:
+        body, sig = token.split(".", 1)
+        expected = _b64(hmac.new(secret.encode("utf-8"), body.encode("ascii"), hashlib.sha256).digest())
+        if not hmac.compare_digest(expected, sig):
+            return None
+        payload = json.loads(_unb64(body))
+    except (ValueError, AttributeError, json.JSONDecodeError):
+        return None
+    if not isinstance(payload, dict) or payload.get("exp", 0) < time.time():
+        return None
+    if payload.get("purpose") != purpose:
+        return None
+    return payload
+
+
 # --- model + store --------------------------------------------------------
 
 @dataclass
@@ -101,6 +128,10 @@ class User:
     created_at: str = ""
     token_version: int = 0
     settings: dict = field(default_factory=dict)  # theme, default_model, avatar, …
+    email_verified: bool = False
+    is_admin: bool = False
+    is_active: bool = True
+    oauth: dict = field(default_factory=dict)  # provider -> subject id (linked logins)
 
     def public(self) -> dict:
         """The user minus secrets, for sending to the client."""
@@ -110,6 +141,10 @@ class User:
             "name": self.name,
             "created_at": self.created_at,
             "settings": self.settings or {},
+            "email_verified": bool(self.email_verified),
+            "is_admin": bool(self.is_admin),
+            "is_active": bool(self.is_active),
+            "oauth": sorted(self.oauth.keys()) if self.oauth else [],
         }
 
 
@@ -143,21 +178,56 @@ class UserStore:
             raise UserError(f"Password must be at least {MIN_PASSWORD_LEN} characters.")
         if self.by_email(email) is not None:
             raise UserError("An account with that email already exists.")
+        first = self.count() == 0
         user = User(
             id=secrets.token_hex(8),
             email=email,
             name=(name or "").strip() or email.split("@")[0],
             password_hash=hash_password(password),
             created_at=_now(),
+            # the first account bootstraps the instance: it's the admin and is
+            # trusted as verified so there's no chicken-and-egg on a fresh server.
+            is_admin=first,
+            email_verified=first,
         )
         self.users[user.id] = user
         self._by_email[email.lower()] = user.id
         self.save()
         return user
 
+    def create_oauth(self, provider: str, subject: str, email: str, name: str = "") -> User:
+        """Create an account from a verified OAuth identity (no password)."""
+        email = (email or "").strip()
+        first = self.count() == 0
+        user = User(
+            id=secrets.token_hex(8),
+            email=email or f"{provider}_{subject}@oauth.local",
+            name=(name or "").strip() or (email.split("@")[0] if email else provider),
+            password_hash="",  # OAuth-only account; password login disabled until set
+            created_at=_now(),
+            is_admin=first,
+            email_verified=True,  # the provider already verified the email
+            oauth={provider: subject},
+        )
+        self.users[user.id] = user
+        if user.email:
+            self._by_email[user.email.lower()] = user.id
+        self.save()
+        return user
+
+    def by_oauth(self, provider: str, subject: str) -> Optional[User]:
+        for u in self.users.values():
+            if u.oauth.get(provider) == subject:
+                return u
+        return None
+
+    def link_oauth(self, user: User, provider: str, subject: str) -> None:
+        user.oauth[provider] = subject
+        self.save()
+
     def authenticate(self, email: str, password: str) -> Optional[User]:
         user = self.by_email(email)
-        if user is None or not verify_password(password or "", user.password_hash):
+        if user is None or not user.password_hash or not verify_password(password or "", user.password_hash):
             return None
         return user
 
@@ -194,6 +264,37 @@ class UserStore:
         user.token_version += 1
         self.save()
 
+    def set_password(self, user: User, new: str) -> None:
+        """Set a password without the current one (password reset / OAuth account
+        adding a password). Rotates the token version."""
+        if len(new or "") < MIN_PASSWORD_LEN:
+            raise UserError(f"Password must be at least {MIN_PASSWORD_LEN} characters.")
+        user.password_hash = hash_password(new)
+        user.token_version += 1
+        self.save()
+
+    def mark_verified(self, user: User) -> None:
+        if not user.email_verified:
+            user.email_verified = True
+            self.save()
+
+    # -- admin / team management --
+    def set_admin(self, user: User, value: bool) -> None:
+        user.is_admin = bool(value)
+        self.save()
+
+    def set_active(self, user: User, value: bool) -> None:
+        user.is_active = bool(value)
+        if not value:
+            user.token_version += 1  # disabling a user kills their live sessions
+        self.save()
+
+    def list_public(self) -> list:
+        return [u.public() for u in sorted(self.users.values(), key=lambda u: u.created_at or "")]
+
+    def admin_count(self) -> int:
+        return sum(1 for u in self.users.values() if u.is_admin)
+
     def delete(self, user_id: str) -> bool:
         user = self.users.pop(user_id, None)
         if user is None:
@@ -222,8 +323,11 @@ class UserStore:
             return
         for row in rows:
             try:
-                u = User(**{k: row.get(k) for k in User.__dataclass_fields__})
+                # only pass keys present in the row so dataclass defaults apply to
+                # fields added in later versions (email_verified, is_admin, …)
+                u = User(**{k: row[k] for k in User.__dataclass_fields__ if k in row})
             except (TypeError, KeyError):
                 continue
             self.users[u.id] = u
-            self._by_email[u.email.lower()] = u.id
+            if u.email:
+                self._by_email[u.email.lower()] = u.id

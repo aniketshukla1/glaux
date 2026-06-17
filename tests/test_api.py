@@ -123,7 +123,8 @@ def _auth(token):
 
 def test_auth_state_starts_open_then_signup_locks_it():
     state = client.get("/api/auth/state").json()
-    assert state == {"has_users": False, "authenticated": False, "user": None}
+    assert state["has_users"] is False and state["authenticated"] is False and state["user"] is None
+    assert "oauth" in state and "signup" in state  # login options for the client
     # open before any account exists: a protected route works without a token
     assert client.get("/api/agents").status_code == 200
 
@@ -191,6 +192,75 @@ def test_logout_everywhere_and_delete_account():
     tok = client.post("/api/auth/login", json={"email": "z@x.com", "password": "password123"}).json()["token"]
     assert client.delete("/api/auth/me", headers=_auth(tok)).json()["ok"] is True
     assert client.post("/api/auth/login", json={"email": "z@x.com", "password": "password123"}).status_code == 401
+
+
+def _token_from_link(link, key):
+    from urllib.parse import urlparse, parse_qs
+    return parse_qs(urlparse(link).query)[key][0]
+
+
+def test_email_verification_flow():
+    _signup(email="admin@x.com")                       # first user: auto-verified admin
+    out = _signup(email="member@x.com", name="Mem")    # second user: must verify
+    assert out["user"]["email_verified"] is False
+    assert out["dev_link"]                              # link surfaced in dev mode
+    token = _token_from_link(out["dev_link"], "verify")
+    res = client.post("/api/auth/verify", json={"token": token}).json()
+    assert res["ok"] and res["user"]["email_verified"] is True
+    assert client.post("/api/auth/verify", json={"token": "bad"}).status_code == 400
+
+
+def test_password_reset_flow():
+    _signup(email="r@x.com", password="password123")
+    # forgot always returns ok, even for an unknown email
+    assert client.post("/api/auth/forgot", json={"email": "nobody@x.com"}).json()["ok"] is True
+    out = client.post("/api/auth/forgot", json={"email": "r@x.com"}).json()
+    token = _token_from_link(out["dev_link"], "reset")
+    reset = client.post("/api/auth/reset", json={"token": token, "password": "freshpass123"}).json()
+    assert reset["token"]  # signed straight in
+    assert client.post("/api/auth/login", json={"email": "r@x.com", "password": "freshpass123"}).status_code == 200
+    assert client.post("/api/auth/login", json={"email": "r@x.com", "password": "password123"}).status_code == 401
+
+
+def test_oauth_providers_hidden_when_unconfigured():
+    state = client.get("/api/auth/state").json()
+    assert state["oauth"] == []  # no client creds in the env => no buttons
+    assert client.get("/api/auth/oauth/google/start").status_code == 404
+
+
+def test_signup_policy_invite_only(monkeypatch):
+    monkeypatch.setenv("ATHENA_SIGNUP", "invite")
+    a = _signup(email="admin@x.com")  # bootstrap is always allowed
+    # a second open signup is now blocked …
+    assert client.post("/api/auth/signup", json={"email": "x@x.com", "password": "password123"}).status_code == 403
+    # … unless it carries a valid invite from an admin
+    invite = client.post("/api/admin/invites", headers=_auth(a["token"])).json()["link"]
+    tok = _token_from_link(invite, "invite")
+    assert client.post("/api/auth/signup", json={"email": "x@x.com", "password": "password123", "invite": tok}).status_code == 200
+
+
+def test_admin_user_management_and_guards():
+    admin = _signup(email="admin@x.com")
+    member = _signup(email="member@x.com")
+    ah = _auth(admin["token"])
+    member_id = member["user"]["id"]
+
+    listing = client.get("/api/admin/users", headers=ah).json()["users"]
+    assert len(listing) == 2 and any(u["is_admin"] for u in listing)
+    # a non-admin can't reach the admin API
+    assert client.get("/api/admin/users", headers=_auth(member["token"])).status_code == 403
+
+    # promote, then deactivate the member
+    assert client.patch(f"/api/admin/users/{member_id}", json={"is_admin": True}, headers=ah).json()["user"]["is_admin"]
+    client.patch(f"/api/admin/users/{member_id}", json={"is_admin": False}, headers=ah)
+    client.patch(f"/api/admin/users/{member_id}", json={"is_active": False}, headers=ah)
+    # a deactivated user's token is rejected
+    assert client.get("/api/auth/me", headers=_auth(member["token"])).status_code == 401
+
+    # guards: can't drop the last admin or delete yourself via the admin route
+    assert client.patch(f"/api/admin/users/{admin['user']['id']}", json={"is_admin": False}, headers=ah).status_code == 400
+    assert client.delete(f"/api/admin/users/{admin['user']['id']}", headers=ah).status_code == 400
+    assert client.delete(f"/api/admin/users/{member_id}", headers=ah).json()["ok"] is True
 
 
 # --- safety / kill switch ------------------------------------------------
