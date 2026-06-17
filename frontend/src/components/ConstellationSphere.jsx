@@ -17,7 +17,7 @@ function fibonacciSphere(n) {
   return pts
 }
 
-export default function ConstellationSphere({ size = 300 }) {
+export default function ConstellationSphere({ size = 300, owlRatio = 0.32 }) {
   const ref = useRef(null)
 
   useEffect(() => {
@@ -126,7 +126,7 @@ export default function ConstellationSphere({ size = 300 }) {
     }
   }, [size])
 
-  const owl = Math.round(size * 0.32)
+  const owl = Math.round(size * owlRatio)
   return (
     <div className="relative grid place-items-center" style={{ width: size, height: size }}>
       <canvas ref={ref} className="absolute inset-0 pointer-events-none select-none" style={{ width: size, height: size }} aria-hidden="true" />
