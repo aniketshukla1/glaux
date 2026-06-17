@@ -2,6 +2,8 @@
 
   athena up        start the server (serves the UI + API) as a background daemon
   athena down      stop the daemon
+  athena restart   cleanly stop and start (waits for the port to free)
+  athena rebuild   rebuild the frontend, then cleanly restart
   athena status    is it running? which model, safety, how many signed blocks
   athena run "..." dispatch a directive and print the result
   athena serve     run in the foreground (Ctrl-C to stop)
@@ -17,6 +19,7 @@ import argparse
 import json
 import os
 import signal
+import socket
 import sys
 import time
 import urllib.error
@@ -103,6 +106,94 @@ def _wait_healthy(base_url: str, timeout: float = 20.0) -> bool:
     return False
 
 
+def _port_in_use(host: str, port: int) -> bool:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.settimeout(0.3)
+        return s.connect_ex((host, port)) == 0
+
+
+def _wait_port_free(host: str, port: int, timeout: float = 15.0) -> bool:
+    """Block until nothing is listening on the port — the missing step that made
+    a quick down+up race (the new server fails to bind to a port the old one
+    hasn't released yet)."""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if not _port_in_use(host, port):
+            return True
+        time.sleep(0.3)
+    return not _port_in_use(host, port)
+
+
+def _stop_daemon() -> int | None:
+    """Stop the daemon and wait for the process to be gone, escalating SIGTERM ->
+    SIGKILL if it doesn't exit. Returns the pid it stopped, or None if nothing ran."""
+    pid = read_pid()
+    if not process_alive(pid):
+        pid_file().unlink(missing_ok=True)
+        return None
+    try:
+        os.kill(pid, signal.SIGTERM)
+    except OSError:
+        pass
+    for _ in range(40):  # up to ~8s for a graceful shutdown
+        if not process_alive(pid):
+            break
+        time.sleep(0.2)
+    if process_alive(pid):  # didn't go quietly — force it
+        try:
+            os.kill(pid, signal.SIGKILL)
+        except OSError:
+            pass
+        for _ in range(15):
+            if not process_alive(pid):
+                break
+            time.sleep(0.2)
+    pid_file().unlink(missing_ok=True)
+    return pid
+
+
+def _start_daemon(host: str, port: int, *, open_browser: bool = False) -> int:
+    """Spawn the uvicorn daemon, record its pid, and wait until it's healthy."""
+    import subprocess
+
+    base_url = f"http://{host}:{port}"
+    home_dir().mkdir(parents=True, exist_ok=True)
+    logf = open(log_file(), "a")
+    proc = subprocess.Popen(
+        _uvicorn_cmd(host, port), stdout=logf, stderr=subprocess.STDOUT,
+        start_new_session=True, env=_env_with_src(),
+    )
+    write_pid(proc.pid)
+    if _wait_healthy(base_url):
+        print(f"Athena is up at {base_url}  (pid {proc.pid}, logs: {log_file()})")
+        if open_browser:
+            import webbrowser
+
+            webbrowser.open(base_url)
+        return 0
+    print(f"Started (pid {proc.pid}) but it didn't become healthy — check {log_file()}", file=sys.stderr)
+    return 1
+
+
+def _build_frontend() -> int:
+    """Build the React frontend so the daemon serves the latest UI."""
+    import subprocess
+
+    frontend = _repo_root() / "frontend"
+    if not (frontend / "package.json").is_file():
+        print(f"No frontend at {frontend} — skipping build.")
+        return 0
+    print("Building the frontend (npm run build)…")
+    try:
+        rc = subprocess.call(["npm", "run", "build"], cwd=str(frontend))
+    except FileNotFoundError:
+        print("npm not found — install Node.js to build the frontend.", file=sys.stderr)
+        return 1
+    if rc != 0:
+        print("Frontend build failed — leaving the running server untouched.", file=sys.stderr)
+    return rc
+
+
 # --- commands -------------------------------------------------------------
 
 def cmd_up(args) -> int:
@@ -112,28 +203,36 @@ def cmd_up(args) -> int:
         print(f"Athena is already running (pid {existing}) at {base_url}")
         return 0
 
-    cmd = _uvicorn_cmd(args.host, args.port)
     if args.foreground:
         print(f"Serving Athena at {base_url}  (Ctrl-C to stop)")
         import subprocess
 
-        return subprocess.call(cmd, env=_env_with_src())
+        return subprocess.call(_uvicorn_cmd(args.host, args.port), env=_env_with_src())
 
-    import subprocess
+    return _start_daemon(args.host, args.port, open_browser=args.open)
 
-    home_dir().mkdir(parents=True, exist_ok=True)
-    logf = open(log_file(), "a")
-    proc = subprocess.Popen(cmd, stdout=logf, stderr=subprocess.STDOUT, start_new_session=True, env=_env_with_src())
-    write_pid(proc.pid)
-    if _wait_healthy(base_url):
-        print(f"Athena is up at {base_url}  (pid {proc.pid}, logs: {log_file()})")
-        if args.open:
-            import webbrowser
 
-            webbrowser.open(base_url)
-        return 0
-    print(f"Started (pid {proc.pid}) but it didn't become healthy — check {log_file()}", file=sys.stderr)
-    return 1
+def cmd_restart(args) -> int:
+    """Cleanly stop, wait for the port to free, then start — so a restart can never
+    silently no-op against a port the old process hasn't released yet."""
+    pid = _stop_daemon()
+    print("Stopped the running daemon." if pid else "No daemon was running.")
+    if not _wait_port_free(args.host, args.port):
+        print(
+            f"Port {args.port} is still in use by something else — free it and retry.",
+            file=sys.stderr,
+        )
+        return 1
+    return _start_daemon(args.host, args.port, open_browser=getattr(args, "open", False))
+
+
+def cmd_rebuild(args) -> int:
+    """Rebuild the frontend, then clean-restart so the daemon serves the fresh UI."""
+    if not args.no_build:
+        rc = _build_frontend()
+        if rc != 0:
+            return rc
+    return cmd_restart(args)
 
 
 def cmd_down(_args) -> int:
@@ -259,6 +358,16 @@ def build_parser() -> argparse.ArgumentParser:
     up.set_defaults(func=cmd_up)
 
     sub.add_parser("down", help="stop the daemon").set_defaults(func=cmd_down)
+
+    restart = sub.add_parser("restart", help="cleanly stop and start (waits for the port to free)")
+    restart.add_argument("--open", action="store_true", help="open the dashboard once it's up")
+    restart.set_defaults(func=cmd_restart)
+
+    rebuild = sub.add_parser("rebuild", help="rebuild the frontend, then cleanly restart")
+    rebuild.add_argument("--no-build", action="store_true", help="skip the frontend build (just clean-restart)")
+    rebuild.add_argument("--open", action="store_true", help="open the dashboard once it's up")
+    rebuild.set_defaults(func=cmd_rebuild)
+
     sub.add_parser("status", help="show whether Athena is running").set_defaults(func=cmd_status)
     sub.add_parser("serve", help="run in the foreground (alias for `up -f`)").set_defaults(
         func=lambda a: cmd_up(argparse.Namespace(**{**vars(a), "foreground": True, "open": False}))

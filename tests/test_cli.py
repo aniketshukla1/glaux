@@ -32,6 +32,41 @@ def test_parser_desktop():
     assert cli.build_parser().parse_args(["desktop"]).build is False
 
 
+def test_parser_restart_and_rebuild():
+    p = cli.build_parser()
+    assert p.parse_args(["restart"]).func is cli.cmd_restart
+    rb = p.parse_args(["rebuild", "--no-build", "--open"])
+    assert rb.func is cli.cmd_rebuild and rb.no_build is True and rb.open is True
+    assert p.parse_args(["rebuild"]).no_build is False
+
+
+def test_restart_waits_for_port_then_starts(monkeypatch):
+    calls = []
+    monkeypatch.setattr(cli, "_stop_daemon", lambda: calls.append("stop") or 123)
+    monkeypatch.setattr(cli, "_wait_port_free", lambda h, p, **k: calls.append("wait") or True)
+    monkeypatch.setattr(cli, "_start_daemon", lambda h, p, **k: calls.append("start") or 0)
+    rc = cli.cmd_restart(cli.build_parser().parse_args(["restart"]))
+    assert rc == 0 and calls == ["stop", "wait", "start"]
+
+
+def test_restart_aborts_if_port_stuck(monkeypatch, capsys):
+    monkeypatch.setattr(cli, "_stop_daemon", lambda: 1)
+    monkeypatch.setattr(cli, "_wait_port_free", lambda h, p, **k: False)
+    started = []
+    monkeypatch.setattr(cli, "_start_daemon", lambda *a, **k: started.append(1) or 0)
+    rc = cli.cmd_restart(cli.build_parser().parse_args(["restart"]))
+    assert rc == 1 and not started  # never tries to start onto a busy port
+    assert "still in use" in capsys.readouterr().err.lower()
+
+
+def test_rebuild_skips_start_when_build_fails(monkeypatch):
+    monkeypatch.setattr(cli, "_build_frontend", lambda: 1)
+    restarted = []
+    monkeypatch.setattr(cli, "cmd_restart", lambda a: restarted.append(1) or 0)
+    rc = cli.cmd_rebuild(cli.build_parser().parse_args(["rebuild"]))
+    assert rc == 1 and not restarted  # a failed build must not bounce the server
+
+
 def test_pid_roundtrip_and_liveness(tmp_path, monkeypatch):
     monkeypatch.setenv("ATHENA_HOME", str(tmp_path))
     assert cli.read_pid() is None
