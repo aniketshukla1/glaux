@@ -96,7 +96,7 @@ export default function AuthScreen({ firstRun, onAuthed, oauthProviders = [], in
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center px-5 py-10 animate-fade-in">
-      <ConstellationSphere size={200} owlRatio={0.62} />
+      <ConstellationSphere size={300} owlRatio={0.36} />
       <h1 className="text-fg text-2xl font-medium tracking-tight mt-4 text-center">{heading}</h1>
       <p className="text-muted text-sm mt-2 text-center max-w-sm">{sub}</p>
 
