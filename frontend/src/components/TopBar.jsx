@@ -1,9 +1,9 @@
 import React from 'react'
-import { Sun, Moon, Settings, LayoutGrid, ShieldCheck, Cpu, Search } from 'lucide-react'
+import { Sun, Moon, Settings, LayoutGrid, ShieldCheck, Search } from 'lucide-react'
 import UserAvatar from './UserAvatar.jsx'
+import ModelSwitcher from './ModelSwitcher.jsx'
 
-export default function TopBar({ title, theme, onToggleTheme, onOpenStudio, onOpenSettings, onOpenPalette, verified, health, user, onOpenAccount }) {
-  const backend = health?.llm || '—'
+export default function TopBar({ title, theme, onToggleTheme, onOpenStudio, onOpenSettings, onOpenPalette, verified, health, user, onOpenAccount, onModelChanged, onOpenModel }) {
   const live = health?.live
 
   return (
@@ -24,13 +24,7 @@ export default function TopBar({ title, theme, onToggleTheme, onOpenStudio, onOp
             {verified ? 'verified' : 'tampered'}
           </span>
         )}
-        <span
-          className="hidden md:flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg border border-line/15 text-muted"
-          title="Active model"
-        >
-          <Cpu className="w-3.5 h-3.5" style={{ color: live ? 'rgb(var(--accent))' : undefined }} />
-          {backend}
-        </span>
+        <ModelSwitcher current={health?.llm} live={live} onChanged={onModelChanged} onOpenModel={onOpenModel} />
         <button onClick={onOpenPalette} className="btn px-2.5 py-2 hidden sm:flex items-center gap-1.5" aria-label="Command palette" title="Command palette (⌘K)">
           <Search className="w-4 h-4" />
           <kbd className="text-[10px] text-faint">⌘K</kbd>

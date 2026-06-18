@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import { MessageSquarePlus, MessageSquare, LayoutGrid, Settings as SettingsIcon, Palette, PanelLeft, Loader2 } from 'lucide-react'
 import {
   getHealth, getLedger, getAgents, getSafety, setSafety, getApproval, setApproval,
-  getAuth, dispatchTask, getWorkspace, getSession, createSession, activateSession,
+  getAuth, dispatchTask, stopTask, getWorkspace, getSession, createSession, activateSession,
   updateSession, deleteSession, createProject, updateProject, deleteProject,
   getAuthState, updateProfile, changePassword, logoutEverywhere, deleteAccount,
   getToken, setToken, clearToken, verifyEmail, resendVerification,
@@ -217,6 +217,8 @@ export default function App() {
     }
   }
 
+  const onStop = async () => { try { await stopTask() } catch { /* ignore */ } }
+
   const selectSession = async (id) => {
     if (id === workspace.active_id) return
     clearLive()
@@ -310,6 +312,8 @@ export default function App() {
             health={health}
             user={user}
             onOpenAccount={() => openSettings('account')}
+            onModelChanged={refresh}
+            onOpenModel={() => openSettings('model')}
           />
           {error && (
             <div className="glass p-3 mb-4 text-sm" style={{ borderColor: 'rgb(244 63 94 / 0.4)', color: 'rgb(251 113 133)' }}>
@@ -334,6 +338,7 @@ export default function App() {
             result={result}
             goal={goal}
             onDispatch={onDispatch}
+            onStop={onStop}
             verification={verification}
           />
         </main>

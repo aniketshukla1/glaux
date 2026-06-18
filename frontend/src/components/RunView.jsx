@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react'
 import {
   ArrowUp, Compass, Code2, Search, ShieldCheck, Wrench, Terminal,
   Check, AlertTriangle, ChevronRight, ChevronDown, ArrowDown, Loader2, GraduationCap, BadgeCheck,
-  Coins, Cpu, Mic, Volume2, VolumeX, Copy, RotateCcw,
+  Coins, Cpu, Mic, Volume2, VolumeX, Copy, RotateCcw, Square,
   Globe, FlaskConical, BarChart3, Server, Bug, PenLine,
 } from 'lucide-react'
 import SwarmGraph from './SwarmGraph.jsx'
@@ -123,7 +123,16 @@ function PlanCard({ item }) {
   )
 }
 
-function ResultCard({ result, verification, onRegenerate }) {
+function timeAgo(iso) {
+  if (!iso) return ''
+  const s = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000)
+  if (s < 60) return 'just now'
+  if (s < 3600) return `${Math.floor(s / 60)}m ago`
+  if (s < 86400) return `${Math.floor(s / 3600)}h ago`
+  return new Date(iso).toLocaleDateString()
+}
+
+function ResultCard({ result, verification, onRegenerate, createdAt }) {
   const ok = result.success
   const c = result.cost || {}
   const [speaking, setSpeaking] = useState(false)
@@ -159,9 +168,10 @@ function ResultCard({ result, verification, onRegenerate }) {
       {result.budget_halt && <div className="mt-2 text-xs text-amber-400">budget guard: {result.budget_halt}</div>}
       <div className="mt-4 pt-3 border-t border-line/10 flex flex-wrap items-center gap-x-5 gap-y-1 text-xs text-faint">
         {verification?.valid && <span className="flex items-center gap-1.5 text-emerald-400"><ShieldCheck className="w-3.5 h-3.5" /> chain verified</span>}
-        <span className="flex items-center gap-1.5"><Cpu className="w-3.5 h-3.5" /> {c.llm_calls || 0} model calls</span>
-        <span>{(c.total_tokens || 0).toLocaleString()} tokens</span>
+        {result.model && <span className="flex items-center gap-1.5"><Cpu className="w-3.5 h-3.5" /> {result.model}</span>}
+        <span>{c.llm_calls || 0} calls · {(c.total_tokens || 0).toLocaleString()} tokens</span>
         <span className="flex items-center gap-1.5"><Coins className="w-3.5 h-3.5" /> ~${(c.usd || 0).toFixed(4)}</span>
+        <span className="ml-auto">{createdAt ? timeAgo(createdAt) : 'just now'}</span>
       </div>
     </div>
   )
@@ -178,7 +188,7 @@ function DirectiveBubble({ text }) {
 }
 
 // One run rendered as a conversation turn: the directive, the swarm timeline, the result.
-function Turn({ directive, blocks, roleOf, running, result, verification, onDispatch }) {
+function Turn({ directive, blocks, roleOf, running, result, verification, onDispatch, createdAt }) {
   const timeline = useMemo(() => buildTimeline(blocks || [], roleOf), [blocks, roleOf])
   const lastStepIdx = (() => {
     for (let i = timeline.length - 1; i >= 0; i--) if (timeline[i].kind === 'step') return i
@@ -199,12 +209,12 @@ function Turn({ directive, blocks, roleOf, running, result, verification, onDisp
           <span className="text-muted text-sm">Athena is planning…</span>
         </div>
       )}
-      {result && <ResultCard result={result} verification={verification} onRegenerate={onDispatch && directive ? () => onDispatch(directive) : undefined} />}
+      {result && <ResultCard result={result} verification={verification} createdAt={createdAt} onRegenerate={onDispatch && directive ? () => onDispatch(directive) : undefined} />}
     </div>
   )
 }
 
-function Composer({ onDispatch, hero }) {
+function Composer({ onDispatch, hero, running, onStop }) {
   const [input, setInput] = useState('')
   const [listening, setListening] = useState(false)
   const recRef = useRef(null)
@@ -254,15 +264,21 @@ function Composer({ onDispatch, hero }) {
             <Mic className="w-4 h-4" />
           </button>
         )}
-        <button type="submit" disabled={!input.trim()} className="btn-accent p-2 disabled:opacity-40 shrink-0" aria-label="Run">
-          <ArrowUp className="w-4 h-4" />
-        </button>
+        {running ? (
+          <button type="button" onClick={onStop} className="p-2 rounded-lg border border-rose-500/50 text-rose-400 bg-rose-500/10 hover:bg-rose-500/20 transition shrink-0" aria-label="Stop" title="Stop the running task">
+            <Square className="w-4 h-4" fill="currentColor" />
+          </button>
+        ) : (
+          <button type="submit" disabled={!input.trim()} className="btn-accent p-2 disabled:opacity-40 shrink-0" aria-label="Run">
+            <ArrowUp className="w-4 h-4" />
+          </button>
+        )}
       </div>
     </form>
   )
 }
 
-export default function RunView({ session, blocks, roleOf, running, result, goal, onDispatch, verification }) {
+export default function RunView({ session, blocks, roleOf, running, result, goal, onDispatch, onStop, verification }) {
   const runs = session?.runs || []
   const liveTurn = running || result || (blocks && blocks.length > 0)
   const hasContent = runs.length > 0 || liveTurn
@@ -287,7 +303,7 @@ export default function RunView({ session, blocks, roleOf, running, result, goal
         <ConstellationSphere size={300} />
         <h1 className="text-fg text-2xl font-medium tracking-tight -mt-4">What should Athena do?</h1>
         <p className="text-muted text-sm mt-2.5 max-w-md">Describe a goal. A swarm of agents plans it, does it, and proves every step.</p>
-        <Composer onDispatch={onDispatch} hero />
+        <Composer onDispatch={onDispatch} hero running={running} onStop={onStop} />
         <div className="flex flex-wrap justify-center gap-2 mt-5 max-w-2xl">
           {EXAMPLES.map((ex) => (
             <button key={ex} onClick={() => onDispatch(ex)} className="text-xs px-3 py-1.5 rounded-full border border-line/15 text-muted hover:text-fg hover:border-line/30 transition">{ex}</button>
@@ -302,7 +318,8 @@ export default function RunView({ session, blocks, roleOf, running, result, goal
       <div className="flex-1 w-full max-w-5xl mx-auto px-5 sm:px-8 pt-4 pb-6 space-y-6">
         {runs.map((run) => (
           <Turn key={run.id} directive={run.directive} blocks={run.blocks} roleOf={roleOf}
-            result={{ success: run.success, final: run.final, cost: run.cost }} verification={run.verification} onDispatch={onDispatch} />
+            result={{ success: run.success, final: run.final, cost: run.cost, model: run.model }}
+            createdAt={run.created_at} verification={run.verification} onDispatch={onDispatch} />
         ))}
         {liveTurn && (
           <Turn directive={goal} blocks={blocks} roleOf={roleOf} running={running} result={result} verification={verification} onDispatch={onDispatch} />
@@ -320,7 +337,7 @@ export default function RunView({ session, blocks, roleOf, running, result, goal
             </button>
           </div>
         )}
-        <Composer onDispatch={onDispatch} />
+        <Composer onDispatch={onDispatch} running={running} onStop={onStop} />
       </div>
     </div>
   )

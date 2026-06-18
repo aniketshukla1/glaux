@@ -113,6 +113,7 @@ export const getBlock = (i) => request('GET', `/api/block/${i}`)
 export const resetLedger = () => request('DELETE', '/api/ledger')
 export const dispatchTask = (directive, budget) =>
   request('POST', '/api/task', budget ? { directive, budget } : { directive })
+export const stopTask = () => request('POST', '/api/task/stop', {})
 
 // safety (kill switch)
 export const getSafety = () => request('GET', '/api/safety')
