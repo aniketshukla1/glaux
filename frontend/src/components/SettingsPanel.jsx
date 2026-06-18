@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react'
 import {
-  Settings, Palette, ShieldHalf, Cpu, Lock, Check, UserCog, KeyRound, LogOut, Trash2, Loader2,
+  Settings, Palette, ShieldHalf, Cpu, Lock, Check, UserCog, KeyRound, LogOut, Trash2, Loader2, X,
 } from 'lucide-react'
-import Drawer from './Drawer.jsx'
+import Modal from './Modal.jsx'
 import LlmControl from './LlmControl.jsx'
 import SafetyControl from './SafetyControl.jsx'
 import ApprovalControl from './ApprovalControl.jsx'
@@ -192,63 +192,75 @@ export default function SettingsPanel({
   const [tab, setTab] = useState(initialTab || 'account')
   useEffect(() => { if (open) setTab(initialTab || 'account') }, [open, initialTab])
   return (
-    <Drawer open={open} onClose={onClose} title="Settings" icon={<Settings className="w-4 h-4 text-muted" />} width={440}>
-      <div className="flex gap-1 flex-wrap mb-5">
-        {TABS.map(({ key, label, Icon }) => (
-          <button key={key} onClick={() => setTab(key)}
-            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-sm border transition ${
-              tab === key ? 'text-fg border-line/30 bg-line/8' : 'text-faint border-transparent hover:text-muted'
-            }`}>
-            <Icon className="w-3.5 h-3.5" /> {label}
-          </button>
-        ))}
+    <Modal open={open} onClose={onClose} className="max-w-4xl">
+      <div className="flex items-center gap-2 px-5 py-3.5 border-b border-line/10 shrink-0">
+        <Settings className="w-4 h-4 text-muted" />
+        <h2 className="text-fg font-medium">Settings</h2>
+        <button onClick={onClose} className="btn p-1.5 ml-auto" aria-label="Close"><X className="w-4 h-4" /></button>
       </div>
 
-      {tab === 'account' && (
-        <AccountTab
-          user={user}
-          onUpdateProfile={onUpdateProfile}
-          onChangePassword={onChangePassword}
-          onSignOut={onSignOut}
-          onSignOutEverywhere={onSignOutEverywhere}
-          onDeleteAccount={onDeleteAccount}
-        />
-      )}
+      <div className="flex flex-1 min-h-0">
+        <nav className="w-48 sm:w-52 shrink-0 border-r border-line/10 p-3 space-y-0.5 overflow-y-auto">
+          {TABS.map(({ key, label, Icon }) => (
+            <button key={key} onClick={() => setTab(key)}
+              className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition ${
+                tab === key ? 'text-fg bg-line/10 font-medium' : 'text-muted hover:text-fg hover:bg-line/5'
+              }`}>
+              <Icon className="w-4 h-4" /> {label}
+            </button>
+          ))}
+        </nav>
 
-      {tab === 'appearance' && (
-        <Field title="Theme" hint="Pick a look — the whole app follows it.">
-          <div className="grid grid-cols-3 gap-2">
-            {THEMES.map((t) => <ThemeSwatch key={t.key} t={t} active={theme === t.key} onPick={onSetTheme} />)}
+        <div className="flex-1 overflow-y-auto">
+          <div className="max-w-2xl mx-auto px-6 sm:px-10 py-8">
+            {tab === 'account' && (
+              <AccountTab
+                user={user}
+                onUpdateProfile={onUpdateProfile}
+                onChangePassword={onChangePassword}
+                onSignOut={onSignOut}
+                onSignOutEverywhere={onSignOutEverywhere}
+                onDeleteAccount={onDeleteAccount}
+              />
+            )}
+
+            {tab === 'appearance' && (
+              <Field title="Theme" hint="Pick a look — the whole app follows it.">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                  {THEMES.map((t) => <ThemeSwatch key={t.key} t={t} active={theme === t.key} onPick={onSetTheme} />)}
+                </div>
+              </Field>
+            )}
+
+            {tab === 'model' && (
+              <Field title="Model" hint="Run the swarm on any of 30+ providers — OpenAI, Gemini, Grok, DeepSeek, Mistral, Sarvam, Groq, OpenRouter, local models, or the offline demo.">
+                <LlmControl />
+              </Field>
+            )}
+
+            {tab === 'safety' && (
+              <>
+                <Field title="Kill switch" hint="Halted stops all execution; dry-run skips side effects.">
+                  <SafetyControl mode={safety} onChange={onSafety} />
+                </Field>
+                <Field title="Approval" hint="In gated mode, skills the swarm writes need your approval before they can run.">
+                  <ApprovalControl mode={approval} onChange={onApproval} />
+                </Field>
+              </>
+            )}
+
+            {tab === 'security' && (
+              <Field title="API security" hint="How the backend authenticates requests.">
+                <div className="text-xs text-muted leading-relaxed">
+                  {auth?.enabled
+                    ? 'HMAC request signing is enabled — every request is verified.'
+                    : 'Open (no auth). Set ATHENA_API_SECRET to require signed requests.'}
+                </div>
+              </Field>
+            )}
           </div>
-        </Field>
-      )}
-
-      {tab === 'model' && (
-        <Field title="Model" hint="Run the swarm on any of 30+ providers — OpenAI, Gemini, Grok, DeepSeek, Mistral, Sarvam, Groq, OpenRouter, local models, or the offline demo.">
-          <LlmControl />
-        </Field>
-      )}
-
-      {tab === 'safety' && (
-        <>
-          <Field title="Kill switch" hint="Halted stops all execution; dry-run skips side effects.">
-            <SafetyControl mode={safety} onChange={onSafety} />
-          </Field>
-          <Field title="Approval" hint="In gated mode, skills the swarm writes need your approval before they can run.">
-            <ApprovalControl mode={approval} onChange={onApproval} />
-          </Field>
-        </>
-      )}
-
-      {tab === 'security' && (
-        <Field title="API security" hint="How the backend authenticates requests.">
-          <div className="text-xs text-muted leading-relaxed">
-            {auth?.enabled
-              ? 'HMAC request signing is enabled — every request is verified.'
-              : 'Open (no auth). Set ATHENA_API_SECRET to require signed requests.'}
-          </div>
-        </Field>
-      )}
-    </Drawer>
+        </div>
+      </div>
+    </Modal>
   )
 }
