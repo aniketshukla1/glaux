@@ -84,6 +84,7 @@ class SwarmResult:
     success: bool = False
     cost: dict = field(default_factory=dict)
     budget_halt: Optional[str] = None
+    cancelled: bool = False
     synthesized: list = field(default_factory=list)
 
 
@@ -117,6 +118,7 @@ class Swarm:
         *,
         skills_by_role: Optional[dict] = None,
         budget: Optional[Budget] = None,
+        cancel=None,
     ) -> SwarmResult:
         # One shared budget tracker for the whole task — every LLM caller charges it.
         tracker = BudgetTracker(budget or Budget())
@@ -134,9 +136,15 @@ class Swarm:
         results: dict[str, StepResult] = {}
         success = True
         budget_halt: Optional[str] = None
+        cancelled = False
         synthesized: list = []
 
         for step in order:
+            # User pressed stop — don't dispatch any further steps.
+            if cancel is not None and cancel():
+                cancelled = True
+                success = False
+                break
             # Stop dispatching new work once the task's budget is spent.
             reason = tracker.exceeded()
             if reason is not None:
@@ -175,6 +183,7 @@ class Swarm:
                         ttl=self.handoff_ttl,
                         context=context or None,
                         skills=skills,
+                        cancel=cancel,
                     )
                 except HandoffRejected as e:
                     result = AgentResult(False, f"handoff rejected: {e}", [], 0)
@@ -204,12 +213,17 @@ class Swarm:
             ):
                 self._synthesize(verdict.synthesize, synthesized)
 
-        # Synthesis is presentation-only: it must never turn a completed run into a
-        # failure, so any error here falls back to the last step's output.
-        try:
-            final = self._final_answer(directive, order, results, tracker)
-        except Exception:  # noqa: BLE001
-            final = _as_text(results[order[-1].id].result.result) if order else None
+        if cancelled:
+            done = [_as_text(results[s.id].result.result) for s in order
+                    if s.id in results and results[s.id].result and results[s.id].result.result]
+            final = (done[-1] if done else None) or "Stopped."
+        else:
+            # Synthesis is presentation-only: it must never turn a completed run into a
+            # failure, so any error here falls back to the last step's output.
+            try:
+                final = self._final_answer(directive, order, results, tracker)
+            except Exception:  # noqa: BLE001
+                final = _as_text(results[order[-1].id].result.result) if order else None
         return SwarmResult(
             plan=plan,
             steps=results,
@@ -217,6 +231,7 @@ class Swarm:
             success=success,
             cost=tracker.snapshot(),
             budget_halt=budget_halt,
+            cancelled=cancelled,
             synthesized=synthesized,
         )
 

@@ -26,6 +26,7 @@ def delegate(
     context: Optional[dict] = None,
     skills: Optional[dict] = None,
     task_id: Optional[str] = None,
+    cancel=None,
 ):
     """Delegate `goal` to `target_agent` under a signed capability token.
 
@@ -53,4 +54,5 @@ def delegate(
         context=context,
         skills=skills,
         task_id=task_id,
+        cancel=cancel,
     )

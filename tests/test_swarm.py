@@ -133,6 +133,30 @@ def test_demo_router_composes_teams_by_directive():
     assert plan.steps[2].depends_on == ["s2"]
 
 
+def test_swarm_stops_when_cancelled():
+    led = Ledger()
+    plan = _swarm_plan(
+        {"id": "s1", "role": "coder", "task": "write code", "depends_on": []},
+        {"id": "s2", "role": "researcher", "task": "summarize", "depends_on": ["s1"]},
+    )
+    router = Router(identity=AgentIdentity.generate(), llm=ScriptedLLM([plan]), ledger=led)
+    coder = coder_agent(identity=AgentIdentity.generate(), llm=ScriptedLLM([_finish("done")]), ledger=led)
+    researcher = researcher_agent(identity=AgentIdentity.generate(), llm=ScriptedLLM([_finish("x")]), ledger=led)
+    swarm = Swarm(router=router, specialists={"coder": coder, "researcher": researcher}, ledger=led)
+    res = swarm.run("build and summarize", cancel=lambda: True)  # stop immediately
+    assert res.cancelled and not res.success
+    assert res.final == "Stopped."
+    assert not res.steps  # nothing dispatched
+
+
+def test_agent_run_respects_cancel():
+    from agents import BaseAgent
+
+    agent = BaseAgent(identity=AgentIdentity.generate(), llm=ScriptedLLM([_finish("hi")]))
+    res = agent.run("do it", cancel=lambda: True)
+    assert not res.success and res.result == "stopped by user"
+
+
 def test_topo_sort_orders_dependencies():
     steps = [
         Step("s2", "researcher", "summarize", ["s1"]),

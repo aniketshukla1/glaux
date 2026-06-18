@@ -46,6 +46,7 @@ class Run:
     verification: dict = field(default_factory=dict)
     blocks: list = field(default_factory=list)
     created_at: str = ""
+    model: str = ""  # the LLM model that produced this run (for per-turn metadata)
 
 
 @dataclass

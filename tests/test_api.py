@@ -82,6 +82,19 @@ def test_task_surfaces_backend_failure_as_502(monkeypatch):
     assert "boom" in r.json()["detail"]
 
 
+def test_task_reports_model_and_stop_endpoint():
+    data = client.post("/api/task", json={"directive": "say hi"}).json()
+    assert data["model"] == "demo-offline"  # which model produced the turn
+    assert data["cancelled"] is False
+    # the run remembers its model for per-turn metadata
+    runs = client.get("/api/workspace").json()
+    sid = runs["active_id"]
+    full = client.get(f"/api/sessions/{sid}").json()["session"]
+    assert full["runs"][-1]["model"] == "demo-offline"
+    # stop endpoint is reachable (no task in flight here, but it must not error)
+    assert client.post("/api/task/stop").json()["ok"] is True
+
+
 def test_block_detail_and_404():
     client.post("/api/task", json={"directive": "do something"})
     b0 = client.get("/api/block/0").json()

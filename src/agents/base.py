@@ -146,6 +146,7 @@ class BaseAgent:
         context: Optional[dict] = None,
         skills: Optional[dict] = None,
         resume: bool = False,
+        cancel=None,
     ) -> AgentResult:
         task_id = task_id or uuid.uuid4().hex
 
@@ -167,6 +168,13 @@ class BaseAgent:
         repeats: dict[str, int] = {}
 
         for i in range(start_iter, self.max_iterations):
+            # User-requested stop: bail out cleanly before spending more.
+            if cancel is not None and cancel():
+                self._log(Action.OBSERVATION, {"aborted": True, "reason": "stopped by user"})
+                return AgentResult(
+                    False, "stopped by user", scratchpad, i,
+                    reproducibility=repro, cost=self._cost(),
+                )
             # Cost/budget guard: stop cleanly *before* spending more.
             if self.budget is not None:
                 reason = self.budget.exceeded()

@@ -20,6 +20,7 @@ import os
 import secrets
 import shutil
 import tempfile
+import threading
 import time
 from contextlib import asynccontextmanager
 from contextvars import ContextVar
@@ -278,6 +279,7 @@ class _State:
         self.users = users.UserStore(_users_path())
         self.users.ensure_admin()  # keep an existing single-user install's owner as admin
         self.auth_secret = _auth_secret()
+        self._cancels: dict[str, threading.Event] = {}  # per-user "stop the running task" flags
         self.eval_runs: list[EvalRun] = []
         self.approval_mode = "auto"  # auto | gated (gated => human approves synthesized skills)
         self.llm_config = _default_llm_config()
@@ -306,6 +308,16 @@ class _State:
 
     def current_user(self):
         return self.users.by_id(_current_user_id.get())
+
+    def cancel_for(self, uid: Optional[str]) -> threading.Event:
+        """The per-user 'stop the running task' flag (so one user's Stop doesn't
+        cancel another user's task)."""
+        key = uid or "_default"
+        ev = self._cancels.get(key)
+        if ev is None:
+            ev = threading.Event()
+            self._cancels[key] = ev
+        return ev
 
     def resolve_user_id(self, token: Optional[str]) -> Optional[str]:
         """Validate a session token and return its user id (or None). Rejects
@@ -938,9 +950,14 @@ async def run_task(req: TaskRequest) -> dict:
     run_directive = req.directive
     if instructions.strip():
         run_directive = f"Project instructions:\n{instructions.strip()}\n\nTask:\n{req.directive}"
+    model_id = STATE.llm.model_id
+    cancel_ev = STATE.cancel_for(_current_user_id.get())
+    cancel_ev.clear()  # fresh start; a Stop press during this run sets it
     t0 = time.monotonic()
     try:
-        result = await run_in_threadpool(lambda: swarm.run(run_directive, budget=budget))
+        result = await run_in_threadpool(
+            lambda: swarm.run(run_directive, budget=budget, cancel=cancel_ev.is_set)
+        )
     except Exception as exc:  # noqa: BLE001 - surface any backend/LLM failure cleanly
         import traceback
         backend = STATE.llm_config.get("backend", "demo")
@@ -957,7 +974,12 @@ async def run_task(req: TaskRequest) -> dict:
     elapsed = time.monotonic() - t0
     new_blocks = [STATE.ledger.block(i) for i in range(before, len(STATE.ledger))]
 
-    outcome = "success" if result.success else ("budget_halt" if result.budget_halt else "incomplete")
+    outcome = (
+        "success" if result.success
+        else "cancelled" if result.cancelled
+        else "budget_halt" if result.budget_halt
+        else "incomplete"
+    )
     METRICS.inc("swarm_tasks_total", outcome=outcome)
     METRICS.observe_duration("swarm_task_duration", elapsed)
     METRICS.inc("llm_calls_total", result.cost.get("llm_calls", 0))
@@ -987,6 +1009,7 @@ async def run_task(req: TaskRequest) -> dict:
             verification=verification,
             blocks=new_blocks,
             created_at="",
+            model=model_id,
         ),
         session_id=req.session_id,
     )
@@ -994,6 +1017,8 @@ async def run_task(req: TaskRequest) -> dict:
         "success": result.success,
         "final": result.final,
         "cost": result.cost,
+        "model": model_id,
+        "cancelled": result.cancelled,
         "budget_halt": result.budget_halt,
         "synthesized": result.synthesized,
         "plan": [s.to_dict() for s in result.plan.steps],
@@ -1011,6 +1036,14 @@ async def run_task(req: TaskRequest) -> dict:
         "verification": verification,
         "session_id": session.id,
     }
+
+
+@app.post("/api/task/stop")
+def stop_task() -> dict:
+    """Request that the caller's in-flight task stop. The swarm checks this flag
+    between steps and the agents between iterations, and unwinds cleanly."""
+    STATE.cancel_for(_current_user_id.get()).set()
+    return {"ok": True}
 
 
 @app.get("/api/ledger")
