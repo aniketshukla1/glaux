@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
-import { MessageSquarePlus, MessageSquare, LayoutGrid, Settings as SettingsIcon, Palette, PanelLeft, Loader2 } from 'lucide-react'
+import { MessageSquarePlus, MessageSquare, LayoutGrid, Settings as SettingsIcon, Palette, PanelLeft, Loader2, Keyboard } from 'lucide-react'
 import {
   getHealth, getLedger, getAgents, getSafety, setSafety, getApproval, setApproval,
   getAuth, dispatchTask, stopTask, getWorkspace, getSession, createSession, activateSession,
@@ -14,12 +14,26 @@ import Studio from './components/Studio.jsx'
 import SettingsPanel from './components/SettingsPanel.jsx'
 import CommandPalette from './components/CommandPalette.jsx'
 import AuthScreen from './components/AuthScreen.jsx'
+import ShortcutsHelp from './components/ShortcutsHelp.jsx'
 
 const PALETTE_THEMES = ['dark', 'light', 'oled', 'midnight', 'nord', 'ember']
 
 const mergeBlocks = (a, b) => {
   const seen = new Set(a.map((x) => x.index))
   return [...a, ...b.filter((x) => !seen.has(x.index))].sort((x, y) => x.index - y.index)
+}
+
+// Desktop notification when a task finishes while the window is in the background.
+const requestNotifyPermission = () => {
+  try { if ('Notification' in window && Notification.permission === 'default') Notification.requestPermission() } catch { /* ignore */ }
+}
+const notifyDone = (r) => {
+  try {
+    if (!('Notification' in window) || Notification.permission !== 'granted' || !document.hidden) return
+    const body = (r?.final || '').replace(/\s+/g, ' ').slice(0, 140) || (r?.success ? 'Task complete' : 'Task finished')
+    const n = new Notification(r?.success ? 'Athena finished ✓' : 'Athena stopped', { body })
+    n.onclick = () => { window.focus(); n.close() }
+  } catch { /* ignore */ }
 }
 
 export default function App() {
@@ -29,6 +43,7 @@ export default function App() {
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [settingsTab, setSettingsTab] = useState('appearance')
   const [paletteOpen, setPaletteOpen] = useState(false)
+  const [helpOpen, setHelpOpen] = useState(false)
 
   // accounts / auth
   const [user, setUser] = useState(null)
@@ -131,7 +146,12 @@ export default function App() {
 
   useEffect(() => {
     const onKey = (e) => {
+      const typing = ['INPUT', 'TEXTAREA'].includes(e.target.tagName) || e.target.isContentEditable
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); setPaletteOpen((o) => !o) }
+      else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'b') {
+        e.preventDefault()
+        setCollapsed((c) => { localStorage.setItem('athena-sidebar', c ? 'expanded' : 'collapsed'); return !c })
+      } else if (e.key === '?' && !typing) { e.preventDefault(); setHelpOpen((o) => !o) }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
@@ -202,9 +222,11 @@ export default function App() {
 
   const onDispatch = async (directive) => {
     setGoal(directive); setRunning(true); setResult(null); setLiveBlocks([])
+    requestNotifyPermission()  // a dispatch is a user gesture, so we may ask here
     try {
       const r = await dispatchTask(directive)
       setResult(r)
+      notifyDone(r)
       setLiveBlocks((prev) => mergeBlocks(prev, r.new_blocks || []))
       await refresh()
       await loadSession(r.session_id || workspace.active_id)
@@ -262,6 +284,7 @@ export default function App() {
       { id: 'studio', section: 'Actions', label: 'Open Studio', icon: LayoutGrid, run: () => setStudioOpen(true), keywords: 'skills tools eval metrics memory ledger schedules' },
       { id: 'settings', section: 'Actions', label: 'Open Settings', icon: SettingsIcon, run: () => setSettingsOpen(true), keywords: 'model safety approval' },
       { id: 'sidebar', section: 'Actions', label: collapsed ? 'Expand sidebar' : 'Collapse sidebar', icon: PanelLeft, run: toggleCollapse },
+      { id: 'help', section: 'Actions', label: 'Keyboard shortcuts', icon: Keyboard, run: () => setHelpOpen(true), keywords: 'keys hotkeys cheatsheet' },
       ...PALETTE_THEMES.map((t) => ({ id: `theme-${t}`, section: 'Theme', label: `Theme: ${t[0].toUpperCase()}${t.slice(1)}`, icon: Palette, run: () => setTheme(t), keywords: 'appearance color' })),
       ...(workspace.sessions || []).map((s) => ({ id: `sess-${s.id}`, section: 'Switch to', label: s.title, icon: MessageSquare, hint: s.id === workspace.active_id ? 'current' : '', run: () => selectSession(s.id), keywords: 'conversation chat open' })),
     ]
@@ -347,6 +370,7 @@ export default function App() {
       </div>
 
       <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} commands={commands} />
+      <ShortcutsHelp open={helpOpen} onClose={() => setHelpOpen(false)} />
       <Studio open={studioOpen} onClose={() => setStudioOpen(false)} ledger={ledger} blocks={liveBlocks} onVerify={refresh} user={user} />
       <SettingsPanel
         open={settingsOpen} onClose={() => setSettingsOpen(false)}
