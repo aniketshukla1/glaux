@@ -200,6 +200,28 @@ def _demo_skill(task: str) -> str:
     return "```json\n" + json.dumps(skill) + "\n```"
 
 
+def _demo_canvas(directive: str) -> str:
+    """A representative Canvas (A2UI) block so the generative-UI feature is visible
+    offline. A real model emits a task-specific one; this is a fixed sample."""
+    spec = {
+        "title": "Overview",
+        "blocks": [
+            {"type": "callout", "tone": "info",
+             "text": "Demo canvas — connect a real model and it renders structured, task-specific UI here."},
+            {"type": "metric", "items": [
+                {"label": "Options", "value": "2"},
+                {"label": "Recommended", "value": "Option A"},
+                {"label": "Confidence", "value": "High"},
+            ]},
+            {"type": "table", "columns": ["Criteria", "Option A", "Option B"],
+             "rows": [["Performance", "High", "Medium"], ["Simplicity", "Medium", "High"], ["Cost", "$$", "$"]]},
+            {"type": "chart", "kind": "bar", "labels": ["Perf", "Simplicity", "Cost"],
+             "series": [{"name": "Option A", "data": [8, 6, 4]}, {"name": "Option B", "data": [6, 8, 7]}]},
+        ],
+    }
+    return "```canvas\n" + json.dumps(spec) + "\n```"
+
+
 class DemoLLM:
     model_id = "demo-offline"
 
@@ -238,6 +260,9 @@ class DemoLLM:
                 "Connect a real model (Ollama or a provider) for a full answer — "
                 "in offline demo mode this just confirms every step ran and was verified."
             )
+            low = directive.lower()
+            if _has(low, _ANALYSIS_KW) or _has(low, _SCIENCE_KW) or "plan" in low or "design" in low:
+                text += "\n\n" + _demo_canvas(directive)
         else:
             snippet = goal.splitlines()[0][:80] if goal else "the task"
             text = (

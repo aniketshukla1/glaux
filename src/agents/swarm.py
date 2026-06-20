@@ -19,6 +19,7 @@ from llm.gateway import Message
 
 from .base import AgentResult, HandoffRejected
 from .budget import Budget, BudgetTracker, charge_for_response
+from .canvas import extract_canvas
 from .handoff import delegate
 from .reflector import Reflector
 from .router import Plan, Router, Step
@@ -27,7 +28,17 @@ FINAL_SYNTH_SYSTEM = (
     "You are the lead of the Athena swarm. Your specialists each completed part of "
     "the user's request. Write the final answer to the ORIGINAL request, integrating "
     "their work into one coherent, complete response that addresses exactly what was "
-    "asked. Lead with the answer; do not describe the team or the process."
+    "asked. Lead with the answer; do not describe the team or the process.\n\n"
+    "If a structured view would genuinely help (a comparison, metrics, a breakdown), "
+    "you MAY append a Canvas after the prose as a ```canvas fenced JSON block: "
+    '{"title": "...", "blocks": [ ... ]}. Allowed blocks: '
+    '{"type":"heading","text","level"}, {"type":"text","text"}, '
+    '{"type":"metric","items":[{"label","value","delta"}]}, '
+    '{"type":"table","columns":[...],"rows":[[...]]}, '
+    '{"type":"list","items":[...],"ordered":bool}, {"type":"code","language","code"}, '
+    '{"type":"callout","tone":"info|success|warn|danger","text"}, '
+    '{"type":"chart","kind":"bar|line","labels":[...],"series":[{"name","data":[...]}]}, '
+    '{"type":"divider"}. Only include a Canvas when it adds real value; otherwise omit it.'
 )
 
 
@@ -85,6 +96,7 @@ class SwarmResult:
     cost: dict = field(default_factory=dict)
     budget_halt: Optional[str] = None
     cancelled: bool = False
+    canvas: Optional[dict] = None  # generative UI spec extracted from the answer
     synthesized: list = field(default_factory=list)
 
 
@@ -224,6 +236,8 @@ class Swarm:
                 final = self._final_answer(directive, order, results, tracker)
             except Exception:  # noqa: BLE001
                 final = _as_text(results[order[-1].id].result.result) if order else None
+        # A model may render a structured Canvas (A2UI) alongside the prose answer.
+        final, canvas = extract_canvas(final)
         return SwarmResult(
             plan=plan,
             steps=results,
@@ -232,6 +246,7 @@ class Swarm:
             cost=tracker.snapshot(),
             budget_halt=budget_halt,
             cancelled=cancelled,
+            canvas=canvas,
             synthesized=synthesized,
         )
 

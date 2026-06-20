@@ -1010,6 +1010,7 @@ async def run_task(req: TaskRequest) -> dict:
             blocks=new_blocks,
             created_at="",
             model=model_id,
+            canvas=result.canvas,
         ),
         session_id=req.session_id,
     )
@@ -1019,6 +1020,7 @@ async def run_task(req: TaskRequest) -> dict:
         "cost": result.cost,
         "model": model_id,
         "cancelled": result.cancelled,
+        "canvas": result.canvas,
         "budget_halt": result.budget_halt,
         "synthesized": result.synthesized,
         "plan": [s.to_dict() for s in result.plan.steps],

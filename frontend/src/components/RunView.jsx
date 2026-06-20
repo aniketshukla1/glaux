@@ -7,6 +7,7 @@ import {
 } from 'lucide-react'
 import SwarmGraph from './SwarmGraph.jsx'
 import ConstellationSphere from './ConstellationSphere.jsx'
+import Canvas from './Canvas.jsx'
 import Markdown from './Markdown.jsx'
 import { ROLE_META, short, buildTimeline } from '../lib/blocks.js'
 import { recognitionSupported, createRecognizer, ttsSupported, speak, stopSpeaking } from '../lib/speech.js'
@@ -165,6 +166,7 @@ function ResultCard({ result, verification, onRegenerate, createdAt }) {
         </div>
       </div>
       <Markdown className="text-fg text-[13.5px]">{result.final || '—'}</Markdown>
+      {result.canvas && <Canvas spec={result.canvas} />}
       {result.budget_halt && <div className="mt-2 text-xs text-amber-400">budget guard: {result.budget_halt}</div>}
       <div className="mt-4 pt-3 border-t border-line/10 flex flex-wrap items-center gap-x-5 gap-y-1 text-xs text-faint">
         {verification?.valid && <span className="flex items-center gap-1.5 text-emerald-400"><ShieldCheck className="w-3.5 h-3.5" /> chain verified</span>}
@@ -318,7 +320,7 @@ export default function RunView({ session, blocks, roleOf, running, result, goal
       <div className="flex-1 w-full max-w-5xl mx-auto px-5 sm:px-8 pt-4 pb-6 space-y-6">
         {runs.map((run) => (
           <Turn key={run.id} directive={run.directive} blocks={run.blocks} roleOf={roleOf}
-            result={{ success: run.success, final: run.final, cost: run.cost, model: run.model }}
+            result={{ success: run.success, final: run.final, cost: run.cost, model: run.model, canvas: run.canvas }}
             createdAt={run.created_at} verification={run.verification} onDispatch={onDispatch} />
         ))}
         {liveTurn && (

@@ -82,6 +82,14 @@ def test_task_surfaces_backend_failure_as_502(monkeypatch):
     assert "boom" in r.json()["detail"]
 
 
+def test_comparison_task_returns_a_canvas():
+    data = client.post("/api/task", json={"directive": "Compare Postgres and Mongo and recommend one"}).json()
+    canvas = data["canvas"]
+    assert canvas and isinstance(canvas["blocks"], list)
+    assert any(b["type"] == "table" for b in canvas["blocks"])
+    assert "```canvas" not in (data["final"] or "")  # the block is stripped from the prose
+
+
 def test_task_reports_model_and_stop_endpoint():
     data = client.post("/api/task", json={"directive": "say hi"}).json()
     assert data["model"] == "demo-offline"  # which model produced the turn

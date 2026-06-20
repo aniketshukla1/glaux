@@ -47,6 +47,7 @@ class Run:
     blocks: list = field(default_factory=list)
     created_at: str = ""
     model: str = ""  # the LLM model that produced this run (for per-turn metadata)
+    canvas: Optional[dict] = None  # generative UI spec (A2UI), if the run produced one
 
 
 @dataclass
