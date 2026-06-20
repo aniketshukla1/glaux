@@ -56,6 +56,7 @@ class Session:
     project_id: Optional[str] = None
     created_at: str = ""
     updated_at: str = ""
+    pinned: bool = False
     runs: list = field(default_factory=list)  # list[Run]
 
 
@@ -161,6 +162,41 @@ class SessionStore:
         self.save()
         return self.session_meta(s)
 
+    def set_pinned(self, session_id: str, pinned: bool) -> Optional[dict]:
+        s = self.sessions.get(session_id)
+        if s is None:
+            return None
+        s.pinned = bool(pinned)
+        self.save()
+        return self.session_meta(s)
+
+    def search(self, query: str, limit: int = 25) -> list:
+        """Find conversations whose title or message content matches `query`,
+        returning each with a short snippet around the hit."""
+        q = (query or "").strip().lower()
+        if not q:
+            return []
+        out = []
+        for s in self.sessions.values():
+            if q in (s.title or "").lower():
+                out.append({**self.session_meta(s), "snippet": s.title, "match": "title"})
+                continue
+            hit = None
+            for r in s.runs:
+                for text in (r.directive, r.final):
+                    if text and q in str(text).lower():
+                        hit = str(text)
+                        break
+                if hit:
+                    break
+            if hit:
+                i = hit.lower().find(q)
+                start = max(0, i - 30)
+                snip = hit[start:i + len(q) + 60].strip().replace("\n", " ")
+                out.append({**self.session_meta(s), "snippet": ("…" if start else "") + snip, "match": "content"})
+        out.sort(key=lambda m: m.get("updated_at") or "", reverse=True)
+        return out[:limit]
+
     def delete_session(self, session_id: str) -> bool:
         if session_id not in self.sessions:
             return False
@@ -193,13 +229,18 @@ class SessionStore:
             "project_id": s.project_id,
             "created_at": s.created_at,
             "updated_at": s.updated_at,
+            "pinned": bool(s.pinned),
             "run_count": len(s.runs),
             "preview": (last.directive if last else None),
         }
 
     def tree(self) -> dict:
         self.ensure_active()
-        sessions = sorted(self.sessions.values(), key=lambda s: s.updated_at or s.created_at, reverse=True)
+        sessions = sorted(
+            self.sessions.values(),
+            key=lambda s: (bool(s.pinned), s.updated_at or s.created_at),
+            reverse=True,
+        )
         return {
             "active_id": self.active_id,
             "projects": [asdict(p) for p in sorted(self.projects.values(), key=lambda p: p.created_at)],
@@ -240,8 +281,8 @@ class SessionStore:
                 continue
         for sd in data.get("sessions", []):
             try:
-                runs = [Run(**{k: rd.get(k) for k in Run.__dataclass_fields__}) for rd in sd.get("runs", [])]
-                fields = {k: sd.get(k) for k in Session.__dataclass_fields__ if k != "runs"}
+                runs = [Run(**{k: rd[k] for k in Run.__dataclass_fields__ if k in rd}) for rd in sd.get("runs", [])]
+                fields = {k: sd[k] for k in Session.__dataclass_fields__ if k != "runs" and k in sd}
                 self.sessions[sd["id"]] = Session(**fields, runs=runs)
             except (TypeError, KeyError):
                 continue

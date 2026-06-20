@@ -3,7 +3,7 @@ import { MessageSquarePlus, MessageSquare, LayoutGrid, Settings as SettingsIcon,
 import {
   getHealth, getLedger, getAgents, getSafety, setSafety, getApproval, setApproval,
   getAuth, dispatchTask, stopTask, getWorkspace, getSession, createSession, activateSession,
-  updateSession, deleteSession, createProject, updateProject, deleteProject,
+  updateSession, deleteSession, pinSession, createProject, updateProject, deleteProject,
   getAuthState, updateProfile, changePassword, logoutEverywhere, deleteAccount,
   getToken, setToken, clearToken, verifyEmail, resendVerification,
 } from './api.js'
@@ -233,6 +233,7 @@ export default function App() {
     await loadWorkspace()
   }
 
+  const onPinSession = async (id, pinned) => { try { await pinSession(id, pinned) } catch { /* ignore */ }; await loadWorkspace() }
   const onRenameSession = async (id, title) => { try { await updateSession(id, { title }) } catch {}; await loadWorkspace(); if (id === activeSession?.id) loadSession(id) }
   const onDeleteSession = async (id) => {
     try {
@@ -297,6 +298,7 @@ export default function App() {
         onUpdateProject={onUpdateProject}
         onDeleteProject={onDeleteProject}
         onMoveSession={onMoveSession}
+        onPinSession={onPinSession}
       />
 
       <div className="flex-1 min-w-0 flex flex-col">

@@ -173,6 +173,8 @@ export const createSession = (title, projectId) =>
 export const activateSession = (id) => request('POST', `/api/sessions/${encodeURIComponent(id)}/activate`)
 export const updateSession = (id, patch) => request('PATCH', `/api/sessions/${encodeURIComponent(id)}`, patch)
 export const deleteSession = (id) => request('DELETE', `/api/sessions/${encodeURIComponent(id)}`)
+export const pinSession = (id, pinned) => request('POST', `/api/sessions/${encodeURIComponent(id)}/pin`, { pinned })
+export const searchConversations = (q) => request('GET', `/api/search?q=${encodeURIComponent(q)}`)
 export const createProject = (name, instructions) =>
   request('POST', '/api/projects', { name, instructions: instructions || null })
 export const updateProject = (id, patch) => request('PATCH', `/api/projects/${encodeURIComponent(id)}`, patch)

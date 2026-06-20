@@ -1402,6 +1402,24 @@ def delete_session(session_id: str) -> dict:
     return {"ok": True, **STATE.sessions.tree()}
 
 
+class PinRequest(BaseModel):
+    pinned: bool
+
+
+@app.post("/api/sessions/{session_id}/pin")
+def pin_session(session_id: str, req: PinRequest) -> dict:
+    s = STATE.sessions.set_pinned(session_id, req.pinned)
+    if s is None:
+        raise HTTPException(status_code=404, detail=f"unknown session {session_id!r}")
+    return {"session": s}
+
+
+@app.get("/api/search")
+def search_conversations(q: str = "") -> dict:
+    """Search the signed-in user's conversations by title and message content."""
+    return {"results": STATE.sessions.search(q)}
+
+
 # --- MCP tools -----------------------------------------------------------
 
 

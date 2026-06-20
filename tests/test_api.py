@@ -95,6 +95,22 @@ def test_task_reports_model_and_stop_endpoint():
     assert client.post("/api/task/stop").json()["ok"] is True
 
 
+def test_pin_and_search_conversations():
+    a = _signup(email="search@x.com")
+    h = _auth(a["token"])
+    sid = client.post("/api/task", json={"directive": "Explain quantum tunneling"}, headers=h).json()["session_id"]
+    # content/title search finds it
+    res = client.get("/api/search", params={"q": "quantum"}, headers=h).json()["results"]
+    assert any(r["id"] == sid for r in res)
+    assert client.get("/api/search", params={"q": "zzznomatch"}, headers=h).json()["results"] == []
+    # pin it, and it sorts to the top of the tree
+    pinned = client.post(f"/api/sessions/{sid}/pin", json={"pinned": True}, headers=h).json()["session"]
+    assert pinned["pinned"] is True
+    assert client.get("/api/workspace", headers=h).json()["sessions"][0]["pinned"] is True
+    # unpin
+    assert client.post(f"/api/sessions/{sid}/pin", json={"pinned": False}, headers=h).json()["session"]["pinned"] is False
+
+
 def test_block_detail_and_404():
     client.post("/api/task", json={"directive": "do something"})
     b0 = client.get("/api/block/0").json()
