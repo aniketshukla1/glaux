@@ -4,6 +4,7 @@ import {
   getHealth, getLedger, getAgents, getSafety, setSafety, getApproval, setApproval,
   getAuth, dispatchTask, stopTask, getWorkspace, getSession, createSession, activateSession,
   updateSession, deleteSession, pinSession, createProject, updateProject, deleteProject,
+  createPersona, updatePersona, deletePersona,
   getAuthState, updateProfile, changePassword, logoutEverywhere, deleteAccount,
   getToken, setToken, clearToken, verifyEmail, resendVerification,
 } from './api.js'
@@ -256,6 +257,14 @@ export default function App() {
   }
 
   const onPinSession = async (id, pinned) => { try { await pinSession(id, pinned) } catch { /* ignore */ }; await loadWorkspace() }
+  const onCreatePersona = async (data) => { await createPersona(data.name, data.instructions, data.emoji); await loadWorkspace() }
+  const onUpdatePersona = async (id, data) => { await updatePersona(id, data); await loadWorkspace() }
+  const onDeletePersona = async (id) => { try { const res = await deletePersona(id); setWorkspace(res) } catch { /* ignore */ } }
+  const onSetSessionPersona = async (personaId) => {
+    if (!activeSession) return
+    try { await updateSession(activeSession.id, { persona_id: personaId }) } catch { /* ignore */ }
+    await loadWorkspace(); loadSession(activeSession.id)
+  }
   const onRenameSession = async (id, title) => { try { await updateSession(id, { title }) } catch {}; await loadWorkspace(); if (id === activeSession?.id) loadSession(id) }
   const onDeleteSession = async (id) => {
     try {
@@ -339,6 +348,10 @@ export default function App() {
             onOpenAccount={() => openSettings('account')}
             onModelChanged={refresh}
             onOpenModel={() => openSettings('model')}
+            personas={workspace.personas || []}
+            activePersonaId={activeSession?.persona_id}
+            onPickPersona={onSetSessionPersona}
+            onManagePersonas={() => openSettings('personas')}
           />
           {error && (
             <div className="glass p-3 mb-4 text-sm" style={{ borderColor: 'rgb(244 63 94 / 0.4)', color: 'rgb(251 113 133)' }}>
@@ -385,6 +398,10 @@ export default function App() {
         onSignOut={onSignOut}
         onSignOutEverywhere={onSignOutEverywhere}
         onDeleteAccount={onDeleteAccount}
+        personas={workspace.personas || []}
+        onCreatePersona={onCreatePersona}
+        onUpdatePersona={onUpdatePersona}
+        onDeletePersona={onDeletePersona}
       />
     </div>
   )

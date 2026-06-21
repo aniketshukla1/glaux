@@ -101,3 +101,14 @@ def test_persistence_roundtrip(tmp_path):
     assert reloaded["title"] == "close the books"  # explicit title is preserved
     assert reloaded["runs"][0]["final"] == "booked"
     assert reloaded["runs"][0]["blocks"] == [{"index": 0}]  # signed blocks preserved
+
+
+def test_persona_instructions_applied_to_session(tmp_path):
+    from core.sessions import SessionStore
+    store = SessionStore(store_path=tmp_path / "ws.json")
+    s = store.create_session("Chat")
+    p = store.create_persona("Pirate", "Answer like a pirate.")
+    store.update_session(s.id, persona_id=p["id"])
+    assert store.persona_instructions_for(s.id) == "Answer like a pirate."
+    store.delete_persona(p["id"])
+    assert store.persona_instructions_for(s.id) == ""  # detached on delete

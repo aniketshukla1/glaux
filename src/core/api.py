@@ -946,10 +946,14 @@ async def run_task(req: TaskRequest) -> dict:
     # If the target session belongs to a project, prepend its custom instructions
     # as context for the run — but keep the recorded directive clean.
     target_sid = req.session_id or STATE.sessions.active().id
-    instructions = STATE.sessions.project_instructions_for(target_sid)
-    run_directive = req.directive
-    if instructions.strip():
-        run_directive = f"Project instructions:\n{instructions.strip()}\n\nTask:\n{req.directive}"
+    persona_instr = STATE.sessions.persona_instructions_for(target_sid)
+    project_instr = STATE.sessions.project_instructions_for(target_sid)
+    prefix = ""
+    if persona_instr.strip():
+        prefix += f"Assistant persona:\n{persona_instr.strip()}\n\n"
+    if project_instr.strip():
+        prefix += f"Project instructions:\n{project_instr.strip()}\n\n"
+    run_directive = f"{prefix}Task:\n{req.directive}" if prefix else req.directive
     model_id = STATE.llm.model_id
     cancel_ev = STATE.cancel_for(_current_user_id.get())
     cancel_ev.clear()  # fresh start; a Stop press during this run sets it
@@ -1341,11 +1345,38 @@ class SessionCreateRequest(BaseModel):
 class SessionUpdateRequest(BaseModel):
     title: Optional[str] = None
     project_id: Optional[str] = "_keep"  # "_keep" = leave unchanged; null = ungroup
+    persona_id: Optional[str] = "_keep"  # "_keep" = unchanged; null = clear persona
+
+
+class PersonaRequest(BaseModel):
+    name: str
+    instructions: Optional[str] = None
+    emoji: Optional[str] = None
 
 
 @app.get("/api/workspace")
 def get_workspace() -> dict:
     return STATE.sessions.tree()
+
+
+@app.post("/api/personas")
+def create_persona(req: PersonaRequest) -> dict:
+    return {"persona": STATE.sessions.create_persona(req.name, req.instructions or "", req.emoji or "🧠")}
+
+
+@app.patch("/api/personas/{persona_id}")
+def update_persona(persona_id: str, req: PersonaRequest) -> dict:
+    p = STATE.sessions.update_persona(persona_id, name=req.name, instructions=req.instructions, emoji=req.emoji)
+    if p is None:
+        raise HTTPException(status_code=404, detail=f"unknown persona {persona_id!r}")
+    return {"persona": p}
+
+
+@app.delete("/api/personas/{persona_id}")
+def delete_persona(persona_id: str) -> dict:
+    if not STATE.sessions.delete_persona(persona_id):
+        raise HTTPException(status_code=404, detail=f"unknown persona {persona_id!r}")
+    return {"ok": True, **STATE.sessions.tree()}
 
 
 @app.post("/api/projects")
@@ -1391,7 +1422,7 @@ def activate_session(session_id: str) -> dict:
 
 @app.patch("/api/sessions/{session_id}")
 def update_session(session_id: str, req: SessionUpdateRequest) -> dict:
-    s = STATE.sessions.update_session(session_id, title=req.title, project_id=req.project_id)
+    s = STATE.sessions.update_session(session_id, title=req.title, project_id=req.project_id, persona_id=req.persona_id)
     if s is None:
         raise HTTPException(status_code=404, detail=f"unknown session {session_id!r}")
     return {"session": s}

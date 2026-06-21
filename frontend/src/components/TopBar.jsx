@@ -2,8 +2,9 @@ import React from 'react'
 import { Sun, Moon, Settings, LayoutGrid, ShieldCheck, Search } from 'lucide-react'
 import UserAvatar from './UserAvatar.jsx'
 import ModelSwitcher from './ModelSwitcher.jsx'
+import PersonaPicker from './PersonaPicker.jsx'
 
-export default function TopBar({ title, theme, onToggleTheme, onOpenStudio, onOpenSettings, onOpenPalette, verified, health, user, onOpenAccount, onModelChanged, onOpenModel }) {
+export default function TopBar({ title, theme, onToggleTheme, onOpenStudio, onOpenSettings, onOpenPalette, verified, health, user, onOpenAccount, onModelChanged, onOpenModel, personas, activePersonaId, onPickPersona, onManagePersonas }) {
   const live = health?.live
 
   return (
@@ -24,6 +25,7 @@ export default function TopBar({ title, theme, onToggleTheme, onOpenStudio, onOp
             {verified ? 'verified' : 'tampered'}
           </span>
         )}
+        <PersonaPicker personas={personas} activeId={activePersonaId} onPick={onPickPersona} onManage={onManagePersonas} />
         <ModelSwitcher current={health?.llm} live={live} onChanged={onModelChanged} onOpenModel={onOpenModel} />
         <button onClick={onOpenPalette} className="btn px-2.5 py-2 hidden sm:flex items-center gap-1.5" aria-label="Command palette" title="Command palette (⌘K)">
           <Search className="w-4 h-4" />

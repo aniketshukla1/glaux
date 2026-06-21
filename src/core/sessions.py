@@ -55,6 +55,7 @@ class Session:
     id: str
     title: str
     project_id: Optional[str] = None
+    persona_id: Optional[str] = None
     created_at: str = ""
     updated_at: str = ""
     pinned: bool = False
@@ -69,11 +70,22 @@ class Project:
     created_at: str = ""
 
 
+@dataclass
+class Persona:
+    """A reusable, named system prompt — a custom assistant the user can apply to a chat."""
+    id: str
+    name: str
+    instructions: str = ""
+    emoji: str = "🧠"
+    created_at: str = ""
+
+
 class SessionStore:
     """Owns projects + sessions and tracks the active session."""
 
     def __init__(self, store_path: Optional[Path] = None) -> None:
         self.projects: dict[str, Project] = {}
+        self.personas: dict[str, Persona] = {}
         self.sessions: dict[str, Session] = {}
         self.active_id: Optional[str] = None
         self.store_path = Path(store_path) if store_path else None
@@ -116,6 +128,45 @@ class SessionStore:
         self.save()
         return True
 
+    # -- personas (reusable system prompts) --
+    def create_persona(self, name: str, instructions: str = "", emoji: str = "🧠") -> dict:
+        p = Persona(id=_id(), name=name.strip() or "Untitled persona", instructions=instructions,
+                    emoji=(emoji or "🧠")[:4], created_at=_now())
+        self.personas[p.id] = p
+        self.save()
+        return asdict(p)
+
+    def update_persona(self, persona_id: str, *, name: Optional[str] = None,
+                       instructions: Optional[str] = None, emoji: Optional[str] = None) -> Optional[dict]:
+        p = self.personas.get(persona_id)
+        if p is None:
+            return None
+        if name is not None:
+            p.name = name.strip() or p.name
+        if instructions is not None:
+            p.instructions = instructions
+        if emoji is not None:
+            p.emoji = (emoji or "🧠")[:4]
+        self.save()
+        return asdict(p)
+
+    def delete_persona(self, persona_id: str) -> bool:
+        if persona_id not in self.personas:
+            return False
+        del self.personas[persona_id]
+        for s in self.sessions.values():  # detach it from any chats using it
+            if s.persona_id == persona_id:
+                s.persona_id = None
+        self.save()
+        return True
+
+    def persona_instructions_for(self, session_id: Optional[str]) -> str:
+        s = self.sessions.get(session_id) if session_id else None
+        if s is None or not s.persona_id:
+            return ""
+        p = self.personas.get(s.persona_id)
+        return (p.instructions if p else "") or ""
+
     # -- sessions --
     def create_session(self, title: Optional[str] = None, project_id: Optional[str] = None) -> Session:
         if project_id is not None and project_id not in self.projects:
@@ -151,7 +202,8 @@ class SessionStore:
         p = self.projects.get(s.project_id)
         return (p.instructions if p else "") or ""
 
-    def update_session(self, session_id: str, *, title: Optional[str] = None, project_id: Optional[str] = "_keep") -> Optional[dict]:
+    def update_session(self, session_id: str, *, title: Optional[str] = None,
+                       project_id: Optional[str] = "_keep", persona_id: Optional[str] = "_keep") -> Optional[dict]:
         s = self.sessions.get(session_id)
         if s is None:
             return None
@@ -159,6 +211,8 @@ class SessionStore:
             s.title = title.strip() or s.title
         if project_id != "_keep":
             s.project_id = project_id if (project_id is None or project_id in self.projects) else s.project_id
+        if persona_id != "_keep":
+            s.persona_id = persona_id if (persona_id is None or persona_id in self.personas) else s.persona_id
         s.updated_at = _now()
         self.save()
         return self.session_meta(s)
@@ -228,6 +282,7 @@ class SessionStore:
             "id": s.id,
             "title": s.title,
             "project_id": s.project_id,
+            "persona_id": s.persona_id,
             "created_at": s.created_at,
             "updated_at": s.updated_at,
             "pinned": bool(s.pinned),
@@ -245,6 +300,7 @@ class SessionStore:
         return {
             "active_id": self.active_id,
             "projects": [asdict(p) for p in sorted(self.projects.values(), key=lambda p: p.created_at)],
+            "personas": [asdict(p) for p in sorted(self.personas.values(), key=lambda p: p.created_at)],
             "sessions": [self.session_meta(s) for s in sessions],
         }
 
@@ -264,6 +320,7 @@ class SessionStore:
         data = {
             "active_id": self.active_id,
             "projects": [asdict(p) for p in self.projects.values()],
+            "personas": [asdict(p) for p in self.personas.values()],
             "sessions": [asdict(s) for s in self.sessions.values()],
         }
         self.store_path.write_text(json.dumps(data, indent=2))
@@ -277,7 +334,12 @@ class SessionStore:
             return
         for pd in data.get("projects", []):
             try:
-                self.projects[pd["id"]] = Project(**{k: pd.get(k) for k in Project.__dataclass_fields__})
+                self.projects[pd["id"]] = Project(**{k: pd[k] for k in Project.__dataclass_fields__ if k in pd})
+            except (TypeError, KeyError):
+                continue
+        for pd in data.get("personas", []):
+            try:
+                self.personas[pd["id"]] = Persona(**{k: pd[k] for k in Persona.__dataclass_fields__ if k in pd})
             except (TypeError, KeyError):
                 continue
         for sd in data.get("sessions", []):

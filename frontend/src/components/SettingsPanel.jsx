@@ -1,12 +1,13 @@
 import React, { useEffect, useState } from 'react'
 import {
-  Settings, Palette, ShieldHalf, Cpu, Lock, Check, UserCog, KeyRound, LogOut, Trash2, Loader2, X,
+  Settings, Palette, ShieldHalf, Cpu, Lock, Check, UserCog, KeyRound, LogOut, Trash2, Loader2, X, Sparkles,
 } from 'lucide-react'
 import Modal from './Modal.jsx'
 import LlmControl from './LlmControl.jsx'
 import SafetyControl from './SafetyControl.jsx'
 import ApprovalControl from './ApprovalControl.jsx'
 import UserAvatar from './UserAvatar.jsx'
+import Personas from './Personas.jsx'
 
 const THEMES = [
   { key: 'dark', label: 'Dark', bg: '#090b10', surface: '#11151e', accent: '#2dd4bf', fg: '#e2e8f0' },
@@ -19,6 +20,7 @@ const THEMES = [
 
 const TABS = [
   { key: 'account', label: 'Account', Icon: UserCog },
+  { key: 'personas', label: 'Personas', Icon: Sparkles },
   { key: 'appearance', label: 'Appearance', Icon: Palette },
   { key: 'model', label: 'Model', Icon: Cpu },
   { key: 'safety', label: 'Safety', Icon: ShieldHalf },
@@ -188,6 +190,7 @@ function Field({ title, hint, children }) {
 export default function SettingsPanel({
   open, onClose, theme, onSetTheme, safety, onSafety, approval, onApproval, auth,
   initialTab, user, onUpdateProfile, onChangePassword, onSignOut, onSignOutEverywhere, onDeleteAccount,
+  personas, onCreatePersona, onUpdatePersona, onDeletePersona,
 }) {
   const [tab, setTab] = useState(initialTab || 'account')
   useEffect(() => { if (open) setTab(initialTab || 'account') }, [open, initialTab])
@@ -222,6 +225,12 @@ export default function SettingsPanel({
                 onSignOutEverywhere={onSignOutEverywhere}
                 onDeleteAccount={onDeleteAccount}
               />
+            )}
+
+            {tab === 'personas' && (
+              <Field title="Personas" hint="Custom assistants you can apply to any chat.">
+                <Personas personas={personas} onCreate={onCreatePersona} onUpdate={onUpdatePersona} onDelete={onDeletePersona} />
+              </Field>
             )}
 
             {tab === 'appearance' && (

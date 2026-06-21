@@ -82,6 +82,25 @@ def test_task_surfaces_backend_failure_as_502(monkeypatch):
     assert "boom" in r.json()["detail"]
 
 
+def test_personas_crud_and_applied_to_session():
+    a = _signup(email="persona@x.com")
+    h = _auth(a["token"])
+    # create a persona
+    p = client.post("/api/personas", json={"name": "Pirate", "instructions": "Answer like a pirate.", "emoji": "🏴‍☠️"}, headers=h).json()["persona"]
+    assert p["name"] == "Pirate"
+    assert any(x["id"] == p["id"] for x in client.get("/api/workspace", headers=h).json()["personas"])
+    # apply it to the active session
+    sid = client.get("/api/workspace", headers=h).json()["active_id"]
+    meta = client.patch(f"/api/sessions/{sid}", json={"persona_id": p["id"]}, headers=h).json()["session"]
+    assert meta["persona_id"] == p["id"]
+    # edit + delete
+    client.patch(f"/api/personas/{p['id']}", json={"name": "Pirate", "instructions": "Arrr."}, headers=h)
+    res = client.delete(f"/api/personas/{p['id']}", headers=h).json()
+    assert res["ok"] and res["personas"] == []
+    # deleting detaches it from the session
+    assert client.get(f"/api/sessions/{sid}", headers=h).json()["session"]["persona_id"] is None
+
+
 def test_comparison_task_returns_a_canvas():
     data = client.post("/api/task", json={"directive": "Compare Postgres and Mongo and recommend one"}).json()
     canvas = data["canvas"]
