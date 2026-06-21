@@ -5,7 +5,11 @@
   athena restart   cleanly stop and start (waits for the port to free)
   athena rebuild   rebuild the frontend, then cleanly restart
   athena status    is it running? which model, safety, how many signed blocks
-  athena run "..." dispatch a directive and print the result
+  athena run "..." dispatch a directive and print the result (--json for scripts)
+  athena chat      interactive terminal chat with the swarm
+  athena login     sign in to the API (stores a session token)
+  athena whoami    show the signed-in account   ·   athena logout
+  athena messaging view/configure messaging gateways (admin)
   athena serve     run in the foreground (Ctrl-C to stop)
   athena open      open the dashboard in a browser
 
@@ -67,16 +71,55 @@ def process_alive(pid: int | None) -> bool:
     return True
 
 
+# --- auth token (CLI session) ---------------------------------------------
+
+def token_file() -> Path:
+    return home_dir() / "cli_token"
+
+
+def read_token() -> str | None:
+    try:
+        return token_file().read_text().strip() or None
+    except OSError:
+        return None
+
+
+def write_token(token: str | None) -> None:
+    home_dir().mkdir(parents=True, exist_ok=True)
+    if token:
+        token_file().write_text(token)
+        try:
+            os.chmod(token_file(), 0o600)
+        except OSError:
+            pass
+    else:
+        token_file().unlink(missing_ok=True)
+
+
+def _auth_headers() -> dict:
+    tok = read_token()
+    return {"Authorization": f"Bearer {tok}"} if tok else {}
+
+
 # --- http helpers (stdlib) ------------------------------------------------
 
+def _detail(e: urllib.error.HTTPError) -> str:
+    try:
+        return json.loads(e.read().decode()).get("detail") or f"HTTP {e.code}"
+    except Exception:  # noqa: BLE001
+        return f"HTTP {e.code}"
+
+
 def _get_json(url: str, timeout: float = 3.0) -> dict:
-    with urllib.request.urlopen(url, timeout=timeout) as r:
+    req = urllib.request.Request(url, headers=_auth_headers())
+    with urllib.request.urlopen(req, timeout=timeout) as r:
         return json.loads(r.read().decode())
 
 
 def _post_json(url: str, payload: dict, timeout: float = 600.0) -> dict:
     req = urllib.request.Request(
-        url, data=json.dumps(payload).encode(), headers={"Content-Type": "application/json"}, method="POST"
+        url, data=json.dumps(payload).encode(),
+        headers={"Content-Type": "application/json", **_auth_headers()}, method="POST",
     )
     with urllib.request.urlopen(req, timeout=timeout) as r:
         return json.loads(r.read().decode())
@@ -298,16 +341,132 @@ def _format_run_result(payload: dict) -> str:
 def cmd_run(args) -> int:
     base_url = args.url or f"http://{args.host}:{args.port}"
     directive = " ".join(args.directive).strip()
+    if not directive and not sys.stdin.isatty():
+        directive = sys.stdin.read().strip()  # allow piping: echo "..." | athena run
     if not directive:
         print("Give a directive, e.g.  athena run \"summarize the news\"", file=sys.stderr)
         return 2
     try:
         payload = _post_json(f"{base_url}/api/task", {"directive": directive})
+    except urllib.error.HTTPError as e:
+        if e.code == 401:
+            print("Not signed in. Run:  athena login", file=sys.stderr)
+            return 1
+        print(_detail(e), file=sys.stderr)
+        return 1
     except urllib.error.URLError:
         print(f"Couldn't reach Athena at {base_url}.  Start it with:  athena up", file=sys.stderr)
         return 1
-    print(_format_run_result(payload))
+    if getattr(args, "json", False):
+        print(json.dumps(payload, indent=2))
+    else:
+        print(_format_run_result(payload))
     return 0 if payload.get("success") else 1
+
+
+# --- accounts -------------------------------------------------------------
+
+def cmd_login(args) -> int:
+    import getpass
+    base_url = f"http://{args.host}:{args.port}"
+    email = (args.email or input("Email: ")).strip()
+    password = getpass.getpass("Password: ")
+    try:
+        out = _post_json(f"{base_url}/api/auth/login", {"email": email, "password": password}, timeout=30)
+    except urllib.error.HTTPError as e:
+        print(_detail(e), file=sys.stderr)
+        return 1
+    except urllib.error.URLError:
+        print(f"Couldn't reach Athena at {base_url}.  Start it with:  athena up", file=sys.stderr)
+        return 1
+    write_token(out["token"])
+    user = out.get("user", {})
+    print(f"Signed in as {user.get('name') or user.get('email')}.")
+    return 0
+
+
+def cmd_logout(_args) -> int:
+    write_token(None)
+    print("Signed out.")
+    return 0
+
+
+def cmd_whoami(args) -> int:
+    base_url = f"http://{args.host}:{args.port}"
+    if not read_token():
+        print("Not signed in. Run:  athena login")
+        return 1
+    try:
+        me = _get_json(f"{base_url}/api/auth/me").get("user", {})
+    except urllib.error.HTTPError as e:
+        print("Session expired. Run:  athena login" if e.code == 401 else _detail(e), file=sys.stderr)
+        return 1
+    except urllib.error.URLError:
+        print("Couldn't reach Athena.  Start it with:  athena up", file=sys.stderr)
+        return 1
+    print(f"{me.get('name')} <{me.get('email')}>" + ("  (admin)" if me.get("is_admin") else ""))
+    return 0
+
+
+def cmd_chat(args) -> int:
+    base_url = args.url or f"http://{args.host}:{args.port}"
+    print("Athena chat — type a task, or 'exit' to quit.\n")
+    while True:
+        try:
+            directive = input("you ▸ ").strip()
+        except (EOFError, KeyboardInterrupt):
+            print()
+            return 0
+        if directive.lower() in ("exit", "quit", ":q"):
+            return 0
+        if not directive:
+            continue
+        try:
+            payload = _post_json(f"{base_url}/api/task", {"directive": directive})
+        except urllib.error.HTTPError as e:
+            if e.code == 401:
+                print("Not signed in. Run:  athena login", file=sys.stderr)
+                return 1
+            print(_detail(e), file=sys.stderr)
+            continue
+        except urllib.error.URLError:
+            print(f"Couldn't reach Athena at {base_url}.", file=sys.stderr)
+            continue
+        print("\nathena ▸ " + (payload.get("final") or "(no result)"))
+        cost = payload.get("cost") or {}
+        if cost.get("llm_calls"):
+            print(f"          {cost['llm_calls']} calls · {cost.get('total_tokens', 0)} tokens · ${cost.get('usd', 0):.4f}")
+        print()
+
+
+def cmd_messaging(args) -> int:
+    base_url = f"http://{args.host}:{args.port}"
+    try:
+        data = _get_json(f"{base_url}/api/messaging")
+    except urllib.error.HTTPError as e:
+        print("Admin sign-in required. Run:  athena login" if e.code in (401, 403) else _detail(e), file=sys.stderr)
+        return 1
+    except urllib.error.URLError:
+        print("Couldn't reach Athena.  Start it with:  athena up", file=sys.stderr)
+        return 1
+    if args.action == "list" or not args.platform:
+        mark = {"ready": "●", "needs_setup": "◐", "disabled": "○"}
+        for p in data["platforms"]:
+            st = data["gateways"][p["id"]]["status"]
+            print(f"  {mark.get(st, '○')} {p['label']:<16} {p['id']:<12} {st}")
+        return 0
+    pid = args.platform
+    if pid not in {p["id"] for p in data["platforms"]}:
+        print(f"Unknown platform {pid!r}. Run:  athena messaging list", file=sys.stderr)
+        return 1
+    config = {}
+    for kv in (args.set or []):
+        if "=" in kv:
+            k, v = kv.split("=", 1)
+            config[k] = v
+    out = _post_json(f"{base_url}/api/messaging/{pid}", {"config": config, "enabled": args.action == "enable"})
+    print(f"{pid}: {out['gateway']['status']}")
+    return 0
 
 
 def cmd_open(args) -> int:
@@ -380,9 +539,27 @@ def build_parser() -> argparse.ArgumentParser:
     desktop.set_defaults(func=cmd_desktop)
 
     run = sub.add_parser("run", help="dispatch a directive to the running server")
-    run.add_argument("directive", nargs="+", help="what the swarm should do")
+    run.add_argument("directive", nargs="*", help="what the swarm should do (or pipe via stdin)")
     run.add_argument("--url", help="base URL of a running server (overrides --host/--port)")
+    run.add_argument("--json", action="store_true", help="print the raw JSON result (for scripting)")
     run.set_defaults(func=cmd_run)
+
+    chat = sub.add_parser("chat", help="interactive terminal chat with the swarm")
+    chat.add_argument("--url", help="base URL of a running server (overrides --host/--port)")
+    chat.set_defaults(func=cmd_chat)
+
+    login = sub.add_parser("login", help="sign in to the API (stores a session token)")
+    login.add_argument("--email", help="account email (prompts if omitted)")
+    login.set_defaults(func=cmd_login)
+    sub.add_parser("logout", help="clear the stored session token").set_defaults(func=cmd_logout)
+    sub.add_parser("whoami", help="show the signed-in account").set_defaults(func=cmd_whoami)
+
+    msg = sub.add_parser("messaging", help="view/configure messaging gateways (admin)")
+    msg.add_argument("action", nargs="?", default="list", choices=["list", "enable", "disable"],
+                     help="list gateways, or enable/disable one")
+    msg.add_argument("platform", nargs="?", help="platform id (e.g. telegram) for enable/disable")
+    msg.add_argument("--set", action="append", metavar="KEY=VALUE", help="set a config field (repeatable)")
+    msg.set_defaults(func=cmd_messaging)
 
     return p
 

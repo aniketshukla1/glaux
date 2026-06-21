@@ -67,6 +67,28 @@ def test_rebuild_skips_start_when_build_fails(monkeypatch):
     assert rc == 1 and not restarted  # a failed build must not bounce the server
 
 
+def test_parser_new_commands():
+    p = cli.build_parser()
+    assert p.parse_args(["chat"]).func is cli.cmd_chat
+    assert p.parse_args(["login", "--email", "a@b.com"]).email == "a@b.com"
+    assert p.parse_args(["logout"]).func is cli.cmd_logout
+    assert p.parse_args(["whoami"]).func is cli.cmd_whoami
+    m = p.parse_args(["messaging", "enable", "telegram", "--set", "bot_token=x", "--set", "allowed_ids=1"])
+    assert m.action == "enable" and m.platform == "telegram" and m.set == ["bot_token=x", "allowed_ids=1"]
+    assert p.parse_args(["messaging"]).action == "list"
+    assert p.parse_args(["run", "--json", "do", "it"]).json is True
+
+
+def test_token_roundtrip_and_auth_header(tmp_path, monkeypatch):
+    monkeypatch.setenv("ATHENA_HOME", str(tmp_path))
+    assert cli.read_token() is None and cli._auth_headers() == {}
+    cli.write_token("tok123")
+    assert cli.read_token() == "tok123"
+    assert cli._auth_headers() == {"Authorization": "Bearer tok123"}
+    cli.write_token(None)
+    assert cli.read_token() is None
+
+
 def test_pid_roundtrip_and_liveness(tmp_path, monkeypatch):
     monkeypatch.setenv("ATHENA_HOME", str(tmp_path))
     assert cli.read_pid() is None
