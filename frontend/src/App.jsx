@@ -16,6 +16,7 @@ import SettingsPanel from './components/SettingsPanel.jsx'
 import CommandPalette from './components/CommandPalette.jsx'
 import AuthScreen from './components/AuthScreen.jsx'
 import ShortcutsHelp from './components/ShortcutsHelp.jsx'
+import Messaging from './components/Messaging.jsx'
 
 const PALETTE_THEMES = ['dark', 'light', 'oled', 'midnight', 'nord', 'ember']
 
@@ -45,6 +46,7 @@ export default function App() {
   const [settingsTab, setSettingsTab] = useState('appearance')
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [helpOpen, setHelpOpen] = useState(false)
+  const [messagingOpen, setMessagingOpen] = useState(false)
 
   // accounts / auth
   const [user, setUser] = useState(null)
@@ -294,11 +296,12 @@ export default function App() {
       { id: 'settings', section: 'Actions', label: 'Open Settings', icon: SettingsIcon, run: () => setSettingsOpen(true), keywords: 'model safety approval' },
       { id: 'sidebar', section: 'Actions', label: collapsed ? 'Expand sidebar' : 'Collapse sidebar', icon: PanelLeft, run: toggleCollapse },
       { id: 'help', section: 'Actions', label: 'Keyboard shortcuts', icon: Keyboard, run: () => setHelpOpen(true), keywords: 'keys hotkeys cheatsheet' },
+      ...(user?.is_admin ? [{ id: 'messaging', section: 'Actions', label: 'Messaging gateways', icon: MessageSquare, run: () => setMessagingOpen(true), keywords: 'telegram discord slack whatsapp signal channels bot' }] : []),
       ...PALETTE_THEMES.map((t) => ({ id: `theme-${t}`, section: 'Theme', label: `Theme: ${t[0].toUpperCase()}${t.slice(1)}`, icon: Palette, run: () => setTheme(t), keywords: 'appearance color' })),
       ...(workspace.sessions || []).map((s) => ({ id: `sess-${s.id}`, section: 'Switch to', label: s.title, icon: MessageSquare, hint: s.id === workspace.active_id ? 'current' : '', run: () => selectSession(s.id), keywords: 'conversation chat open' })),
     ]
     return cmds
-  }, [workspace, collapsed])
+  }, [workspace, collapsed, user])
 
   if (!authReady) {
     return <div className="min-h-screen grid place-items-center"><Loader2 className="w-6 h-6 animate-spin text-muted" /></div>
@@ -384,6 +387,7 @@ export default function App() {
 
       <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} commands={commands} />
       <ShortcutsHelp open={helpOpen} onClose={() => setHelpOpen(false)} />
+      <Messaging open={messagingOpen} onClose={() => setMessagingOpen(false)} />
       <Studio open={studioOpen} onClose={() => setStudioOpen(false)} ledger={ledger} blocks={liveBlocks} onVerify={refresh} user={user} />
       <SettingsPanel
         open={settingsOpen} onClose={() => setSettingsOpen(false)}

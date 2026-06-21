@@ -184,6 +184,11 @@ export const createProject = (name, instructions) =>
 export const updateProject = (id, patch) => request('PATCH', `/api/projects/${encodeURIComponent(id)}`, patch)
 export const deleteProject = (id) => request('DELETE', `/api/projects/${encodeURIComponent(id)}`)
 
+// messaging gateways
+export const getMessaging = () => request('GET', '/api/messaging')
+export const setMessaging = (platform, config, enabled) =>
+  request('POST', `/api/messaging/${encodeURIComponent(platform)}`, { config: config || {}, enabled: !!enabled })
+
 // scheduled jobs (cron)
 export const getSchedules = () => request('GET', '/api/schedules')
 export const addSchedule = (directive, schedule) => request('POST', '/api/schedules', { directive, schedule })

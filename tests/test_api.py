@@ -32,6 +32,7 @@ def _fresh_state():
     STATE.users.users.clear()
     STATE.users._by_email.clear()
     STATE._user_stores.clear()
+    STATE.messaging._configs.clear()
     client.headers.pop("Authorization", None)
     client.post("/api/safety", json={"mode": "live"})
     client.post("/api/approval", json={"mode": "auto"})
@@ -80,6 +81,24 @@ def test_task_surfaces_backend_failure_as_502(monkeypatch):
     r = client.post("/api/task", json={"directive": "say hi"})
     assert r.status_code == 502
     assert "boom" in r.json()["detail"]
+
+
+def test_messaging_catalog_config_and_secret_masking():
+    data = client.get("/api/messaging").json()
+    assert any(p["id"] == "telegram" for p in data["platforms"])
+    assert data["gateways"]["telegram"]["status"] == "disabled"
+    # configure telegram (a token is required); enabling without it => needs_setup
+    g = client.post("/api/messaging/telegram", json={"enabled": True, "config": {"allowed_ids": "123"}}).json()["gateway"]
+    assert g["status"] == "needs_setup"
+    g = client.post("/api/messaging/telegram", json={"enabled": True, "config": {"bot_token": "secret123"}}).json()["gateway"]
+    assert g["status"] == "ready"
+    # the secret is never returned, but is reported as configured
+    assert "bot_token" not in g["config"] and "bot_token" in g["configured_secrets"]
+    assert g["config"]["allowed_ids"] == "123"  # non-secret kept across saves
+    # re-saving with a blank token keeps the stored one
+    g = client.post("/api/messaging/telegram", json={"enabled": True, "config": {"bot_token": ""}}).json()["gateway"]
+    assert "bot_token" in g["configured_secrets"]
+    assert client.post("/api/messaging/nope", json={"enabled": True}).status_code == 404
 
 
 def test_personas_crud_and_applied_to_session():

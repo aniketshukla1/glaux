@@ -37,6 +37,7 @@ from starlette.concurrency import run_in_threadpool
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from core import auth, mailer, oauth, users
+from core.messaging import MessagingRegistry
 from core.observability import METRICS, log_json
 
 # auth action-token lifetimes
@@ -97,6 +98,10 @@ def _llm_config_path() -> Path:
 
 def _users_path() -> Path:
     return _athena_home() / "users.json"
+
+
+def _messaging_config_path() -> Path:
+    return _athena_home() / "messaging.json"
 
 
 def _user_workspace_path(uid: str) -> Path:
@@ -261,6 +266,7 @@ class _State:
         self.skills = SkillLibrary(self.memory.procedural)
         self.mcp = MCPRegistry(builtin=default_local_client(), config_path=_mcp_config_path())
         self.mcp.load(connect=True)
+        self.messaging = MessagingRegistry(_messaging_config_path())
         from llm.localmodel import LocalModelManager
 
         self.local_model = LocalModelManager()
@@ -797,6 +803,36 @@ def admin_create_invite(request: Request) -> dict:
     _require_admin()
     token = users.issue_action_token(STATE.auth_secret, "team", "invite", ttl=INVITE_TTL)
     return {"link": f"{_app_base_url(request)}/?invite={urllib.parse.quote(token)}", "expires_in": INVITE_TTL}
+
+
+# --- messaging gateways (instance-level, admin) --------------------------
+
+
+def _require_admin_if_users():
+    """Messaging config is instance-level: require an admin once accounts exist,
+    but stay open on a fresh install (same bootstrap rule as the rest of /api)."""
+    if STATE.users.count() > 0:
+        _require_admin()
+
+
+class MessagingConfigRequest(BaseModel):
+    config: dict = {}
+    enabled: bool = False
+
+
+@app.get("/api/messaging")
+def get_messaging() -> dict:
+    _require_admin_if_users()
+    return {"platforms": STATE.messaging.catalog(), "gateways": STATE.messaging.all_public()}
+
+
+@app.post("/api/messaging/{platform}")
+def set_messaging(platform: str, req: MessagingConfigRequest) -> dict:
+    _require_admin_if_users()
+    out = STATE.messaging.set_config(platform, req.config, req.enabled)
+    if out is None:
+        raise HTTPException(status_code=404, detail=f"unknown messaging platform {platform!r}")
+    return {"gateway": out}
 
 
 # --- models --------------------------------------------------------------
