@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useRef, useState } from 'react'
 import { LayoutDashboard, Info, CheckCircle2, AlertTriangle, XCircle } from 'lucide-react'
 import Markdown from './Markdown.jsx'
 
@@ -67,15 +67,29 @@ function Chart({ kind = 'bar', labels = [], series = [] }) {
   const y = (v) => padT + ih - (Math.max(0, Number(v) || 0) / max) * ih
   const band = iw / Math.max(labels.length, 1)
 
+  const ref = useRef(null)
+  const [hover, setHover] = useState(null) // { i, px, py }
+  const onMove = (i) => (e) => {
+    const r = ref.current?.getBoundingClientRect()
+    if (r) setHover({ i, px: e.clientX - r.left, py: e.clientY - r.top })
+  }
+
   return (
-    <div>
+    <div className="relative" ref={ref}>
       <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ maxHeight: 200 }}>
         <line x1={padL} y1={padT + ih} x2={W - padR} y2={padT + ih} stroke="rgb(var(--line))" strokeOpacity="0.25" />
+        {hover && <rect x={xBand(hover.i)} y={padT} width={band} height={ih} fill="rgb(var(--fg))" fillOpacity="0.05" />}
         {kind === 'line' ? (
-          series.map((s, si) => (
-            <polyline key={si} fill="none" stroke={SERIES_COLORS[si % SERIES_COLORS.length]} strokeWidth="2"
-              points={(s.data || []).map((v, i) => `${x(i)},${y(v)}`).join(' ')} />
-          ))
+          <>
+            {series.map((s, si) => (
+              <polyline key={si} fill="none" stroke={SERIES_COLORS[si % SERIES_COLORS.length]} strokeWidth="2"
+                points={(s.data || []).map((v, i) => `${x(i)},${y(v)}`).join(' ')} />
+            ))}
+            {series.map((s, si) => (s.data || []).map((v, i) => (
+              <circle key={`${si}-${i}`} cx={x(i)} cy={y(v)} r={hover?.i === i ? 4 : 2.5}
+                fill={SERIES_COLORS[si % SERIES_COLORS.length]} stroke="rgb(var(--surface))" strokeWidth="1.5" />
+            )))}
+          </>
         ) : (
           labels.map((_, i) => {
             const bw = (band * 0.7) / Math.max(series.length, 1)
@@ -83,14 +97,32 @@ function Chart({ kind = 'bar', labels = [], series = [] }) {
             return series.map((s, si) => {
               const v = (s.data || [])[i] || 0
               return <rect key={`${i}-${si}`} x={x0 + si * bw} y={y(v)} width={Math.max(1, bw - 2)} height={padT + ih - y(v)}
-                rx="2" fill={SERIES_COLORS[si % SERIES_COLORS.length]} />
+                rx="2" fill={SERIES_COLORS[si % SERIES_COLORS.length]} fillOpacity={hover && hover.i !== i ? 0.55 : 1} />
             })
           })
         )}
         {labels.map((l, i) => (
           <text key={i} x={kind === 'line' ? x(i) : xBand(i) + band / 2} y={H - 6} textAnchor="middle" fontSize="9" fill="rgb(var(--faint))">{l}</text>
         ))}
+        {/* invisible hover bands per column */}
+        {labels.map((_, i) => (
+          <rect key={`hb${i}`} x={xBand(i)} y={padT} width={band} height={ih} fill="transparent"
+            onMouseMove={onMove(i)} onMouseLeave={() => setHover(null)} />
+        ))}
       </svg>
+      {hover && (
+        <div className="absolute z-10 pointer-events-none card px-2.5 py-1.5 shadow-xl text-xs whitespace-nowrap"
+          style={{ left: hover.px, top: hover.py, transform: 'translate(-50%, calc(-100% - 10px))' }}>
+          <div className="text-faint mb-1">{labels[hover.i]}</div>
+          {series.map((s, si) => (
+            <div key={si} className="flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-sm shrink-0" style={{ background: SERIES_COLORS[si % SERIES_COLORS.length] }} />
+              <span className="text-muted">{s.name || `Series ${si + 1}`}</span>
+              <span className="text-fg font-medium ml-auto pl-3">{(s.data || [])[hover.i]}</span>
+            </div>
+          ))}
+        </div>
+      )}
       {series.length > 1 && (
         <div className="flex flex-wrap gap-3 mt-1 px-1">
           {series.map((s, si) => (
