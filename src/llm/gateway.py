@@ -45,6 +45,19 @@ class LLMClient(Protocol):
     ) -> LLMResponse: ...
 
 
+def stream_complete(client, messages, *, on_delta: Optional[Callable[[str], None]] = None, **kw) -> LLMResponse:
+    """Stream a completion when the client supports it (calling ``on_delta(text)``
+    per chunk), otherwise fall back to a single ``complete()`` and emit the whole
+    text once. Always returns the full :class:`LLMResponse`."""
+    streamer = getattr(client, "stream", None)
+    if on_delta is not None and callable(streamer):
+        return streamer(messages, on_delta=on_delta, **kw)
+    resp = client.complete(messages, **kw)
+    if on_delta is not None and resp.text:
+        on_delta(resp.text)
+    return resp
+
+
 class ScriptedLLM:
     """Deterministic, offline LLM for tests.
 

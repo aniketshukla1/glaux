@@ -991,12 +991,17 @@ async def run_task(req: TaskRequest) -> dict:
         prefix += f"Project instructions:\n{project_instr.strip()}\n\n"
     run_directive = f"{prefix}Task:\n{req.directive}" if prefix else req.directive
     model_id = STATE.llm.model_id
-    cancel_ev = STATE.cancel_for(_current_user_id.get())
+    uid = _current_user_id.get()
+    cancel_ev = STATE.cancel_for(uid)
     cancel_ev.clear()  # fresh start; a Stop press during this run sets it
+
+    def _on_token(t: str) -> None:
+        WS.publish({"type": "token", "text": t, "uid": uid})  # streamed final answer
+
     t0 = time.monotonic()
     try:
         result = await run_in_threadpool(
-            lambda: swarm.run(run_directive, budget=budget, cancel=cancel_ev.is_set)
+            lambda: swarm.run(run_directive, budget=budget, cancel=cancel_ev.is_set, on_token=_on_token)
         )
     except Exception as exc:  # noqa: BLE001 - surface any backend/LLM failure cleanly
         import traceback
@@ -1011,6 +1016,8 @@ async def run_task(req: TaskRequest) -> dict:
             status_code=502,
             detail=f"The {backend} model {model!r} failed: {exc}",
         ) from exc
+    finally:
+        WS.publish({"type": "token_end", "uid": uid})  # tell clients the stream is done
     elapsed = time.monotonic() - t0
     new_blocks = [STATE.ledger.block(i) for i in range(before, len(STATE.ledger))]
 

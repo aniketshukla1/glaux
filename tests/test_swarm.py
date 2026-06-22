@@ -149,6 +149,34 @@ def test_swarm_stops_when_cancelled():
     assert not res.steps  # nothing dispatched
 
 
+def test_swarm_streams_final_answer():
+    from llm.gateway import stream_complete  # noqa: F401 - smoke that the helper is importable
+    led = Ledger()
+    plan = _swarm_plan(
+        {"id": "s1", "role": "coder", "task": "write code", "depends_on": []},
+        {"id": "s2", "role": "researcher", "task": "summarize", "depends_on": ["s1"]},
+    )
+    router = Router(identity=AgentIdentity.generate(), llm=ScriptedLLM([plan, "Integrated final answer."]), ledger=led)
+    coder = coder_agent(identity=AgentIdentity.generate(), llm=ScriptedLLM([_finish("code")]), ledger=led)
+    researcher = researcher_agent(identity=AgentIdentity.generate(), llm=ScriptedLLM([_finish("sum")]), ledger=led)
+    swarm = Swarm(router=router, specialists={"coder": coder, "researcher": researcher}, ledger=led)
+    tokens = []
+    res = swarm.run("build and summarize", on_token=tokens.append)
+    assert res.final == "Integrated final answer."
+    # ScriptedLLM has no stream(), so the synthesis is delivered via the fallback
+    assert "".join(tokens) == "Integrated final answer."
+
+
+def test_demo_llm_streams_in_chunks():
+    from llm.demo import DemoLLM
+    from llm.gateway import Message
+    chunks = []
+    DemoLLM().stream([Message(role="user", content="ORIGINAL REQUEST: compare A and B")],
+                     system="you are the lead of the athena swarm", on_delta=chunks.append)
+    assert len(chunks) > 1  # typed out word by word
+    assert "".join(chunks).startswith("(demo)")
+
+
 def test_agent_run_respects_cancel():
     from agents import BaseAgent
 

@@ -15,7 +15,7 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 from core.ledger import Action, Ledger
-from llm.gateway import Message
+from llm.gateway import Message, stream_complete
 
 from .base import AgentResult, HandoffRejected
 from .budget import Budget, BudgetTracker, charge_for_response
@@ -131,6 +131,7 @@ class Swarm:
         skills_by_role: Optional[dict] = None,
         budget: Optional[Budget] = None,
         cancel=None,
+        on_token=None,
     ) -> SwarmResult:
         # One shared budget tracker for the whole task — every LLM caller charges it.
         tracker = BudgetTracker(budget or Budget())
@@ -233,7 +234,7 @@ class Swarm:
             # Synthesis is presentation-only: it must never turn a completed run into a
             # failure, so any error here falls back to the last step's output.
             try:
-                final = self._final_answer(directive, order, results, tracker)
+                final = self._final_answer(directive, order, results, tracker, on_token=on_token)
             except Exception:  # noqa: BLE001
                 final = _as_text(results[order[-1].id].result.result) if order else None
         # A model may render a structured Canvas (A2UI) alongside the prose answer.
@@ -250,7 +251,7 @@ class Swarm:
             synthesized=synthesized,
         )
 
-    def _final_answer(self, directive: str, order, results: dict, tracker: BudgetTracker):
+    def _final_answer(self, directive: str, order, results: dict, tracker: BudgetTracker, on_token=None):
         """The swarm's answer to the ORIGINAL directive — not just whatever the last
         step happened to produce. With one step the step's result IS the answer; with
         a team, integrate their outputs so a plan request gets the plan (and not, say,
@@ -263,9 +264,9 @@ class Swarm:
             return last
         if tracker.exceeded() is not None:  # no budget left to synthesize — use the last output
             return last
-        return self._synthesize_final(directive, done, tracker)
+        return self._synthesize_final(directive, done, tracker, on_token=on_token)
 
-    def _synthesize_final(self, directive: str, step_results: list, tracker: BudgetTracker):
+    def _synthesize_final(self, directive: str, step_results: list, tracker: BudgetTracker, on_token=None):
         parts = []
         for sr in step_results:
             text = _as_text(sr.result.result).strip()
@@ -278,8 +279,11 @@ class Swarm:
         )
         messages = [Message(role="user", content=content)]
         try:
-            resp = self.router.llm.complete(
-                messages, system=FINAL_SYNTH_SYSTEM, temperature=0.0, max_tokens=1200
+            # Stream the final answer when a token sink is wired (so the UI types it
+            # out); falls back to a single call otherwise.
+            resp = stream_complete(
+                self.router.llm, messages, on_delta=on_token,
+                system=FINAL_SYNTH_SYSTEM, temperature=0.0, max_tokens=1200,
             )
         except Exception:  # noqa: BLE001 - synthesis is best-effort; fall back to last output
             return _as_text(step_results[-1].result.result)

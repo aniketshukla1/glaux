@@ -75,10 +75,23 @@ def _has(text: str, keywords) -> bool:
 
 
 def _extract_directive(content: str) -> str:
+    # Capture the whole DIRECTIVE block (it may be multi-line when a persona /
+    # project prefix is prepended) up to the AVAILABLE ROLES section, so keyword
+    # routing sees the actual task, not just the first prefix line.
+    out: list[str] = []
+    capturing = False
     for line in content.splitlines():
-        if line.strip().upper().startswith("DIRECTIVE:"):
-            return line.split(":", 1)[1].strip()
-    return content.strip()
+        s = line.strip()
+        if s.upper().startswith("AVAILABLE ROLES:"):
+            break
+        if capturing:
+            out.append(line)
+        elif s.upper().startswith("DIRECTIVE:"):
+            capturing = True
+            rest = line.split(":", 1)[1].strip()
+            if rest:
+                out.append(rest)
+    return "\n".join(out).strip() if out else content.strip()
 
 
 def _router_plan(content: str) -> str:
@@ -271,3 +284,20 @@ class DemoLLM:
                 "```"
             )
         return LLMResponse(text=text, model_id=self.model_id, usage={}, raw=None)
+
+    def stream(self, messages, *, system=None, temperature=0.0, max_tokens=1024, seed=None, on_delta=None):
+        """Re-use complete() for the text, then 'type it out' word-by-word so the
+        offline demo shows streaming. Any trailing ```canvas block is emitted whole."""
+        import time
+
+        resp = self.complete(messages, system=system, temperature=temperature, max_tokens=max_tokens, seed=seed)
+        text = resp.text or ""
+        if on_delta and text:
+            cut = text.find("```canvas")
+            prose = text if cut < 0 else text[:cut]
+            for chunk in re.findall(r"\S+\s*", prose):
+                on_delta(chunk)
+                time.sleep(0.012)
+            if cut >= 0:
+                on_delta(text[cut:])
+        return resp

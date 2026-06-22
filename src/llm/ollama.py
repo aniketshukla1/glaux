@@ -102,3 +102,51 @@ class OllamaClient:
             "output_tokens": data.get("eval_count"),
         }
         return LLMResponse(text=text, model_id=self.model_id, usage=usage, raw=data)
+
+    def stream(self, messages, *, system=None, temperature=0.0, max_tokens=1024, seed=None, on_delta=None):
+        """Token-stream a chat completion. Ollama's /api/chat with stream=true emits
+        newline-delimited JSON; each carries a message.content delta."""
+        chat = []
+        if system:
+            chat.append({"role": "system", "content": system})
+        chat.extend({"role": m.role, "content": m.content} for m in messages)
+        options = {"temperature": temperature, "num_predict": max_tokens or self._default_max_tokens}
+        if seed is not None:
+            options["seed"] = seed
+        payload = {"model": self.model, "messages": chat, "stream": True, "options": options}
+        req = urllib.request.Request(
+            f"{self.host}/api/chat",
+            data=json.dumps(payload).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        parts: list[str] = []
+        usage: dict = {}
+        try:
+            with urllib.request.urlopen(req, timeout=self.timeout) as resp:
+                for raw in resp:
+                    line = raw.decode("utf-8").strip()
+                    if not line:
+                        continue
+                    try:
+                        data = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+                    delta = (data.get("message") or {}).get("content", "")
+                    if delta:
+                        parts.append(delta)
+                        if on_delta:
+                            on_delta(delta)
+                    if data.get("done"):
+                        usage = {"input_tokens": data.get("prompt_eval_count"), "output_tokens": data.get("eval_count")}
+        except urllib.error.HTTPError as e:
+            body = e.read().decode("utf-8", "replace") if e.fp else ""
+            detail = body
+            try:
+                detail = json.loads(body).get("error", body)
+            except Exception:  # noqa: BLE001
+                pass
+            raise RuntimeError(f"Ollama returned HTTP {e.code} for model {self.model!r}: {detail or e.reason}") from e
+        except urllib.error.URLError as e:
+            raise RuntimeError(f"Could not reach Ollama at {self.host}: {e.reason}") from e
+        return LLMResponse(text="".join(parts), model_id=self.model_id, usage=usage, raw=None)

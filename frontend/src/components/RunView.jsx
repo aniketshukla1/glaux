@@ -189,8 +189,25 @@ function DirectiveBubble({ text }) {
   )
 }
 
+function StreamingCard({ text }) {
+  // Hide anything from a ```canvas fence onward — the structured Canvas renders
+  // only once the run completes, so we don't flash raw JSON while typing.
+  const cut = text.indexOf('```canvas')
+  const shown = cut >= 0 ? text.slice(0, cut) : text
+  return (
+    <div className="card p-4 animate-fade-in" style={{ borderColor: 'rgb(var(--accent) / 0.3)' }}>
+      <div className="flex items-center gap-2 mb-1.5">
+        <Loader2 className="w-3.5 h-3.5 animate-spin text-accent" />
+        <span className="text-faint text-[11px] uppercase tracking-wide">Writing the answer…</span>
+      </div>
+      <Markdown className="text-fg text-[13.5px]">{shown}</Markdown>
+      <span className="inline-block w-[3px] h-[1.05em] bg-accent/70 align-text-bottom animate-pulse ml-0.5 rounded-full" />
+    </div>
+  )
+}
+
 // One run rendered as a conversation turn: the directive, the swarm timeline, the result.
-function Turn({ directive, blocks, roleOf, running, result, verification, onDispatch, createdAt }) {
+function Turn({ directive, blocks, roleOf, running, result, streamingText, verification, onDispatch, createdAt }) {
   const timeline = useMemo(() => buildTimeline(blocks || [], roleOf), [blocks, roleOf])
   const lastStepIdx = (() => {
     for (let i = timeline.length - 1; i >= 0; i--) if (timeline[i].kind === 'step') return i
@@ -211,6 +228,7 @@ function Turn({ directive, blocks, roleOf, running, result, verification, onDisp
           <span className="text-muted text-sm">Athena is planning…</span>
         </div>
       )}
+      {running && !result && streamingText && <StreamingCard text={streamingText} />}
       {result && <ResultCard result={result} verification={verification} createdAt={createdAt} onRegenerate={onDispatch && directive ? () => onDispatch(directive) : undefined} />}
     </div>
   )
@@ -280,7 +298,7 @@ function Composer({ onDispatch, hero, running, onStop }) {
   )
 }
 
-export default function RunView({ session, blocks, roleOf, running, result, goal, onDispatch, onStop, verification }) {
+export default function RunView({ session, blocks, roleOf, running, result, goal, streamingText, onDispatch, onStop, verification }) {
   const runs = session?.runs || []
   const liveTurn = running || result || (blocks && blocks.length > 0)
   const hasContent = runs.length > 0 || liveTurn
@@ -324,7 +342,7 @@ export default function RunView({ session, blocks, roleOf, running, result, goal
             createdAt={run.created_at} verification={run.verification} onDispatch={onDispatch} />
         ))}
         {liveTurn && (
-          <Turn directive={goal} blocks={blocks} roleOf={roleOf} running={running} result={result} verification={verification} onDispatch={onDispatch} />
+          <Turn directive={goal} blocks={blocks} roleOf={roleOf} running={running} result={result} streamingText={streamingText} verification={verification} onDispatch={onDispatch} />
         )}
         <div ref={bottomRef} className="h-px" />
       </div>

@@ -70,6 +70,7 @@ export default function App() {
   const [goal, setGoal] = useState(null)
   const [running, setRunning] = useState(false)
   const [result, setResult] = useState(null)
+  const [streamingText, setStreamingText] = useState('')
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme)
@@ -212,6 +213,7 @@ export default function App() {
         let msg
         try { msg = JSON.parse(e.data) } catch { return }
         if (msg.type === 'block') setLiveBlocks((prev) => mergeBlocks(prev, [msg.block]))
+        else if (msg.type === 'token' && msg.uid === user.id) setStreamingText((s) => s + msg.text)
       }
       ws.onclose = () => { if (!closed) retry = setTimeout(connect, 2000) }
       ws.onerror = () => ws.close()
@@ -221,10 +223,10 @@ export default function App() {
   }, [user])
 
   const roleOf = useCallback((id) => agentsMap[id], [agentsMap])
-  const clearLive = () => { setGoal(null); setResult(null); setLiveBlocks([]) }
+  const clearLive = () => { setGoal(null); setResult(null); setLiveBlocks([]); setStreamingText('') }
 
   const onDispatch = async (directive) => {
-    setGoal(directive); setRunning(true); setResult(null); setLiveBlocks([])
+    setGoal(directive); setRunning(true); setResult(null); setLiveBlocks([]); setStreamingText('')
     requestNotifyPermission()  // a dispatch is a user gesture, so we may ask here
     try {
       const r = await dispatchTask(directive)
@@ -378,6 +380,7 @@ export default function App() {
             running={running}
             result={result}
             goal={goal}
+            streamingText={streamingText}
             onDispatch={onDispatch}
             onStop={onStop}
             verification={verification}
