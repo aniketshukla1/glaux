@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
-import { MessageSquarePlus, MessageSquare, LayoutGrid, Settings as SettingsIcon, Palette, PanelLeft, Loader2, Keyboard } from 'lucide-react'
+import { MessageSquarePlus, MessageSquare, LayoutGrid, Settings as SettingsIcon, Palette, PanelLeft, Loader2, Keyboard, Download, Copy } from 'lucide-react'
+import { exportConversation, conversationToMarkdown } from './lib/export.js'
 import {
   getHealth, getLedger, getAgents, getSafety, setSafety, getApproval, setApproval,
   getAuth, dispatchTask, stopTask, getWorkspace, getSession, createSession, activateSession,
@@ -65,6 +66,7 @@ export default function App() {
   const [error, setError] = useState(null)
 
   const [workspace, setWorkspace] = useState({ projects: [], sessions: [], active_id: null })
+  const [wsLoading, setWsLoading] = useState(true)
   const [activeSession, setActiveSession] = useState(null)
   const [liveBlocks, setLiveBlocks] = useState([])
   const [goal, setGoal] = useState(null)
@@ -182,6 +184,7 @@ export default function App() {
 
   const loadWorkspace = useCallback(async () => {
     try { const w = await getWorkspace(); setWorkspace(w); return w } catch { return null }
+    finally { setWsLoading(false) }
   }, [])
 
   const loadSession = useCallback(async (id) => {
@@ -299,11 +302,15 @@ export default function App() {
       { id: 'sidebar', section: 'Actions', label: collapsed ? 'Expand sidebar' : 'Collapse sidebar', icon: PanelLeft, run: toggleCollapse },
       { id: 'help', section: 'Actions', label: 'Keyboard shortcuts', icon: Keyboard, run: () => setHelpOpen(true), keywords: 'keys hotkeys cheatsheet' },
       ...(user?.is_admin ? [{ id: 'messaging', section: 'Actions', label: 'Messaging gateways', icon: MessageSquare, run: () => setMessagingOpen(true), keywords: 'telegram discord slack whatsapp signal channels bot' }] : []),
+      ...(activeSession?.runs?.length ? [
+        { id: 'export', section: 'Actions', label: 'Export conversation (Markdown)', icon: Download, run: () => exportConversation(activeSession), keywords: 'download save share md file' },
+        { id: 'copy-convo', section: 'Actions', label: 'Copy conversation', icon: Copy, run: () => navigator.clipboard?.writeText(conversationToMarkdown(activeSession)), keywords: 'clipboard share markdown' },
+      ] : []),
       ...PALETTE_THEMES.map((t) => ({ id: `theme-${t}`, section: 'Theme', label: `Theme: ${t[0].toUpperCase()}${t.slice(1)}`, icon: Palette, run: () => setTheme(t), keywords: 'appearance color' })),
       ...(workspace.sessions || []).map((s) => ({ id: `sess-${s.id}`, section: 'Switch to', label: s.title, icon: MessageSquare, hint: s.id === workspace.active_id ? 'current' : '', run: () => selectSession(s.id), keywords: 'conversation chat open' })),
     ]
     return cmds
-  }, [workspace, collapsed, user])
+  }, [workspace, collapsed, user, activeSession])
 
   if (!authReady) {
     return <div className="min-h-screen grid place-items-center"><Loader2 className="w-6 h-6 animate-spin text-muted" /></div>
@@ -336,6 +343,7 @@ export default function App() {
         onDeleteProject={onDeleteProject}
         onMoveSession={onMoveSession}
         onPinSession={onPinSession}
+        loading={wsLoading}
       />
 
       <div className="flex-1 min-w-0 flex flex-col">

@@ -187,7 +187,7 @@ function SessionRow({ s, active, projects, onSelect, onRename, onDelete, onMove,
 
 export default function Sidebar({
   workspace, collapsed, onToggleCollapse, onSelectSession, onNewSession,
-  onRenameSession, onDeleteSession, onNewProject, onUpdateProject, onDeleteProject, onMoveSession, onPinSession,
+  onRenameSession, onDeleteSession, onNewProject, onUpdateProject, onDeleteProject, onMoveSession, onPinSession, loading,
 }) {
   const { projects = [], sessions = [], active_id } = workspace || {}
   const [openProjects, setOpenProjects] = useState({})
@@ -265,7 +265,13 @@ export default function Sidebar({
       </div>
 
       <div className="flex-1 overflow-y-auto px-2 pb-4 space-y-1">
-        {results !== null ? (
+        {loading ? (
+          <div className="space-y-1.5 px-1 pt-1">
+            {[80, 64, 72, 56, 68].map((w, i) => (
+              <div key={i} className="h-7 rounded-lg shimmer bg-line/8" style={{ width: `${w}%` }} />
+            ))}
+          </div>
+        ) : results !== null ? (
           results.length === 0 ? (
             <div className="px-2.5 py-6 text-center text-faint text-sm">{searching ? 'Searching…' : 'No matches'}</div>
           ) : (
@@ -327,6 +333,13 @@ export default function Sidebar({
             <div className="space-y-0.5">
               {ungrouped.map((s) => <SessionRow key={s.id} s={s} active={s.id === active_id} {...rowProps} />)}
             </div>
+          </div>
+        )}
+        {projects.length === 0 && sessions.length === 0 && (
+          <div className="px-3 py-10 text-center">
+            <MessageSquare className="w-7 h-7 text-faint/50 mx-auto mb-2.5" />
+            <p className="text-faint text-sm">No conversations yet.</p>
+            <p className="text-faint/70 text-xs mt-1">Start one with <span className="text-muted">New session</span>.</p>
           </div>
         )}
           </>
