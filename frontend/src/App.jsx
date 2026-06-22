@@ -391,7 +391,7 @@ export default function App() {
       <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} commands={commands} />
       <ShortcutsHelp open={helpOpen} onClose={() => setHelpOpen(false)} />
       <Messaging open={messagingOpen} onClose={() => setMessagingOpen(false)} />
-      <Studio open={studioOpen} onClose={() => setStudioOpen(false)} ledger={ledger} blocks={liveBlocks} onVerify={refresh} user={user} />
+      <Studio open={studioOpen} onClose={() => setStudioOpen(false)} ledger={ledger} blocks={liveBlocks} onVerify={refresh} user={user} onOpenMessaging={() => setMessagingOpen(true)} />
       <SettingsPanel
         open={settingsOpen} onClose={() => setSettingsOpen(false)}
         initialTab={settingsTab}

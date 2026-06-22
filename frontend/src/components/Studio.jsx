@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { Hammer, Plug, BarChart3, Activity, Database, Users, Link2, LayoutGrid, CalendarClock, UsersRound, X } from 'lucide-react'
+import { Hammer, Plug, BarChart3, Activity, Database, Users, Link2, LayoutGrid, CalendarClock, UsersRound, MessageSquare, X } from 'lucide-react'
 import Modal from './Modal.jsx'
 import SkillLibrary from './SkillLibrary.jsx'
 import McpPanel from './McpPanel.jsx'
@@ -23,9 +23,15 @@ const TABS = [
   { key: 'ledger', label: 'Ledger', Icon: Link2 },
 ]
 
-export default function Studio({ open, onClose, ledger, blocks, onVerify, user }) {
+export default function Studio({ open, onClose, ledger, blocks, onVerify, user, onOpenMessaging }) {
   const [tab, setTab] = useState('skills')
-  const tabs = user?.is_admin ? [...TABS, { key: 'team', label: 'Team', Icon: UsersRound }] : TABS
+  const tabs = user?.is_admin
+    ? [...TABS, { key: 'messaging', label: 'Messaging', Icon: MessageSquare }, { key: 'team', label: 'Team', Icon: UsersRound }]
+    : TABS
+  const onTab = (key) => {
+    if (key === 'messaging') { onClose(); onOpenMessaging?.() }  // opens its own full-screen modal
+    else setTab(key)
+  }
   return (
     <Modal open={open} onClose={onClose} className="max-w-6xl">
       <div className="flex items-center gap-2 px-5 py-3.5 border-b border-line/10 shrink-0">
@@ -37,7 +43,7 @@ export default function Studio({ open, onClose, ledger, blocks, onVerify, user }
       <div className="flex flex-1 min-h-0">
         <nav className="w-48 sm:w-52 shrink-0 border-r border-line/10 p-3 space-y-0.5 overflow-y-auto">
           {tabs.map(({ key, label, Icon }) => (
-            <button key={key} onClick={() => setTab(key)}
+            <button key={key} onClick={() => onTab(key)}
               className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition ${
                 tab === key ? 'text-fg bg-line/10 font-medium' : 'text-muted hover:text-fg hover:bg-line/5'
               }`}>
