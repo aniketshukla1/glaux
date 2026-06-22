@@ -137,6 +137,8 @@ function SessionRow({ s, active, projects, onSelect, onRename, onDelete, onMove,
 
   return (
     <div
+      draggable={!editing}
+      onDragStart={(e) => { e.dataTransfer.setData('text/athena-session', s.id); e.dataTransfer.effectAllowed = 'move' }}
       onClick={() => !editing && onSelect(s.id)}
       className={`group relative flex items-center gap-2 px-2.5 py-2 rounded-lg cursor-pointer text-sm transition ${
         active ? 'bg-line/10 text-fg' : 'text-muted hover:text-fg hover:bg-line/6'
@@ -197,6 +199,18 @@ export default function Sidebar({
   const [query, setQuery] = useState('')
   const [results, setResults] = useState(null)        // null = not searching
   const [searching, setSearching] = useState(false)
+  const [dragOver, setDragOver] = useState(undefined) // drop target: undefined=none, null=ungrouped, id=project
+
+  const dropProps = (pid) => ({
+    onDragOver: (e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; if (dragOver !== pid) setDragOver(pid) },
+    onDragLeave: (e) => { if (!e.currentTarget.contains(e.relatedTarget)) setDragOver((v) => (v === pid ? undefined : v)) },
+    onDrop: (e) => {
+      e.preventDefault()
+      const sid = e.dataTransfer.getData('text/athena-session')
+      if (sid) onMoveSession(sid, pid)
+      setDragOver(undefined)
+    },
+  })
 
   useEffect(() => {
     const q = query.trim()
@@ -303,7 +317,8 @@ export default function Sidebar({
           const open = openProjects[p.id] !== false
           const list = byProject(p.id)
           return (
-            <div key={p.id} className="mt-2">
+            <div key={p.id} {...dropProps(p.id)}
+              className={`mt-2 rounded-lg transition ${dragOver === p.id ? 'ring-1 ring-accent/50 bg-accent/5' : ''}`}>
               <div className="group flex items-center gap-1.5 px-1.5 py-1 text-xs uppercase tracking-wide text-faint">
                 <button onClick={() => setOpenProjects((o) => ({ ...o, [p.id]: !open }))} className="flex items-center gap-1.5 flex-1 min-w-0">
                   <ChevronDown className={`w-3 h-3 transition ${open ? '' : '-rotate-90'}`} />
@@ -328,7 +343,8 @@ export default function Sidebar({
         })}
 
         {ungrouped.length > 0 && (
-          <div className="mt-2">
+          <div {...dropProps(null)}
+            className={`mt-2 rounded-lg transition ${dragOver === null ? 'ring-1 ring-accent/50 bg-accent/5' : ''}`}>
             <div className="px-1.5 py-1 text-xs uppercase tracking-wide text-faint">Chats</div>
             <div className="space-y-0.5">
               {ungrouped.map((s) => <SessionRow key={s.id} s={s} active={s.id === active_id} {...rowProps} />)}
