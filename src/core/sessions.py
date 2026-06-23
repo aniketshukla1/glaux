@@ -48,6 +48,7 @@ class Run:
     created_at: str = ""
     model: str = ""  # the LLM model that produced this run (for per-turn metadata)
     canvas: Optional[dict] = None  # generative UI spec (A2UI), if the run produced one
+    sources: list = field(default_factory=list)  # [{url, title}] the run actually browsed (citations)
 
 
 @dataclass

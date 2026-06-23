@@ -15,7 +15,7 @@ from .mcp import (
     make_client,
 )
 from .protocol import CALL_AGENT, CALL_MCP, CALL_SKILL, FINISH, extract_json, parse_action
-from .web import default_browser_client, web_fetch, web_search
+from .web import begin_source_capture, collected_sources, default_browser_client, web_fetch, web_search
 from .reflector import Reflector, Verdict
 from .router import Plan, Router, Step
 from .specialists import SPECIALISTS, build_specialists, coder_agent, make_specialist, researcher_agent

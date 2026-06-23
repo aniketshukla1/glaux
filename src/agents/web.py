@@ -12,6 +12,7 @@ than crashing the agent loop.
 
 from __future__ import annotations
 
+import contextvars
 import html
 import re
 import urllib.error
@@ -20,6 +21,37 @@ import urllib.request
 from html.parser import HTMLParser
 
 from .mcp import LocalMCPClient
+
+# Per-task source capture. run_task starts a bucket before the swarm runs; the
+# web tools record every page they read / surface into it (it propagates into
+# the worker thread the swarm runs in via contextvars). The result then carries
+# real citations — sources are never fabricated, only what was actually visited.
+_sources: contextvars.ContextVar = contextvars.ContextVar("athena_web_sources", default=None)
+
+
+def begin_source_capture() -> list:
+    """Start a fresh source bucket for the current logical task; returns it."""
+    bucket: list = []
+    _sources.set(bucket)
+    return bucket
+
+
+def collected_sources() -> list:
+    bucket = _sources.get()
+    return list(bucket) if bucket else []
+
+
+def _record_source(url: str, title: str = "") -> None:
+    bucket = _sources.get()
+    if bucket is None or not url:
+        return
+    for s in bucket:
+        if s["url"] == url:
+            if title and not s.get("title"):
+                s["title"] = title
+            return
+    if len(bucket) < 50:
+        bucket.append({"url": url, "title": title or ""})
 
 USER_AGENT = "Mozilla/5.0 (compatible; AthenaAgent/1.0; +https://athena.local)"
 _MAX_BYTES = 2_000_000   # don't read unbounded pages into memory
@@ -118,6 +150,7 @@ def web_fetch(url: str) -> dict:
         title = ""
         text = body.strip()
 
+    _record_source(final_url, title)
     truncated = len(text) > _MAX_TEXT
     return {
         "url": final_url,
@@ -172,6 +205,8 @@ def web_search(query: str, limit: int = 5) -> dict:
 
     if not results:
         return {"query": query, "results": [], "note": "no results — search may be rate-limited or blocked"}
+    for r in results:
+        _record_source(r["url"], r["title"])
     return {"query": query, "results": results}
 
 

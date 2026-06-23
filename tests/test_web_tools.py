@@ -10,7 +10,7 @@ import urllib.error
 import pytest
 
 from agents import default_browser_client
-from agents.web import web_fetch, web_search
+from agents.web import begin_source_capture, collected_sources, web_fetch, web_search
 
 
 _PAGE = """
@@ -100,3 +100,27 @@ def test_browser_client_registers_tools_and_wraps_errors(monkeypatch):
     monkeypatch.setattr("agents.web._http_get", boom)
     bad = client.call_tool("web_fetch", {"url": "x.test"})
     assert bad["ok"] is False and "could not reach" in bad["error"]
+
+
+def test_source_capture_records_fetched_and_searched(monkeypatch):
+    begin_source_capture()
+    monkeypatch.setattr("agents.web._http_get", lambda url, timeout=15.0: ("https://x.test/", "text/html", _PAGE))
+    web_fetch("x.test")
+    monkeypatch.setattr("agents.web._http_get", lambda url, timeout=15.0: ("u", "text/html", _LITE))
+    web_search("ed25519", limit=5)
+    urls = [s["url"] for s in collected_sources()]
+    assert "https://x.test/" in urls
+    assert "https://en.wikipedia.org/wiki/EdDSA" in urls
+    # the fetched page carried its title through
+    fetched = next(s for s in collected_sources() if s["url"] == "https://x.test/")
+    assert fetched["title"] == "Ada Lovelace"
+
+
+def test_source_capture_dedupes_and_is_noop_without_session(monkeypatch):
+    # No capture started → recording is a harmless no-op (no crash, nothing kept).
+    monkeypatch.setattr("agents.web._http_get", lambda url, timeout=15.0: ("https://x.test/", "text/html", _PAGE))
+    web_fetch("x.test")  # outside any capture
+    begin_source_capture()
+    web_fetch("x.test")
+    web_fetch("x.test")  # same url twice → deduped
+    assert [s["url"] for s in collected_sources()] == ["https://x.test/"]

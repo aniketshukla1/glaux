@@ -11,6 +11,10 @@ function runToMarkdown(run) {
   if (c.total_tokens) bits.push(`${c.total_tokens.toLocaleString()} tokens`)
   if (c.usd) bits.push(`$${Number(c.usd).toFixed(4)}`)
   if (bits.length) out.push(`\n*${bits.join(' · ')}*`)
+  if (run.sources?.length) {
+    out.push('\n**Sources**')
+    run.sources.forEach((s, i) => out.push(`${i + 1}. [${s.title || s.url}](${s.url})`))
+  }
   return out.join('\n')
 }
 

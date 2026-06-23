@@ -61,7 +61,9 @@ from agents import (
     Reflector,
     Router,
     Swarm,
+    begin_source_capture,
     build_specialists,
+    collected_sources,
     default_browser_client,
     default_local_client,
 )
@@ -1003,6 +1005,7 @@ async def run_task(req: TaskRequest) -> dict:
     def _on_token(t: str) -> None:
         WS.publish({"type": "token", "text": t, "uid": uid})  # streamed final answer
 
+    begin_source_capture()  # collect any web pages the swarm browses → citations
     t0 = time.monotonic()
     try:
         result = await run_in_threadpool(
@@ -1024,6 +1027,7 @@ async def run_task(req: TaskRequest) -> dict:
     finally:
         WS.publish({"type": "token_end", "uid": uid})  # tell clients the stream is done
     elapsed = time.monotonic() - t0
+    sources = collected_sources()  # web pages the swarm actually browsed this run
     new_blocks = [STATE.ledger.block(i) for i in range(before, len(STATE.ledger))]
 
     outcome = (
@@ -1063,6 +1067,7 @@ async def run_task(req: TaskRequest) -> dict:
             created_at="",
             model=model_id,
             canvas=result.canvas,
+            sources=sources,
         ),
         session_id=req.session_id,
     )
@@ -1073,6 +1078,7 @@ async def run_task(req: TaskRequest) -> dict:
         "model": model_id,
         "cancelled": result.cancelled,
         "canvas": result.canvas,
+        "sources": sources,
         "budget_halt": result.budget_halt,
         "synthesized": result.synthesized,
         "plan": [s.to_dict() for s in result.plan.steps],
