@@ -1,10 +1,10 @@
 import React from 'react'
-import { Sun, Moon, Settings, LayoutGrid, ShieldCheck, Search } from 'lucide-react'
+import { Sun, Moon, Settings, LayoutGrid, ShieldCheck, Search, Mic } from 'lucide-react'
 import UserAvatar from './UserAvatar.jsx'
 import ModelSwitcher from './ModelSwitcher.jsx'
 import PersonaPicker from './PersonaPicker.jsx'
 
-export default function TopBar({ title, theme, onToggleTheme, onOpenStudio, onOpenSettings, onOpenPalette, verified, health, user, onOpenAccount, onModelChanged, onOpenModel, personas, activePersonaId, onPickPersona, onManagePersonas }) {
+export default function TopBar({ title, theme, onToggleTheme, onOpenStudio, onOpenSettings, onOpenPalette, verified, health, user, onOpenAccount, onModelChanged, onOpenModel, personas, activePersonaId, onPickPersona, onManagePersonas, wakeSupported, wakeOn, onToggleWake }) {
   const live = health?.live
 
   return (
@@ -31,6 +31,15 @@ export default function TopBar({ title, theme, onToggleTheme, onOpenStudio, onOp
           <Search className="w-4 h-4" />
           <kbd className="text-[10px] text-faint">⌘K</kbd>
         </button>
+        {wakeSupported && (
+          <button onClick={onToggleWake} aria-pressed={wakeOn}
+            className={`btn p-2 relative ${wakeOn ? 'text-accent border-accent/40 bg-accent/10' : ''}`}
+            aria-label={wakeOn ? 'Turn off hands-free' : 'Turn on hands-free (say “Hey Athena”)'}
+            title={wakeOn ? 'Hands-free is on — say “Hey Athena”' : 'Hands-free voice — say “Hey Athena”'}>
+            <Mic className="w-4 h-4" />
+            {wakeOn && <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-accent animate-pulse" />}
+          </button>
+        )}
         <button onClick={onToggleTheme} className="btn p-2" aria-label="Toggle theme">
           {theme === 'light' ? <Moon className="w-4 h-4" /> : <Sun className="w-4 h-4" />}
         </button>

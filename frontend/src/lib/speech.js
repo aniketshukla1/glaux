@@ -31,6 +31,58 @@ export function createRecognizer({ onResult, onError, onEnd, lang = 'en-US' } = 
   return rec
 }
 
+// Always-listening wake-word listener. Runs a *continuous* recognizer that scans
+// finalized speech for a wake phrase ("Hey Athena …"). If the wake word is
+// followed by a command in the same breath, it fires onCommand immediately;
+// otherwise it arms and the next utterance becomes the command. Continuous
+// recognizers time out on their own, so onend auto-restarts until stop().
+const DEFAULT_WAKE = ['hey athena', 'hi athena', 'okay athena', 'ok athena', 'hey athene', 'athena']
+
+export function createWakeListener({ wakeWords = DEFAULT_WAKE, onWake, onCommand, onStatus, onError, lang = 'en-US' } = {}) {
+  if (!recognitionSupported()) return null
+  let rec = null, running = false, stopped = true, armed = false, restartT = null
+
+  // Detect the wake phrase case-insensitively but return the *original-cased*
+  // remainder, so "Hey Athena, compare Redis and Memcached" dispatches with
+  // proper nouns intact (not a flattened lowercase string).
+  const matchWake = (s) => {
+    const text = s || ''
+    for (const w of wakeWords) {
+      const re = new RegExp('\\b' + w.replace(/\s+/g, '\\s+') + '\\b[\\s,.:;!?-]*', 'i')
+      const m = text.match(re)
+      if (m) return text.slice(m.index + m[0].length).trim()
+    }
+    return null  // no wake word present
+  }
+  const handleFinal = (text) => {
+    if (armed) { armed = false; const c = text.trim(); if (c) onCommand && onCommand(c); else onStatus && onStatus('listening'); return }
+    const rest = matchWake(text)
+    if (rest === null) return
+    onWake && onWake()
+    if (rest) onCommand && onCommand(rest)
+    else { armed = true; onStatus && onStatus('armed') }
+  }
+  const build = () => {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition
+    rec = new SR(); rec.lang = lang; rec.continuous = true; rec.interimResults = true
+    rec.onresult = (e) => { for (let i = e.resultIndex; i < e.results.length; i++) if (e.results[i].isFinal) handleFinal(e.results[i][0].transcript) }
+    rec.onerror = (e) => {
+      const err = e.error || 'error'
+      if (err === 'not-allowed' || err === 'service-not-allowed') { stopped = true; armed = false; onStatus && onStatus('denied'); onError && onError(err) }
+      // no-speech / aborted / network: let onend auto-restart
+    }
+    rec.onend = () => {
+      running = false
+      if (!stopped) restartT = setTimeout(() => { try { rec.start(); running = true } catch { /* already running */ } }, 250)
+      else onStatus && onStatus('off')
+    }
+  }
+  return {
+    start() { stopped = false; armed = false; if (!rec) build(); if (!running) { try { rec.start(); running = true; onStatus && onStatus('listening') } catch { /* already running */ } } },
+    stop() { stopped = true; armed = false; clearTimeout(restartT); try { rec && rec.stop() } catch { /* not started */ } },
+  }
+}
+
 export function speak(text, { onEnd, rate = 1.0 } = {}) {
   if (!ttsSupported() || !text) return false
   window.speechSynthesis.cancel()

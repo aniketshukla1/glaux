@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
-import { MessageSquarePlus, MessageSquare, LayoutGrid, Settings as SettingsIcon, Palette, PanelLeft, Loader2, Keyboard, Download, Copy } from 'lucide-react'
+import { MessageSquarePlus, MessageSquare, LayoutGrid, Settings as SettingsIcon, Palette, PanelLeft, Loader2, Keyboard, Download, Copy, Mic } from 'lucide-react'
 import { exportConversation, conversationToMarkdown } from './lib/export.js'
 import {
   getHealth, getLedger, getAgents, getSafety, setSafety, getApproval, setApproval,
@@ -18,6 +18,8 @@ import CommandPalette from './components/CommandPalette.jsx'
 import AuthScreen from './components/AuthScreen.jsx'
 import ShortcutsHelp from './components/ShortcutsHelp.jsx'
 import Messaging from './components/Messaging.jsx'
+import VoiceWake from './components/VoiceWake.jsx'
+import { recognitionSupported } from './lib/speech.js'
 
 const PALETTE_THEMES = ['dark', 'light', 'oled', 'midnight', 'nord', 'ember']
 
@@ -48,6 +50,8 @@ export default function App() {
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [helpOpen, setHelpOpen] = useState(false)
   const [messagingOpen, setMessagingOpen] = useState(false)
+  const [wakeOn, setWakeOn] = useState(() => localStorage.getItem('athena-wake') === '1')
+  useEffect(() => { localStorage.setItem('athena-wake', wakeOn ? '1' : '0') }, [wakeOn])
 
   // accounts / auth
   const [user, setUser] = useState(null)
@@ -301,6 +305,7 @@ export default function App() {
       { id: 'settings', section: 'Actions', label: 'Open Settings', icon: SettingsIcon, run: () => setSettingsOpen(true), keywords: 'model safety approval' },
       { id: 'sidebar', section: 'Actions', label: collapsed ? 'Expand sidebar' : 'Collapse sidebar', icon: PanelLeft, run: toggleCollapse },
       { id: 'help', section: 'Actions', label: 'Keyboard shortcuts', icon: Keyboard, run: () => setHelpOpen(true), keywords: 'keys hotkeys cheatsheet' },
+      ...(recognitionSupported() ? [{ id: 'wake', section: 'Actions', label: wakeOn ? 'Turn off hands-free voice' : 'Turn on hands-free voice', icon: Mic, run: () => setWakeOn((v) => !v), keywords: 'voice wake word hey athena dictation listen microphone' }] : []),
       ...(user?.is_admin ? [{ id: 'messaging', section: 'Actions', label: 'Messaging gateways', icon: MessageSquare, run: () => setMessagingOpen(true), keywords: 'telegram discord slack whatsapp signal channels bot' }] : []),
       ...(activeSession?.runs?.length ? [
         { id: 'export', section: 'Actions', label: 'Export conversation (Markdown)', icon: Download, run: () => exportConversation(activeSession), keywords: 'download save share md file' },
@@ -365,6 +370,9 @@ export default function App() {
             activePersonaId={activeSession?.persona_id}
             onPickPersona={onSetSessionPersona}
             onManagePersonas={() => openSettings('personas')}
+            wakeSupported={recognitionSupported()}
+            wakeOn={wakeOn}
+            onToggleWake={() => setWakeOn((v) => !v)}
           />
           {error && (
             <div className="glass p-3 mb-4 text-sm" style={{ borderColor: 'rgb(244 63 94 / 0.4)', color: 'rgb(251 113 133)' }}>
@@ -399,6 +407,7 @@ export default function App() {
       <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} commands={commands} />
       <ShortcutsHelp open={helpOpen} onClose={() => setHelpOpen(false)} />
       <Messaging open={messagingOpen} onClose={() => setMessagingOpen(false)} />
+      <VoiceWake enabled={wakeOn} running={running} result={result} onDispatch={onDispatch} onDisable={() => setWakeOn(false)} />
       <Studio open={studioOpen} onClose={() => setStudioOpen(false)} ledger={ledger} blocks={liveBlocks} onVerify={refresh} user={user} onOpenMessaging={() => setMessagingOpen(true)} />
       <SettingsPanel
         open={settingsOpen} onClose={() => setSettingsOpen(false)}
