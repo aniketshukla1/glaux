@@ -9,6 +9,7 @@ import SwarmGraph from './SwarmGraph.jsx'
 import ConstellationSphere from './ConstellationSphere.jsx'
 import Canvas from './Canvas.jsx'
 import Sources from './Sources.jsx'
+import { extractPdfText } from '../lib/pdf.js'
 import Markdown from './Markdown.jsx'
 import { ROLE_META, short, buildTimeline } from '../lib/blocks.js'
 import { recognitionSupported, createRecognizer, ttsSupported, speak, stopSpeaking } from '../lib/speech.js'
@@ -250,8 +251,9 @@ const SLASH_COMMANDS = [
 const TEXT_EXT = /\.(txt|md|markdown|json|ya?ml|csv|tsv|log|py|js|jsx|ts|tsx|java|c|h|cpp|cc|go|rs|rb|php|sh|bash|zsh|sql|html|css|scss|xml|toml|ini|cfg|conf|env|dockerfile|makefile)$/i
 const isTextFile = (f) => (f.type && (f.type.startsWith('text/') || /json|xml|yaml|javascript|csv/.test(f.type))) || TEXT_EXT.test(f.name)
 const isDocx = (f) => /\.docx$/i.test(f.name) || f.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-const MAX_FILE = 4 * 1024 * 1024  // 4 MB
-const MAX_TEXT = 200_000          // cap extracted text fed to the model
+const isPdf = (f) => /\.pdf$/i.test(f.name) || f.type === 'application/pdf'
+const MAX_FILE = 12 * 1024 * 1024  // 12 MB (PDFs run large)
+const MAX_TEXT = 200_000           // cap extracted text fed to the model
 
 // A binary file decoded as UTF-8 is full of U+FFFD / NUL — never feed that to the model.
 function looksBinary(s) {
@@ -365,7 +367,12 @@ function Composer({ onDispatch, hero, running, onStop, recipes = [] }) {
     for (const f of Array.from(files)) {
       if (f.size > MAX_FILE) { out.push({ name: f.name, error: 'too large' }); continue }
       try {
-        if (isDocx(f)) {
+        if (isPdf(f)) {
+          let content = await extractPdfText(f)
+          if (!content) { out.push({ name: f.name, error: 'no selectable text (scanned?)' }); continue }
+          if (content.length > MAX_TEXT) content = content.slice(0, MAX_TEXT) + '\n…[truncated]'
+          out.push({ name: f.name, content })
+        } else if (isDocx(f)) {
           let content = await extractDocxText(f)
           if (!content) { out.push({ name: f.name, error: 'empty document' }); continue }
           if (content.length > MAX_TEXT) content = content.slice(0, MAX_TEXT) + '\n…[truncated]'
@@ -376,7 +383,7 @@ function Composer({ onDispatch, hero, running, onStop, recipes = [] }) {
           if (content.length > MAX_TEXT) content = content.slice(0, MAX_TEXT) + '\n…[truncated]'
           out.push({ name: f.name, content })
         } else {
-          out.push({ name: f.name, error: 'text, code & .docx only' })
+          out.push({ name: f.name, error: 'text, code, .docx & .pdf only' })
         }
       } catch { out.push({ name: f.name, error: 'could not read' }) }
     }
@@ -470,11 +477,11 @@ function Composer({ onDispatch, hero, running, onStop, recipes = [] }) {
             autoFocus={hero}
           />
           <input ref={fileRef} type="file" multiple className="hidden"
-            accept=".txt,.md,.markdown,.json,.csv,.tsv,.log,.py,.js,.jsx,.ts,.tsx,.java,.c,.h,.cpp,.go,.rs,.rb,.php,.sh,.sql,.html,.css,.scss,.xml,.yml,.yaml,.toml,.ini,.docx,text/*"
+            accept=".txt,.md,.markdown,.json,.csv,.tsv,.log,.py,.js,.jsx,.ts,.tsx,.java,.c,.h,.cpp,.go,.rs,.rb,.php,.sh,.sql,.html,.css,.scss,.xml,.yml,.yaml,.toml,.ini,.docx,.pdf,application/pdf,text/*"
             onChange={(e) => { addFiles(e.target.files); e.target.value = '' }} />
           <button type="button" onClick={() => fileRef.current?.click()}
             className="p-2 rounded-lg border border-line/16 text-muted hover:text-fg transition shrink-0"
-            aria-label="Attach files" title="Attach text, code or Word (.docx) files">
+            aria-label="Attach files" title="Attach text, code, Word (.docx) or PDF files">
             <Paperclip className="w-4 h-4" />
           </button>
           {recognitionSupported() && (
