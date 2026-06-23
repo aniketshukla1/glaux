@@ -1408,6 +1408,13 @@ class PersonaRequest(BaseModel):
     emoji: Optional[str] = None
 
 
+class RecipeRequest(BaseModel):
+    name: str
+    prompt: Optional[str] = None
+    description: Optional[str] = None
+    emoji: Optional[str] = None
+
+
 @app.get("/api/workspace")
 def get_workspace() -> dict:
     return STATE.sessions.tree()
@@ -1430,6 +1437,26 @@ def update_persona(persona_id: str, req: PersonaRequest) -> dict:
 def delete_persona(persona_id: str) -> dict:
     if not STATE.sessions.delete_persona(persona_id):
         raise HTTPException(status_code=404, detail=f"unknown persona {persona_id!r}")
+    return {"ok": True, **STATE.sessions.tree()}
+
+
+@app.post("/api/recipes")
+def create_recipe(req: RecipeRequest) -> dict:
+    return {"recipe": STATE.sessions.create_recipe(req.name, req.prompt or "", req.description or "", req.emoji or "📋")}
+
+
+@app.patch("/api/recipes/{recipe_id}")
+def update_recipe(recipe_id: str, req: RecipeRequest) -> dict:
+    r = STATE.sessions.update_recipe(recipe_id, name=req.name, prompt=req.prompt, description=req.description, emoji=req.emoji)
+    if r is None:
+        raise HTTPException(status_code=404, detail=f"unknown recipe {recipe_id!r}")
+    return {"recipe": r}
+
+
+@app.delete("/api/recipes/{recipe_id}")
+def delete_recipe(recipe_id: str) -> dict:
+    if not STATE.sessions.delete_recipe(recipe_id):
+        raise HTTPException(status_code=404, detail=f"unknown recipe {recipe_id!r}")
     return {"ok": True, **STATE.sessions.tree()}
 
 

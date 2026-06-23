@@ -179,6 +179,10 @@ export const createPersona = (name, instructions, emoji) =>
   request('POST', '/api/personas', { name, instructions: instructions || null, emoji: emoji || null })
 export const updatePersona = (id, patch) => request('PATCH', `/api/personas/${encodeURIComponent(id)}`, patch)
 export const deletePersona = (id) => request('DELETE', `/api/personas/${encodeURIComponent(id)}`)
+export const createRecipe = (data) =>
+  request('POST', '/api/recipes', { name: data.name, prompt: data.prompt || null, description: data.description || null, emoji: data.emoji || null })
+export const updateRecipe = (id, patch) => request('PATCH', `/api/recipes/${encodeURIComponent(id)}`, patch)
+export const deleteRecipe = (id) => request('DELETE', `/api/recipes/${encodeURIComponent(id)}`)
 export const createProject = (name, instructions) =>
   request('POST', '/api/projects', { name, instructions: instructions || null })
 export const updateProject = (id, patch) => request('PATCH', `/api/projects/${encodeURIComponent(id)}`, patch)

@@ -1,11 +1,12 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
-import { MessageSquarePlus, MessageSquare, LayoutGrid, Settings as SettingsIcon, Palette, PanelLeft, Loader2, Keyboard, Download, Copy, Mic } from 'lucide-react'
+import { MessageSquarePlus, MessageSquare, LayoutGrid, Settings as SettingsIcon, Palette, PanelLeft, Loader2, Keyboard, Download, Copy, Mic, BookMarked } from 'lucide-react'
 import { exportConversation, conversationToMarkdown } from './lib/export.js'
 import {
   getHealth, getLedger, getAgents, getSafety, setSafety, getApproval, setApproval,
   getAuth, dispatchTask, stopTask, getWorkspace, getSession, createSession, activateSession,
   updateSession, deleteSession, pinSession, createProject, updateProject, deleteProject,
   createPersona, updatePersona, deletePersona,
+  createRecipe, updateRecipe, deleteRecipe,
   getAuthState, updateProfile, changePassword, logoutEverywhere, deleteAccount,
   getToken, setToken, clearToken, verifyEmail, resendVerification,
 } from './api.js'
@@ -271,6 +272,9 @@ export default function App() {
   const onCreatePersona = async (data) => { await createPersona(data.name, data.instructions, data.emoji); await loadWorkspace() }
   const onUpdatePersona = async (id, data) => { await updatePersona(id, data); await loadWorkspace() }
   const onDeletePersona = async (id) => { try { const res = await deletePersona(id); setWorkspace(res) } catch { /* ignore */ } }
+  const onCreateRecipe = async (data) => { await createRecipe(data); await loadWorkspace() }
+  const onUpdateRecipe = async (id, data) => { await updateRecipe(id, data); await loadWorkspace() }
+  const onDeleteRecipe = async (id) => { try { const res = await deleteRecipe(id); setWorkspace(res) } catch { /* ignore */ } }
   const onSetSessionPersona = async (personaId) => {
     if (!activeSession) return
     try { await updateSession(activeSession.id, { persona_id: personaId }) } catch { /* ignore */ }
@@ -305,6 +309,7 @@ export default function App() {
       { id: 'settings', section: 'Actions', label: 'Open Settings', icon: SettingsIcon, run: () => setSettingsOpen(true), keywords: 'model safety approval' },
       { id: 'sidebar', section: 'Actions', label: collapsed ? 'Expand sidebar' : 'Collapse sidebar', icon: PanelLeft, run: toggleCollapse },
       { id: 'help', section: 'Actions', label: 'Keyboard shortcuts', icon: Keyboard, run: () => setHelpOpen(true), keywords: 'keys hotkeys cheatsheet' },
+      { id: 'recipes', section: 'Actions', label: 'Recipes', icon: BookMarked, run: () => openSettings('recipes'), keywords: 'workflow template saved prompt task' },
       ...(recognitionSupported() ? [{ id: 'wake', section: 'Actions', label: wakeOn ? 'Turn off hands-free voice' : 'Turn on hands-free voice', icon: Mic, run: () => setWakeOn((v) => !v), keywords: 'voice wake word hey athena dictation listen microphone' }] : []),
       ...(user?.is_admin ? [{ id: 'messaging', section: 'Actions', label: 'Messaging gateways', icon: MessageSquare, run: () => setMessagingOpen(true), keywords: 'telegram discord slack whatsapp signal channels bot' }] : []),
       ...(activeSession?.runs?.length ? [
@@ -400,6 +405,7 @@ export default function App() {
             onDispatch={onDispatch}
             onStop={onStop}
             verification={verification}
+            recipes={workspace.recipes || []}
           />
         </main>
       </div>
@@ -426,6 +432,10 @@ export default function App() {
         onCreatePersona={onCreatePersona}
         onUpdatePersona={onUpdatePersona}
         onDeletePersona={onDeletePersona}
+        recipes={workspace.recipes || []}
+        onCreateRecipe={onCreateRecipe}
+        onUpdateRecipe={onUpdateRecipe}
+        onDeleteRecipe={onDeleteRecipe}
       />
     </div>
   )

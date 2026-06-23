@@ -316,7 +316,7 @@ async function extractDocxText(file) {
   throw new Error('no document body')
 }
 
-function Composer({ onDispatch, hero, running, onStop }) {
+function Composer({ onDispatch, hero, running, onStop, recipes = [] }) {
   const [input, setInput] = useState('')
   const [listening, setListening] = useState(false)
   const [attachments, setAttachments] = useState([])  // { name, content?, error? }
@@ -327,18 +327,38 @@ function Composer({ onDispatch, hero, running, onStop }) {
   const fileRef = useRef(null)
 
   const slashQuery = /^\/[a-z0-9-]*$/i.test(input) ? input.slice(1).toLowerCase() : null
-  const byCmd = slashQuery === null ? [] : SLASH_COMMANDS.filter((c) => c.cmd.startsWith(slashQuery))
-  const slashMatches = slashQuery === null ? []
-    : byCmd.length ? byCmd : SLASH_COMMANDS.filter((c) => c.label.toLowerCase().includes(slashQuery))
-  const slashOpen = slashMatches.length > 0
+  const cmdMatches = slashQuery === null ? [] : (() => {
+    const byCmd = SLASH_COMMANDS.filter((c) => c.cmd.startsWith(slashQuery))
+    return byCmd.length ? byCmd : SLASH_COMMANDS.filter((c) => c.label.toLowerCase().includes(slashQuery))
+  })()
+  const recipeMatches = slashQuery === null ? []
+    : (recipes || []).filter((r) => !slashQuery
+        || (r.name || '').toLowerCase().includes(slashQuery)
+        || (r.description || '').toLowerCase().includes(slashQuery)).slice(0, 6)
+  // flat list for keyboard navigation: commands first, then recipes
+  const slashItems = [
+    ...cmdMatches.map((c) => ({ type: 'cmd', command: c })),
+    ...recipeMatches.map((r) => ({ type: 'recipe', recipe: r })),
+  ]
+  const slashOpen = slashItems.length > 0
 
   const autoGrow = () => {
     const el = taRef.current
     if (el) { el.style.height = 'auto'; el.style.height = `${Math.min(el.scrollHeight, 200)}px` }
   }
-  const pickSlash = (c) => {
-    setInput(c.template); setSlashIdx(0)
-    requestAnimationFrame(() => { autoGrow(); const el = taRef.current; if (el) { el.focus(); el.setSelectionRange(c.template.length, c.template.length) } })
+  const setComposerText = (text, selectPlaceholder = false) => {
+    setInput(text); setSlashIdx(0)
+    requestAnimationFrame(() => {
+      autoGrow(); const el = taRef.current; if (!el) return; el.focus()
+      const m = selectPlaceholder && text.match(/\{\{\s*[^}]+\s*\}\}/)
+      if (m) el.setSelectionRange(m.index, m.index + m[0].length)
+      else el.setSelectionRange(text.length, text.length)
+    })
+  }
+  const pickItem = (item) => {
+    if (!item) return
+    if (item.type === 'cmd') setComposerText(item.command.template)
+    else setComposerText(item.recipe.prompt || '', true)
   }
   const addFiles = async (files) => {
     const out = []
@@ -374,10 +394,10 @@ function Composer({ onDispatch, hero, running, onStop }) {
   const submit = (e) => { e.preventDefault(); send() }
   const onKeyDown = (e) => {
     if (slashOpen) {
-      const pick = () => pickSlash(slashMatches[Math.min(slashIdx, slashMatches.length - 1)])
-      if (e.key === 'ArrowDown') { e.preventDefault(); setSlashIdx((i) => (i + 1) % slashMatches.length); return }
-      if (e.key === 'ArrowUp') { e.preventDefault(); setSlashIdx((i) => (i - 1 + slashMatches.length) % slashMatches.length); return }
-      if ((e.key === 'Enter' && !e.shiftKey) || e.key === 'Tab') { e.preventDefault(); pick(); return }
+      const n = slashItems.length
+      if (e.key === 'ArrowDown') { e.preventDefault(); setSlashIdx((i) => (i + 1) % n); return }
+      if (e.key === 'ArrowUp') { e.preventDefault(); setSlashIdx((i) => (i - 1 + n) % n); return }
+      if ((e.key === 'Enter' && !e.shiftKey) || e.key === 'Tab') { e.preventDefault(); pickItem(slashItems[Math.min(slashIdx, n - 1)]); return }
       if (e.key === 'Escape') { e.preventDefault(); setInput(''); return }
     }
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send() }
@@ -399,16 +419,28 @@ function Composer({ onDispatch, hero, running, onStop }) {
       onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) setDragOver(false) }}
       onDrop={(e) => { if (e.dataTransfer.files?.length) { e.preventDefault(); setDragOver(false); addFiles(e.dataTransfer.files) } }}>
       {slashOpen && (
-        <div className="absolute bottom-full mb-2 left-0 right-0 card p-1.5 shadow-2xl z-20 max-h-72 overflow-y-auto">
-          <div className="px-2 py-1 text-xs text-faint">Commands · ↑↓ to move, ↵ to insert</div>
-          {slashMatches.map((c, i) => (
-            <button type="button" key={c.cmd} onMouseEnter={() => setSlashIdx(i)} onClick={() => pickSlash(c)}
+        <div className="absolute bottom-full mb-2 left-0 right-0 card p-1.5 shadow-2xl z-20 max-h-80 overflow-y-auto">
+          {cmdMatches.length > 0 && <div className="px-2 py-1 text-xs text-faint">Commands · ↑↓ to move, ↵ to insert</div>}
+          {cmdMatches.map((c, i) => (
+            <button type="button" key={`c-${c.cmd}`} onMouseEnter={() => setSlashIdx(i)} onClick={() => pickItem(slashItems[i])}
               className={`w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-left transition ${i === slashIdx ? 'bg-line/10' : 'hover:bg-line/5'}`}>
               <span className="text-accent text-sm font-mono shrink-0">/{c.cmd}</span>
               <span className="text-fg text-sm">{c.label}</span>
               <span className="text-faint text-xs ml-auto truncate hidden sm:block">{c.desc}</span>
             </button>
           ))}
+          {recipeMatches.length > 0 && <div className="px-2 py-1 mt-0.5 text-xs text-faint">Recipes</div>}
+          {recipeMatches.map((r, j) => {
+            const i = cmdMatches.length + j
+            return (
+              <button type="button" key={`r-${r.id}`} onMouseEnter={() => setSlashIdx(i)} onClick={() => pickItem(slashItems[i])}
+                className={`w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-left transition ${i === slashIdx ? 'bg-line/10' : 'hover:bg-line/5'}`}>
+                <span className="text-base shrink-0 w-5 text-center">{r.emoji || '📋'}</span>
+                <span className="text-fg text-sm truncate">{r.name}</span>
+                {r.description && <span className="text-faint text-xs ml-auto truncate hidden sm:block">{r.description}</span>}
+              </button>
+            )
+          })}
         </div>
       )}
       <div className={`glass rounded-xl p-1.5 transition ${dragOver ? 'ring-2 ring-accent/60' : ''}`}>
@@ -467,7 +499,7 @@ function Composer({ onDispatch, hero, running, onStop }) {
   )
 }
 
-export default function RunView({ session, blocks, roleOf, running, result, goal, streamingText, onDispatch, onStop, verification }) {
+export default function RunView({ session, blocks, roleOf, running, result, goal, streamingText, onDispatch, onStop, verification, recipes }) {
   const runs = session?.runs || []
   const liveTurn = running || result || (blocks && blocks.length > 0)
   const hasContent = runs.length > 0 || liveTurn
@@ -492,7 +524,7 @@ export default function RunView({ session, blocks, roleOf, running, result, goal
         <ConstellationSphere size={300} />
         <h1 className="text-fg text-2xl font-medium tracking-tight -mt-4">What should Athena do?</h1>
         <p className="text-muted text-sm mt-2.5 max-w-md">Describe a goal. A swarm of agents plans it, does it, and proves every step.</p>
-        <Composer onDispatch={onDispatch} hero running={running} onStop={onStop} />
+        <Composer onDispatch={onDispatch} hero running={running} onStop={onStop} recipes={recipes} />
         <div className="flex flex-wrap justify-center gap-2 mt-5 max-w-2xl">
           {EXAMPLES.map((ex) => (
             <button key={ex} onClick={() => onDispatch(ex)} className="text-xs px-3 py-1.5 rounded-full border border-line/15 text-muted hover:text-fg hover:border-line/30 transition">{ex}</button>
@@ -507,7 +539,7 @@ export default function RunView({ session, blocks, roleOf, running, result, goal
       <div className="flex-1 w-full max-w-5xl mx-auto px-5 sm:px-8 pt-4 pb-6 space-y-6">
         {runs.map((run) => (
           <Turn key={run.id} directive={run.directive} blocks={run.blocks} roleOf={roleOf}
-            result={{ success: run.success, final: run.final, cost: run.cost, model: run.model, canvas: run.canvas }}
+            result={{ success: run.success, final: run.final, cost: run.cost, model: run.model, canvas: run.canvas, sources: run.sources }}
             createdAt={run.created_at} verification={run.verification} onDispatch={onDispatch} />
         ))}
         {liveTurn && (
@@ -526,7 +558,7 @@ export default function RunView({ session, blocks, roleOf, running, result, goal
             </button>
           </div>
         )}
-        <Composer onDispatch={onDispatch} running={running} onStop={onStop} />
+        <Composer onDispatch={onDispatch} running={running} onStop={onStop} recipes={recipes} />
       </div>
     </div>
   )

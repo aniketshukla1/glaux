@@ -81,12 +81,25 @@ class Persona:
     created_at: str = ""
 
 
+@dataclass
+class Recipe:
+    """A saved, reusable task — a named prompt template the user can run again.
+    ``prompt`` may contain ``{{placeholder}}`` slots the UI fills before dispatch."""
+    id: str
+    name: str
+    prompt: str = ""
+    description: str = ""
+    emoji: str = "📋"
+    created_at: str = ""
+
+
 class SessionStore:
     """Owns projects + sessions and tracks the active session."""
 
     def __init__(self, store_path: Optional[Path] = None) -> None:
         self.projects: dict[str, Project] = {}
         self.personas: dict[str, Persona] = {}
+        self.recipes: dict[str, Recipe] = {}
         self.sessions: dict[str, Session] = {}
         self.active_id: Optional[str] = None
         self.store_path = Path(store_path) if store_path else None
@@ -167,6 +180,37 @@ class SessionStore:
             return ""
         p = self.personas.get(s.persona_id)
         return (p.instructions if p else "") or ""
+
+    # -- recipes (reusable task templates) --
+    def create_recipe(self, name: str, prompt: str = "", description: str = "", emoji: str = "📋") -> dict:
+        r = Recipe(id=_id(), name=name.strip() or "Untitled recipe", prompt=prompt or "",
+                   description=description or "", emoji=(emoji or "📋")[:4], created_at=_now())
+        self.recipes[r.id] = r
+        self.save()
+        return asdict(r)
+
+    def update_recipe(self, recipe_id: str, *, name: Optional[str] = None, prompt: Optional[str] = None,
+                      description: Optional[str] = None, emoji: Optional[str] = None) -> Optional[dict]:
+        r = self.recipes.get(recipe_id)
+        if r is None:
+            return None
+        if name is not None:
+            r.name = name.strip() or r.name
+        if prompt is not None:
+            r.prompt = prompt
+        if description is not None:
+            r.description = description
+        if emoji is not None:
+            r.emoji = (emoji or "📋")[:4]
+        self.save()
+        return asdict(r)
+
+    def delete_recipe(self, recipe_id: str) -> bool:
+        if recipe_id not in self.recipes:
+            return False
+        del self.recipes[recipe_id]
+        self.save()
+        return True
 
     # -- sessions --
     def create_session(self, title: Optional[str] = None, project_id: Optional[str] = None) -> Session:
@@ -302,6 +346,7 @@ class SessionStore:
             "active_id": self.active_id,
             "projects": [asdict(p) for p in sorted(self.projects.values(), key=lambda p: p.created_at)],
             "personas": [asdict(p) for p in sorted(self.personas.values(), key=lambda p: p.created_at)],
+            "recipes": [asdict(r) for r in sorted(self.recipes.values(), key=lambda r: r.created_at)],
             "sessions": [self.session_meta(s) for s in sessions],
         }
 
@@ -322,6 +367,7 @@ class SessionStore:
             "active_id": self.active_id,
             "projects": [asdict(p) for p in self.projects.values()],
             "personas": [asdict(p) for p in self.personas.values()],
+            "recipes": [asdict(r) for r in self.recipes.values()],
             "sessions": [asdict(s) for s in self.sessions.values()],
         }
         self.store_path.write_text(json.dumps(data, indent=2))
@@ -341,6 +387,11 @@ class SessionStore:
         for pd in data.get("personas", []):
             try:
                 self.personas[pd["id"]] = Persona(**{k: pd[k] for k in Persona.__dataclass_fields__ if k in pd})
+            except (TypeError, KeyError):
+                continue
+        for rd in data.get("recipes", []):
+            try:
+                self.recipes[rd["id"]] = Recipe(**{k: rd[k] for k in Recipe.__dataclass_fields__ if k in rd})
             except (TypeError, KeyError):
                 continue
         for sd in data.get("sessions", []):
