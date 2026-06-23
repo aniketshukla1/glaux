@@ -15,7 +15,16 @@ from .mcp import (
     make_client,
 )
 from .protocol import CALL_AGENT, CALL_MCP, CALL_SKILL, FINISH, extract_json, parse_action
-from .web import begin_source_capture, collected_sources, default_browser_client, web_fetch, web_search
+from .web import (
+    SEARCH_PROVIDERS,
+    begin_source_capture,
+    collected_sources,
+    configure_search,
+    default_browser_client,
+    search_status,
+    web_fetch,
+    web_search,
+)
 from .reflector import Reflector, Verdict
 from .router import Plan, Router, Step
 from .specialists import SPECIALISTS, build_specialists, coder_agent, make_specialist, researcher_agent
@@ -44,6 +53,9 @@ __all__ = [
     "make_client",
     "default_local_client",
     "default_browser_client",
+    "configure_search",
+    "search_status",
+    "SEARCH_PROVIDERS",
     "web_fetch",
     "web_search",
     "Router",

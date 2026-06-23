@@ -64,8 +64,10 @@ from agents import (
     begin_source_capture,
     build_specialists,
     collected_sources,
+    configure_search,
     default_browser_client,
     default_local_client,
+    search_status,
 )
 from core.ledger import Ledger
 from identity import AgentIdentity
@@ -105,6 +107,31 @@ def _users_path() -> Path:
 
 def _messaging_config_path() -> Path:
     return _athena_home() / "messaging.json"
+
+
+def _search_config_path() -> Path:
+    return _athena_home() / "search.json"
+
+
+def _load_search_config() -> dict:
+    p = _search_config_path()
+    if not p.exists():
+        return {"provider": "", "keys": {}}
+    try:
+        data = json.loads(p.read_text())
+        return {"provider": data.get("provider", ""), "keys": dict(data.get("keys") or {})}
+    except (json.JSONDecodeError, OSError):
+        return {"provider": "", "keys": {}}
+
+
+def _save_search_config(cfg: dict) -> None:
+    p = _search_config_path()
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(json.dumps({"provider": cfg.get("provider", ""), "keys": cfg.get("keys", {})}, indent=2))
+    try:
+        os.chmod(p, 0o600)  # search API keys are secrets
+    except OSError:
+        pass
 
 
 def _user_workspace_path(uid: str) -> Path:
@@ -273,6 +300,8 @@ class _State:
             config_path=_mcp_config_path(),
         )
         self.mcp.load(connect=True)
+        self.search_config = _load_search_config()
+        configure_search(self.search_config.get("provider", ""), self.search_config.get("keys", {}))
         self.messaging = MessagingRegistry(_messaging_config_path())
         from llm.localmodel import LocalModelManager
 
@@ -840,6 +869,37 @@ def set_messaging(platform: str, req: MessagingConfigRequest) -> dict:
     if out is None:
         raise HTTPException(status_code=404, detail=f"unknown messaging platform {platform!r}")
     return {"gateway": out}
+
+
+# --- web search engine (instance-level) ----------------------------------
+
+
+class SearchConfigRequest(BaseModel):
+    provider: Optional[str] = None  # pin an engine ("" = auto-detect by key)
+    keys: Optional[dict] = None     # {provider: api_key}; a blank value keeps the saved key
+
+
+@app.get("/api/search-engine")
+def get_search() -> dict:
+    return search_status()  # no secrets — safe for any signed-in user to read
+
+
+@app.post("/api/search-engine")
+def set_search(req: SearchConfigRequest) -> dict:
+    _require_admin_if_users()
+    cfg = STATE.search_config
+    if req.provider is not None:
+        cfg["provider"] = (req.provider or "").strip().lower()
+    if req.keys:
+        keys = dict(cfg.get("keys", {}))
+        for k, v in req.keys.items():
+            v = (v or "").strip()
+            if v:  # blank keeps the existing secret
+                keys[k] = v
+        cfg["keys"] = keys
+    _save_search_config(cfg)
+    configure_search(cfg.get("provider", ""), cfg.get("keys", {}))
+    return search_status()
 
 
 # --- models --------------------------------------------------------------

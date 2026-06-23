@@ -10,7 +10,24 @@ import urllib.error
 import pytest
 
 from agents import default_browser_client
-from agents.web import begin_source_capture, collected_sources, web_fetch, web_search
+from agents.web import (
+    begin_source_capture,
+    collected_sources,
+    configure_search,
+    resolve_provider,
+    web_fetch,
+    web_search,
+)
+
+
+@pytest.fixture(autouse=True)
+def _reset_search(monkeypatch):
+    # Each test starts with no pinned provider and no env keys.
+    for v in ("ATHENA_SEARCH_PROVIDER", "ATHENA_BRAVE_API_KEY", "ATHENA_TAVILY_API_KEY", "ATHENA_SERPER_API_KEY"):
+        monkeypatch.delenv(v, raising=False)
+    configure_search("", {})
+    yield
+    configure_search("", {})
 
 
 _PAGE = """
@@ -124,3 +141,71 @@ def test_source_capture_dedupes_and_is_noop_without_session(monkeypatch):
     web_fetch("x.test")
     web_fetch("x.test")  # same url twice → deduped
     assert [s["url"] for s in collected_sources()] == ["https://x.test/"]
+
+
+# --- pluggable search providers ------------------------------------------
+
+_BRAVE = {"web": {"results": [
+    {"title": "Ed25519 <strong>signature</strong>", "url": "https://a.test/1", "description": "fast <b>EdDSA</b>"},
+    {"title": "More", "url": "https://a.test/2", "description": "second"},
+]}}
+_TAVILY = {"results": [
+    {"title": "Tavily One", "url": "https://t.test/1", "content": "answer-style content"},
+]}
+_SERPER = {"organic": [
+    {"title": "Serper One", "url": "https://s.test/1", "snippet": "google snippet"},
+]}
+
+
+def test_resolve_provider_defaults_to_duckduckgo():
+    assert resolve_provider() == ("duckduckgo", "")
+
+
+def test_resolve_provider_auto_picks_keyed_provider():
+    configure_search("", {"tavily": "tvly-x"})
+    assert resolve_provider() == ("tavily", "tvly-x")
+    configure_search("", {"brave": "bk", "tavily": "tvly-x"})  # brave wins by preference order
+    assert resolve_provider() == ("brave", "bk")
+
+
+def test_resolve_provider_env_key(monkeypatch):
+    monkeypatch.setenv("ATHENA_SERPER_API_KEY", "sk-env")
+    assert resolve_provider() == ("serper", "sk-env")
+
+
+def test_pinned_provider_without_key_falls_back():
+    configure_search("brave", {})  # pinned but no key
+    assert resolve_provider() == ("duckduckgo", "")
+
+
+def test_web_search_uses_brave_when_configured(monkeypatch):
+    configure_search("brave", {"brave": "bk"})
+    monkeypatch.setattr("agents.web._http_json", lambda *a, **k: _BRAVE)
+    out = web_search("ed25519", limit=5)
+    assert out["provider"] == "brave"
+    assert out["results"][0]["title"] == "Ed25519 signature"  # html stripped
+    assert out["results"][0]["url"] == "https://a.test/1"
+    assert out["results"][0]["snippet"] == "fast EdDSA"
+
+
+def test_web_search_tavily_and_serper(monkeypatch):
+    configure_search("tavily", {"tavily": "tk"})
+    monkeypatch.setattr("agents.web._http_json", lambda *a, **k: _TAVILY)
+    assert web_search("q")["results"][0]["url"] == "https://t.test/1"
+
+    configure_search("serper", {"serper": "sk"})
+    monkeypatch.setattr("agents.web._http_json", lambda *a, **k: _SERPER)
+    assert web_search("q")["results"][0]["snippet"] == "google snippet"
+
+
+def test_web_search_falls_back_to_ddg_on_provider_error(monkeypatch):
+    configure_search("brave", {"brave": "bk"})
+
+    def boom(*a, **k):
+        raise urllib.error.URLError("brave down")
+
+    monkeypatch.setattr("agents.web._http_json", boom)
+    monkeypatch.setattr("agents.web._http_get", lambda url, timeout=15.0: ("u", "text/html", _LITE))
+    out = web_search("ed25519")
+    assert out["provider"] == "brave→duckduckgo"
+    assert any(r["url"] == "https://en.wikipedia.org/wiki/EdDSA" for r in out["results"])

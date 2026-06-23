@@ -55,7 +55,7 @@ export default function Studio({ open, onClose, ledger, blocks, onVerify, user, 
         <div className="flex-1 overflow-y-auto">
           <div className="max-w-3xl mx-auto px-6 sm:px-8 py-7">
             {tab === 'skills' && <SkillLibrary />}
-            {tab === 'mcp' && <McpPanel />}
+            {tab === 'mcp' && <McpPanel user={user} />}
             {tab === 'schedules' && <SchedulePanel />}
             {tab === 'eval' && <EvalDashboard />}
             {tab === 'metrics' && <MetricsPanel />}
