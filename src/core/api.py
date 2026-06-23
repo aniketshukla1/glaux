@@ -113,6 +113,41 @@ def _search_config_path() -> Path:
     return _athena_home() / "search.json"
 
 
+def _metrics_path() -> Path:
+    return _athena_home() / "metrics.json"
+
+
+def _eval_runs_path() -> Path:
+    return _athena_home() / "eval_runs.json"
+
+
+def _load_eval_runs() -> list:
+    p = _eval_runs_path()
+    if not p.exists():
+        return []
+    try:
+        data = json.loads(p.read_text())
+    except (json.JSONDecodeError, OSError):
+        return []
+    out = []
+    for r in data[-200:]:  # keep history bounded
+        try:
+            out.append(EvalRun(timestamp=r["timestamp"], total=r["total"], passed=r["passed"]))
+        except (KeyError, TypeError):
+            continue
+    return out
+
+
+def _save_eval_runs(runs: list) -> None:
+    p = _eval_runs_path()
+    try:
+        p.parent.mkdir(parents=True, exist_ok=True)
+        payload = [{"timestamp": r.timestamp, "total": r.total, "passed": r.passed} for r in runs[-200:]]
+        p.write_text(json.dumps(payload, indent=2))
+    except OSError:
+        pass
+
+
 def _load_search_config() -> dict:
     p = _search_config_path()
     if not p.exists():
@@ -300,6 +335,7 @@ class _State:
             config_path=_mcp_config_path(),
         )
         self.mcp.load(connect=True)
+        METRICS.bind(_metrics_path())  # counters survive restarts → real cumulative data
         self.search_config = _load_search_config()
         configure_search(self.search_config.get("provider", ""), self.search_config.get("keys", {}))
         self.messaging = MessagingRegistry(_messaging_config_path())
@@ -322,7 +358,7 @@ class _State:
         self.users.ensure_admin()  # keep an existing single-user install's owner as admin
         self.auth_secret = _auth_secret()
         self._cancels: dict[str, threading.Event] = {}  # per-user "stop the running task" flags
-        self.eval_runs: list[EvalRun] = []
+        self.eval_runs: list[EvalRun] = _load_eval_runs()  # benchmark history survives restarts
         self.approval_mode = "auto"  # auto | gated (gated => human approves synthesized skills)
         self.llm_config = _default_llm_config()
         self.reset_ledger()
@@ -421,6 +457,7 @@ async def _lifespan(_app):
     STATE.scheduler.stop()
     STATE.mcp.close_all()
     STATE.local_model.stop()
+    METRICS.save()  # flush the latest counters on a clean shutdown
 
 
 app = FastAPI(title="Athena Swarm API", version="0.2.0", lifespan=_lifespan)
@@ -1700,6 +1737,7 @@ async def run_eval() -> dict:
     previous = STATE.eval_runs[-1] if STATE.eval_runs else None
     run = await run_in_threadpool(harness.run_suite, cases)
     STATE.eval_runs.append(run)
+    _save_eval_runs(STATE.eval_runs)  # persist benchmark history
     METRICS.inc("eval_runs_total")
     METRICS.set("eval_pass_rate", run.pass_rate)
     log_json("eval", passed=run.passed, total=run.total, pass_rate=round(run.pass_rate, 3))

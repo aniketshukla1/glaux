@@ -89,18 +89,9 @@ export default function SchedulePanel() {
       await addSchedule(directive.trim(), schedule.trim())
       setDirective(''); setSchedule('')
       await refresh()
-    } catch {
-      // surface the backend's validation detail
-      try {
-        const r = await fetch('/api/schedules', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ directive: directive.trim(), schedule: schedule.trim() }),
-        })
-        const j = await r.json().catch(() => ({}))
-        setErr(j.detail || 'Could not create the job.')
-      } catch {
-        setErr('Could not create the job.')
-      }
+    } catch (e) {
+      // the API helper already carries the backend's validation detail
+      setErr(e?.message || 'Could not create the job.')
     } finally {
       setBusy(false)
     }

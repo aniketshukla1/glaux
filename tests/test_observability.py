@@ -47,3 +47,29 @@ def test_reset_clears():
     m.inc("x")
     m.reset()
     assert m.value("x") == 0.0
+
+
+def test_metrics_persist_across_bind(tmp_path):
+    """Counters/gauges survive a restart: save to disk, then a fresh Metrics
+    bound to the same path reads them back."""
+    from core.observability import Metrics
+
+    path = tmp_path / "metrics.json"
+    m = Metrics()
+    m.bind(path)
+    m.inc("swarm_tasks_total", outcome="success")
+    m.inc("swarm_tasks_total", outcome="success")
+    m.inc("llm_tokens_total", 1500)
+    m.set("eval_pass_rate", 0.83)
+    m.save()
+    assert path.exists()
+
+    # A brand-new registry (simulating a restart) recovers the values.
+    m2 = Metrics()
+    m2.bind(path)
+    assert m2.value("swarm_tasks_total", outcome="success") == 2.0
+    assert m2.value("llm_tokens_total") == 1500.0
+    assert m2.value("eval_pass_rate") == 0.83
+    # and keeps accumulating from there
+    m2.inc("swarm_tasks_total", outcome="success")
+    assert m2.value("swarm_tasks_total", outcome="success") == 3.0
