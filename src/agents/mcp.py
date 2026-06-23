@@ -509,14 +509,23 @@ class MCPRegistry:
     """Aggregates the built-in tools with any number of connected MCP servers
     behind one :class:`MCPClient` surface, and persists server configs to disk."""
 
-    def __init__(self, builtin: Optional[LocalMCPClient] = None, config_path: Optional[Path] = None) -> None:
+    def __init__(
+        self,
+        builtin: Optional[LocalMCPClient] = None,
+        config_path: Optional[Path] = None,
+        extra_builtins: Optional[list] = None,
+    ) -> None:
         self.builtin = builtin if builtin is not None else default_local_client()
+        # Always-on in-process providers beyond the demo tools (e.g. the web
+        # browser). They participate in list_tools/call_tool but aren't persisted
+        # like external servers.
+        self.builtins: list = [self.builtin, *(extra_builtins or [])]
         self.servers: dict[str, Any] = {}
         self.configs: dict[str, MCPServerConfig] = {}
         self.config_path = Path(config_path) if config_path else None
 
     def _clients(self) -> list:
-        return [self.builtin, *self.servers.values()]
+        return [*self.builtins, *self.servers.values()]
 
     # -- MCPClient interface --
     def list_tools(self) -> list[MCPTool]:

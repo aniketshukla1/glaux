@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react'
 import {
-  Plug, Plus, RefreshCw, Trash2, Wrench, Server, Loader2, ChevronDown, Play,
+  Plug, Plus, RefreshCw, Trash2, Wrench, Server, Loader2, ChevronDown, Play, Globe,
 } from 'lucide-react'
 import {
   getMcpTools, callMcpTool, getMcpServers, addMcpServer, removeMcpServer, reconnectMcpServer,
@@ -230,6 +230,17 @@ export default function McpPanel() {
         <h2 className="text-fg font-medium">Tools</h2>
         <span className="text-faint text-xs">{tools.length} available · {servers.length} servers</span>
       </div>
+
+      {tools.some((t) => t.server === 'athena-web') && (
+        <div className="card p-3 flex items-start gap-2.5 border-accent/20 bg-accent/[0.04]">
+          <Globe className="w-4 h-4 text-accent mt-0.5 shrink-0" />
+          <div className="text-xs text-muted leading-relaxed">
+            <span className="text-fg font-medium">Web browsing is built in.</span> The swarm can
+            <code className="text-accent2 mx-1">web_search</code> the live web and
+            <code className="text-accent2 mx-1">web_fetch</code> any page to read it — no setup, every call signed to the ledger.
+          </div>
+        </div>
+      )}
 
       <AddServerForm onAdded={refresh} />
 

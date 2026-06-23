@@ -62,6 +62,7 @@ from agents import (
     Router,
     Swarm,
     build_specialists,
+    default_browser_client,
     default_local_client,
 )
 from core.ledger import Ledger
@@ -264,7 +265,11 @@ class _State:
         self.memory_dir = tempfile.mkdtemp(prefix="athena-mem-")
         self.memory = MemoryManager(self.memory_dir)
         self.skills = SkillLibrary(self.memory.procedural)
-        self.mcp = MCPRegistry(builtin=default_local_client(), config_path=_mcp_config_path())
+        self.mcp = MCPRegistry(
+            builtin=default_local_client(),
+            extra_builtins=[default_browser_client()],
+            config_path=_mcp_config_path(),
+        )
         self.mcp.load(connect=True)
         self.messaging = MessagingRegistry(_messaging_config_path())
         from llm.localmodel import LocalModelManager
