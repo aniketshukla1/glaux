@@ -31,7 +31,7 @@ import urllib.parse
 
 from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, PlainTextResponse, RedirectResponse
+from fastapi.responses import JSONResponse, PlainTextResponse, RedirectResponse, StreamingResponse
 from pydantic import BaseModel
 from starlette.concurrency import run_in_threadpool
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -1076,11 +1076,9 @@ def set_safety(req: SafetyRequest) -> dict:
 # --- swarm / ledger ------------------------------------------------------
 
 
-@app.post("/api/task")
-async def run_task(req: TaskRequest) -> dict:
-    if not req.directive.strip():
-        raise HTTPException(status_code=400, detail="directive is required")
-    before = len(STATE.ledger)
+def _prepare_run(req: TaskRequest):
+    """Shared setup for a task: build the swarm, budget, and the (persona/project-
+    prefixed) directive. Returns (swarm, budget, run_directive, model_id)."""
     swarm = STATE.build_swarm()
     budget = Budget.from_dict(req.budget)
     # If the target session belongs to a project, prepend its custom instructions
@@ -1094,7 +1092,72 @@ async def run_task(req: TaskRequest) -> dict:
     if project_instr.strip():
         prefix += f"Project instructions:\n{project_instr.strip()}\n\n"
     run_directive = f"{prefix}Task:\n{req.directive}" if prefix else req.directive
-    model_id = STATE.llm.model_id
+    return swarm, budget, run_directive, STATE.llm.model_id
+
+
+def _finalize_run(req: TaskRequest, result, before: int, sources: list, elapsed: float, model_id: str) -> dict:
+    """Record metrics, persist the run, and build the response payload — shared by
+    the blocking and streaming task endpoints."""
+    new_blocks = [STATE.ledger.block(i) for i in range(before, len(STATE.ledger))]
+    outcome = (
+        "success" if result.success
+        else "cancelled" if result.cancelled
+        else "budget_halt" if result.budget_halt
+        else "incomplete"
+    )
+    METRICS.inc("swarm_tasks_total", outcome=outcome)
+    METRICS.observe_duration("swarm_task_duration", elapsed)
+    METRICS.inc("llm_calls_total", result.cost.get("llm_calls", 0))
+    METRICS.inc("llm_tokens_total", result.cost.get("total_tokens", 0))
+    METRICS.inc("llm_cost_usd_total", result.cost.get("usd", 0.0))
+    for s in result.synthesized:
+        if s.get("ok"):
+            METRICS.inc("skills_synthesized_total")
+    log_json(
+        "task", outcome=outcome, blocks=len(new_blocks), duration_s=round(elapsed, 3),
+        cost=result.cost, synthesized=len(result.synthesized),
+    )
+    verification = _verification()
+    from core.sessions import Run
+
+    session = STATE.sessions.record_run(
+        Run(
+            id="", directive=req.directive, final=result.final, success=result.success,
+            cost=result.cost, verification=verification, blocks=new_blocks, created_at="",
+            model=model_id, canvas=result.canvas, sources=sources,
+        ),
+        session_id=req.session_id,
+    )
+    return {
+        "success": result.success,
+        "final": result.final,
+        "cost": result.cost,
+        "model": model_id,
+        "cancelled": result.cancelled,
+        "canvas": result.canvas,
+        "sources": sources,
+        "budget_halt": result.budget_halt,
+        "synthesized": result.synthesized,
+        "plan": [s.to_dict() for s in result.plan.steps],
+        "steps": [
+            {
+                "id": sid, "role": sr.step.role, "accepted": sr.accepted,
+                "attempts": sr.attempts, "reproducibility": sr.result.reproducibility,
+            }
+            for sid, sr in result.steps.items()
+        ],
+        "new_blocks": new_blocks,
+        "verification": verification,
+        "session_id": session.id,
+    }
+
+
+@app.post("/api/task")
+async def run_task(req: TaskRequest) -> dict:
+    if not req.directive.strip():
+        raise HTTPException(status_code=400, detail="directive is required")
+    before = len(STATE.ledger)
+    swarm, budget, run_directive, model_id = _prepare_run(req)
     uid = _current_user_id.get()
     cancel_ev = STATE.cancel_for(uid)
     cancel_ev.clear()  # fresh start; a Stop press during this run sets it
@@ -1125,74 +1188,78 @@ async def run_task(req: TaskRequest) -> dict:
         WS.publish({"type": "token_end", "uid": uid})  # tell clients the stream is done
     elapsed = time.monotonic() - t0
     sources = collected_sources()  # web pages the swarm actually browsed this run
-    new_blocks = [STATE.ledger.block(i) for i in range(before, len(STATE.ledger))]
+    return _finalize_run(req, result, before, sources, elapsed, model_id)
 
-    outcome = (
-        "success" if result.success
-        else "cancelled" if result.cancelled
-        else "budget_halt" if result.budget_halt
-        else "incomplete"
-    )
-    METRICS.inc("swarm_tasks_total", outcome=outcome)
-    METRICS.observe_duration("swarm_task_duration", elapsed)
-    METRICS.inc("llm_calls_total", result.cost.get("llm_calls", 0))
-    METRICS.inc("llm_tokens_total", result.cost.get("total_tokens", 0))
-    METRICS.inc("llm_cost_usd_total", result.cost.get("usd", 0.0))
-    for s in result.synthesized:
-        if s.get("ok"):
-            METRICS.inc("skills_synthesized_total")
-    log_json(
-        "task",
-        outcome=outcome,
-        blocks=len(new_blocks),
-        duration_s=round(elapsed, 3),
-        cost=result.cost,
-        synthesized=len(result.synthesized),
-    )
-    verification = _verification()
-    from core.sessions import Run
 
-    session = STATE.sessions.record_run(
-        Run(
-            id="",
-            directive=req.directive,
-            final=result.final,
-            success=result.success,
-            cost=result.cost,
-            verification=verification,
-            blocks=new_blocks,
-            created_at="",
-            model=model_id,
-            canvas=result.canvas,
-            sources=sources,
-        ),
-        session_id=req.session_id,
-    )
-    return {
-        "success": result.success,
-        "final": result.final,
-        "cost": result.cost,
-        "model": model_id,
-        "cancelled": result.cancelled,
-        "canvas": result.canvas,
-        "sources": sources,
-        "budget_halt": result.budget_halt,
-        "synthesized": result.synthesized,
-        "plan": [s.to_dict() for s in result.plan.steps],
-        "steps": [
-            {
-                "id": sid,
-                "role": sr.step.role,
-                "accepted": sr.accepted,
-                "attempts": sr.attempts,
-                "reproducibility": sr.result.reproducibility,
-            }
-            for sid, sr in result.steps.items()
-        ],
-        "new_blocks": new_blocks,
-        "verification": verification,
-        "session_id": session.id,
-    }
+@app.post("/api/task/stream")
+async def run_task_stream(req: TaskRequest):
+    """Same as /api/task but streams Server-Sent Events as the swarm works:
+    `start`, live `block` events (each signed agent step), `token` deltas (the
+    answer typing out), then a final `done` carrying the full result. Lets the
+    CLI render the multi-agent run live with nothing but stdlib urllib."""
+    if not req.directive.strip():
+        raise HTTPException(status_code=400, detail="directive is required")
+    before = len(STATE.ledger)
+    swarm, budget, run_directive, model_id = _prepare_run(req)
+    uid = _current_user_id.get()
+    cancel_ev = STATE.cancel_for(uid)
+    cancel_ev.clear()
+    loop = asyncio.get_running_loop()
+    tokens: asyncio.Queue = asyncio.Queue()
+
+    def _on_token(t: str) -> None:
+        loop.call_soon_threadsafe(tokens.put_nowait, t)
+        WS.publish({"type": "token", "text": t, "uid": uid})
+
+    begin_source_capture()
+
+    def _sse(obj: dict) -> str:
+        return f"data: {json.dumps(obj, default=str)}\n\n"
+
+    async def gen():
+        t0 = time.monotonic()
+        yield _sse({"type": "start", "directive": req.directive, "model": model_id})
+        fut = asyncio.create_task(
+            run_in_threadpool(lambda: swarm.run(run_directive, budget=budget, cancel=cancel_ev.is_set, on_token=_on_token))
+        )
+        sent = before
+
+        def _drain_blocks(upto: int):
+            out = []
+            nonlocal sent
+            while sent < upto:
+                try:
+                    out.append(STATE.ledger.block(sent))
+                except Exception:  # noqa: BLE001
+                    pass
+                sent += 1
+            return out
+
+        while not fut.done():
+            for blk in _drain_blocks(len(STATE.ledger)):
+                yield _sse({"type": "block", "block": blk})
+            while not tokens.empty():
+                yield _sse({"type": "token", "text": tokens.get_nowait()})
+            await asyncio.sleep(0.06)
+        # flush whatever's left now that the run is done
+        for blk in _drain_blocks(len(STATE.ledger)):
+            yield _sse({"type": "block", "block": blk})
+        while not tokens.empty():
+            yield _sse({"type": "token", "text": tokens.get_nowait()})
+
+        try:
+            result = await fut
+        except Exception as exc:  # noqa: BLE001
+            METRICS.inc("swarm_tasks_total", outcome="error")
+            log_json("task", outcome="error", error=str(exc))
+            yield _sse({"type": "error", "detail": str(exc)})
+            return
+        elapsed = time.monotonic() - t0
+        sources = collected_sources()
+        payload = _finalize_run(req, result, before, sources, elapsed, model_id)
+        yield _sse({"type": "done", "result": payload})
+
+    return StreamingResponse(gen(), media_type="text/event-stream", headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
 
 @app.post("/api/task/stop")

@@ -141,7 +141,21 @@ def test_run_unreachable_server(monkeypatch, capsys):
     def boom(*a, **k):
         raise urllib.error.URLError("refused")
 
-    monkeypatch.setattr(cli, "_post_json", boom)
+    # `run` streams by default: it opens the SSE stream and looks up agents.
+    monkeypatch.setattr(cli, "_open_stream", boom)
+    monkeypatch.setattr(cli, "_get_json", boom)
     rc = cli.cmd_run(cli.build_parser().parse_args(["run", "do", "something"]))
+    assert rc == 1
+    assert "couldn't reach" in capsys.readouterr().err.lower()
+
+
+def test_run_no_stream_uses_blocking_endpoint(monkeypatch, capsys):
+    import urllib.error
+
+    def boom(*a, **k):
+        raise urllib.error.URLError("refused")
+
+    monkeypatch.setattr(cli, "_post_json", boom)
+    rc = cli.cmd_run(cli.build_parser().parse_args(["run", "--no-stream", "do", "something"]))
     assert rc == 1
     assert "couldn't reach" in capsys.readouterr().err.lower()

@@ -1,20 +1,27 @@
 """The ``athena`` command line — install once, then drive the swarm from anywhere.
 
+Server:
   athena up        start the server (serves the UI + API) as a background daemon
-  athena down      stop the daemon
-  athena restart   cleanly stop and start (waits for the port to free)
-  athena rebuild   rebuild the frontend, then cleanly restart
+  athena down      ·  restart  ·  rebuild  (rebuild the UI, then restart)
   athena status    is it running? which model, safety, how many signed blocks
-  athena run "..." dispatch a directive and print the result (--json for scripts)
-  athena chat      interactive terminal chat with the swarm
-  athena login     sign in to the API (stores a session token)
-  athena whoami    show the signed-in account   ·   athena logout
-  athena messaging view/configure messaging gateways (admin)
-  athena serve     run in the foreground (Ctrl-C to stop)
-  athena open      open the dashboard in a browser
+  athena serve     run in the foreground   ·   athena open   open the dashboard
+
+Drive the agent:
+  athena run "..." dispatch a directive — streams the run live (--json for scripts)
+  athena chat      interactive terminal chat (one conversation, Ctrl-C stops a run)
+  athena search    search the web via the agent's tools
+  athena remember  store a fact   ·   athena memory <layer> [query]   browse it
+
+Inspect:
+  athena sessions · agents · skills · recipes · metrics · verify · eval
+  athena models [--set ollama:qwen2.5:7b-instruct]   show / switch the LLM
+
+Account / admin:
+  athena login · logout · whoami   ·   athena messaging   (gateways, admin)
 
 Stdlib-only so ``athena --help`` / ``status`` / ``run`` work without importing
-the heavy backend; ``up``/``serve`` shell out to uvicorn.
+the heavy backend; ``up``/``serve`` shell out to uvicorn. Live runs stream over
+Server-Sent Events, rendered with nothing but urllib.
 """
 
 from __future__ import annotations
@@ -27,6 +34,7 @@ import socket
 import sys
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from pathlib import Path
 
@@ -123,6 +131,171 @@ def _post_json(url: str, payload: dict, timeout: float = 600.0) -> dict:
     )
     with urllib.request.urlopen(req, timeout=timeout) as r:
         return json.loads(r.read().decode())
+
+
+# --- terminal output (stdlib ANSI; respects NO_COLOR and non-TTY) ---------
+
+_STYLES = {
+    "dim": "2", "bold": "1", "red": "31", "green": "32", "yellow": "33",
+    "blue": "34", "magenta": "35", "cyan": "36", "gray": "90",
+}
+
+
+def _use_color() -> bool:
+    return sys.stdout.isatty() and "NO_COLOR" not in os.environ and os.environ.get("TERM") != "dumb"
+
+
+def style(text: str, *names: str) -> str:
+    if not names or not _use_color():
+        return text
+    codes = ";".join(_STYLES[n] for n in names if n in _STYLES)
+    return f"\033[{codes}m{text}\033[0m" if codes else text
+
+
+def _err(msg: str) -> int:
+    print(style(msg, "red"), file=sys.stderr)
+    return 1
+
+
+def _api(base_url: str, method: str, path: str, payload: dict | None = None):
+    """Call a JSON endpoint; on failure print a friendly message and return None."""
+    url = f"{base_url}{path}"
+    try:
+        return _post_json(url, payload or {}) if method == "POST" else _get_json(url)
+    except urllib.error.HTTPError as e:
+        if e.code == 401:
+            _err("Not signed in. Run:  athena login")
+        elif e.code == 403:
+            _err("Admin sign-in required for this.")
+        else:
+            _err(_detail(e))
+        return None
+    except urllib.error.URLError:
+        _err(f"Couldn't reach Athena at {base_url}.  Start it with:  athena up")
+        return None
+
+
+# how the swarm's signed ledger actions read as live status lines
+ACTION_VERB = {
+    "PLAN": "planning the team",
+    "CALL_AGENT": "delegating",
+    "CAPABILITY_GRANT": "granting capability",
+    "THINK": "thinking",
+    "EMIT_OBSERVATION": "observed",
+    "REFLECT": "verifying",
+    "MCP_TOOL": "using a tool",
+    "CALL_SKILL": "running a skill",
+    "SYNTHESIZE_SKILL": "learning a skill",
+}
+
+
+# --- streaming a task over SSE (stdlib urllib) ----------------------------
+
+def _open_stream(base_url: str, payload: dict, timeout: float = 900.0):
+    req = urllib.request.Request(
+        f"{base_url}/api/task/stream", data=json.dumps(payload).encode(),
+        headers={"Content-Type": "application/json", "Accept": "text/event-stream", **_auth_headers()},
+        method="POST",
+    )
+    return urllib.request.urlopen(req, timeout=timeout)
+
+
+def _iter_sse(resp):
+    for raw in resp:
+        line = raw.decode("utf-8", "replace").rstrip("\n")
+        if line.startswith("data:"):
+            data = line[5:].strip()
+            if data:
+                try:
+                    yield json.loads(data)
+                except json.JSONDecodeError:
+                    continue
+
+
+def _print_summary(result: dict) -> None:
+    cost = result.get("cost") or {}
+    ver = result.get("verification") or {}
+    bits = []
+    if ver:
+        bits.append(style("✓ chain verified", "green") if ver.get("valid") else style("✗ chain invalid", "red"))
+    if result.get("model"):
+        bits.append(result["model"])
+    if cost.get("llm_calls") is not None:
+        bits.append(f"{cost['llm_calls']} calls")
+    if cost.get("total_tokens"):
+        bits.append(f"{cost['total_tokens']:,} tokens")
+    if cost.get("usd"):
+        bits.append(f"${cost['usd']:.4f}")
+    if bits:
+        print(style("  " + " · ".join(bits), "dim"))
+    sources = result.get("sources") or []
+    if sources:
+        print(style(f"  sources ({len(sources)})", "dim"))
+        for i, s in enumerate(sources[:8], 1):
+            title = s.get("title") or s.get("url")
+            print("    " + style(f"{i}.", "gray") + f" {title}  " + style(s.get("url", ""), "gray"))
+
+
+def _render_stream(base_url: str, directive: str, session_id: str | None = None) -> dict | None:
+    """Stream a task and render the multi-agent run live. Returns the result dict
+    (for the exit code), or None on a transport/auth error."""
+    role_of = {}
+    try:
+        for a in _get_json(f"{base_url}/api/agents").get("agents", []):
+            role_of[a["agent_id"]] = a["role"]
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        resp = _open_stream(base_url, {"directive": directive, "session_id": session_id})
+    except urllib.error.HTTPError as e:
+        if e.code == 401:
+            _err("Not signed in. Run:  athena login")
+        else:
+            _err(_detail(e))
+        return None
+    except urllib.error.URLError:
+        _err(f"Couldn't reach Athena at {base_url}.  Start it with:  athena up")
+        return None
+
+    result = None
+    answering = False
+    try:
+        with resp:
+            for ev in _iter_sse(resp):
+                t = ev.get("type")
+                if t == "block" and not answering:
+                    b = ev.get("block", {})
+                    role = role_of.get(b.get("agent_id"), "agent")
+                    verb = ACTION_VERB.get(b.get("action_type"), (b.get("action_type") or "").replace("_", " ").lower())
+                    print(style(f"  ◆ {role:<11}", "cyan") + style(verb, "gray"))
+                elif t == "token":
+                    if not answering:
+                        answering = True
+                        print(style("\n  ⬡ answer", "green"))
+                        sys.stdout.write("  ")
+                    text = ev.get("text", "")
+                    sys.stdout.write(text.replace("\n", "\n  "))
+                    sys.stdout.flush()
+                elif t == "done":
+                    result = ev.get("result")
+                elif t == "error":
+                    print()
+                    _err("✗ " + (ev.get("detail") or "the run failed"))
+    except KeyboardInterrupt:
+        try:
+            _post_json(f"{base_url}/api/task/stop", {}, timeout=5)
+        except Exception:  # noqa: BLE001
+            pass
+        print(style("\n  ⊘ stopping…", "yellow"))
+        return None
+    if answering:
+        print()
+    elif result and result.get("final"):  # answer wasn't streamed (short/non-stream synthesis)
+        print(style("\n  ⬡ answer", "green"))
+        print("  " + (result["final"] or "").replace("\n", "\n  "))
+    if result:
+        _print_summary(result)
+    return result
 
 
 # --- server spawning ------------------------------------------------------
@@ -346,22 +519,28 @@ def cmd_run(args) -> int:
     if not directive:
         print("Give a directive, e.g.  athena run \"summarize the news\"", file=sys.stderr)
         return 2
-    try:
-        payload = _post_json(f"{base_url}/api/task", {"directive": directive})
-    except urllib.error.HTTPError as e:
-        if e.code == 401:
-            print("Not signed in. Run:  athena login", file=sys.stderr)
-            return 1
-        print(_detail(e), file=sys.stderr)
+
+    # Scripting paths use the plain blocking endpoint; interactive use streams live.
+    if getattr(args, "json", False) or getattr(args, "no_stream", False):
+        try:
+            payload = _post_json(f"{base_url}/api/task", {"directive": directive})
+        except urllib.error.HTTPError as e:
+            if e.code == 401:
+                return _err("Not signed in. Run:  athena login")
+            return _err(_detail(e))
+        except urllib.error.URLError:
+            return _err(f"Couldn't reach Athena at {base_url}.  Start it with:  athena up")
+        if getattr(args, "json", False):
+            print(json.dumps(payload, indent=2))
+        else:
+            print(_format_run_result(payload))
+        return 0 if payload.get("success") else 1
+
+    print(style("▸ ", "magenta") + directive)
+    result = _render_stream(base_url, directive)
+    if result is None:
         return 1
-    except urllib.error.URLError:
-        print(f"Couldn't reach Athena at {base_url}.  Start it with:  athena up", file=sys.stderr)
-        return 1
-    if getattr(args, "json", False):
-        print(json.dumps(payload, indent=2))
-    else:
-        print(_format_run_result(payload))
-    return 0 if payload.get("success") else 1
+    return 0 if result.get("success") else 1
 
 
 # --- accounts -------------------------------------------------------------
@@ -410,10 +589,16 @@ def cmd_whoami(args) -> int:
 
 def cmd_chat(args) -> int:
     base_url = args.url or f"http://{args.host}:{args.port}"
-    print("Athena chat — type a task, or 'exit' to quit.\n")
+    # Keep the whole chat in one session so turns build on each other.
+    session_id = None
+    try:
+        session_id = _get_json(f"{base_url}/api/workspace").get("active_id")
+    except Exception:  # noqa: BLE001
+        pass
+    print(style("Athena chat", "bold") + style("  —  type a task, or 'exit' to quit. Ctrl-C stops a run.\n", "dim"))
     while True:
         try:
-            directive = input("you ▸ ").strip()
+            directive = input(style("you ▸ ", "magenta", "bold")).strip()
         except (EOFError, KeyboardInterrupt):
             print()
             return 0
@@ -421,21 +606,9 @@ def cmd_chat(args) -> int:
             return 0
         if not directive:
             continue
-        try:
-            payload = _post_json(f"{base_url}/api/task", {"directive": directive})
-        except urllib.error.HTTPError as e:
-            if e.code == 401:
-                print("Not signed in. Run:  athena login", file=sys.stderr)
-                return 1
-            print(_detail(e), file=sys.stderr)
-            continue
-        except urllib.error.URLError:
-            print(f"Couldn't reach Athena at {base_url}.", file=sys.stderr)
-            continue
-        print("\nathena ▸ " + (payload.get("final") or "(no result)"))
-        cost = payload.get("cost") or {}
-        if cost.get("llm_calls"):
-            print(f"          {cost['llm_calls']} calls · {cost.get('total_tokens', 0)} tokens · ${cost.get('usd', 0):.4f}")
+        result = _render_stream(base_url, directive, session_id=session_id)
+        if result and result.get("session_id"):
+            session_id = result["session_id"]  # stay in the same conversation
         print()
 
 
@@ -498,8 +671,187 @@ def cmd_desktop(args) -> int:
         return 1
 
 
+# --- inspecting the agent ------------------------------------------------
+
+def cmd_sessions(args) -> int:
+    base_url = f"http://{args.host}:{args.port}"
+    ws = _api(base_url, "GET", "/api/workspace")
+    if ws is None:
+        return 1
+    sessions = ws.get("sessions", [])
+    if not sessions:
+        print(style("No conversations yet.", "dim"))
+        return 0
+    active = ws.get("active_id")
+    for s in sessions:
+        mark = style("●", "green") if s["id"] == active else style("○", "gray")
+        title = s.get("title") or "Untitled"
+        print(f"  {mark} {title}" + style(f"   {s.get('run_count', 0)} turns · {s['id'][:8]}", "dim"))
+    return 0
+
+
+def cmd_agents(args) -> int:
+    base_url = f"http://{args.host}:{args.port}"
+    data = _api(base_url, "GET", "/api/agents")
+    if data is None:
+        return 1
+    agents = data.get("agents", [])
+    print(style(f"  {len(agents)} signed agents", "dim"))
+    for a in agents:
+        print("  " + style(f"{a['role']:<11}", "cyan") + " " + style(a["public_key"][:36] + "…", "gray"))
+    return 0
+
+
+def cmd_skills(args) -> int:
+    base_url = f"http://{args.host}:{args.port}"
+    data = _api(base_url, "GET", "/api/skills")
+    if data is None:
+        return 1
+    skills = data.get("skills", [])
+    if not skills:
+        print(style("No skills learned yet.", "dim"))
+        return 0
+    for s in skills:
+        print("  " + style(s.get("name", "?"), "bold") + style(f"   {s.get('status', '')}", "dim"))
+        if s.get("description"):
+            print(style(f"     {s['description']}", "dim"))
+    return 0
+
+
+def cmd_memory(args) -> int:
+    base_url = f"http://{args.host}:{args.port}"
+    path = f"/api/memory/{args.layer}"
+    if args.query:
+        path += "?q=" + urllib.parse.quote(args.query)
+    data = _api(base_url, "GET", path)
+    if data is None:
+        return 1
+    items = data.get("items", [])
+    if not items:
+        print(style(f"No {args.layer} memories" + (" match." if args.query else " yet."), "dim"))
+        return 0
+    for it in items:
+        text = it.get("text") or it.get("name") or json.dumps(it)
+        print("  " + style("•", "gray") + " " + text[:200])
+    return 0
+
+
+def cmd_remember(args) -> int:
+    base_url = f"http://{args.host}:{args.port}"
+    text = " ".join(args.text).strip()
+    if not text:
+        return _err("Give something to remember, e.g.  athena remember \"the API base is /v2\"")
+    out = _api(base_url, "POST", f"/api/memory/{args.layer}", {"text": text})
+    if out is None:
+        return 1
+    print(style(f"✓ stored in {args.layer} memory.", "green"))
+    return 0
+
+
+def cmd_search(args) -> int:
+    base_url = f"http://{args.host}:{args.port}"
+    query = " ".join(args.query).strip()
+    if not query:
+        return _err("Give a search query, e.g.  athena search \"ed25519 vs rsa\"")
+    out = _api(base_url, "POST", "/api/mcp/call", {"tool": "web_search", "args": {"query": query, "limit": args.limit}})
+    if out is None:
+        return 1
+    if not out.get("ok"):
+        return _err(out.get("error", "search failed"))
+    res = out.get("result", {})
+    results = res.get("results", [])
+    print(style(f"  {len(results)} results via {res.get('provider', '?')}", "dim"))
+    for i, r in enumerate(results, 1):
+        print("  " + style(f"{i}.", "gray") + " " + style(r.get("title", ""), "bold"))
+        print("     " + style(r.get("url", ""), "cyan"))
+        if r.get("snippet"):
+            print(style(f"     {r['snippet']}", "dim"))
+    return 0
+
+
+def cmd_verify(args) -> int:
+    base_url = f"http://{args.host}:{args.port}"
+    data = _api(base_url, "GET", "/api/ledger")
+    if data is None:
+        return 1
+    ver = data.get("verification") or {}
+    ok = ver.get("valid")
+    head = style("✓ chain verified", "green") if ok else style("✗ CHAIN INVALID", "red")
+    print(head + style(f"   ·   {data.get('count', 0)} signed blocks", "dim"))
+    return 0 if ok else 1
+
+
+def cmd_metrics(args) -> int:
+    base_url = f"http://{args.host}:{args.port}"
+    m = _api(base_url, "GET", "/api/metrics")
+    if m is None:
+        return 1
+    total = int(m.get("tasks_total", 0))
+    rate = (m.get("tasks_success", 0) / total * 100) if total else 0
+    print("  " + style("tasks ", "dim") + f"  {total}  ({rate:.0f}% success · {m.get('task_duration_avg_s', 0):.1f}s avg)")
+    print("  " + style("llm   ", "dim") + f"  {int(m.get('llm_calls', 0))} calls · {int(m.get('tokens_total', 0)):,} tokens · ${m.get('usd_total', 0):.4f}")
+    print("  " + style("skills", "dim") + f"  {int(m.get('skills_synthesized', 0))} synthesized")
+    print("  " + style("eval  ", "dim") + f"  {int(m.get('eval_runs', 0))} runs · last {m.get('last_pass_rate', 0) * 100:.0f}% pass")
+    return 0
+
+
+def cmd_models(args) -> int:
+    base_url = f"http://{args.host}:{args.port}"
+    if args.set:  # switch model: athena models --set ollama:qwen2.5:7b-instruct  (or  backend model)
+        backend, _, model = args.set.partition(":")
+        payload = {"backend": backend.strip()}
+        if model.strip():
+            payload["model"] = model.strip()
+        out = _api(base_url, "POST", "/api/llm", payload)
+        if out is None:
+            return 1
+        print(style("✓ model set to ", "green") + style(out.get("model_id", "?"), "bold"))
+        return 0
+    data = _api(base_url, "GET", "/api/llm")
+    if data is None:
+        return 1
+    print("  current:  " + style(data.get("model_id", "?"), "bold") + style(f"   ({data.get('backend')})", "dim"))
+    print(style("  native:   " + ", ".join(data.get("native", [])), "dim"))
+    provs = [p.get("id") or p.get("name") for p in (data.get("providers") or [])]
+    provs = [p for p in provs if p]
+    if provs:
+        shown = ", ".join(provs[:16]) + (f", +{len(provs) - 16} more" if len(provs) > 16 else "")
+        print(style("  providers: " + shown, "dim"))
+    return 0
+
+
+def cmd_eval(args) -> int:
+    base_url = f"http://{args.host}:{args.port}"
+    print(style("Running the benchmark suite…", "dim"))
+    out = _api(base_url, "POST", "/api/eval/run", {})
+    if out is None:
+        return 1
+    run = out.get("run", {})
+    pr = run.get("pass_rate", 0)
+    head = style("✓", "green") if pr >= 0.5 else style("•", "yellow")
+    print(f"  {head}  {run.get('passed', 0)}/{run.get('total', 0)} passed   ({pr * 100:.0f}%)")
+    return 0
+
+
+def cmd_recipes(args) -> int:
+    base_url = f"http://{args.host}:{args.port}"
+    ws = _api(base_url, "GET", "/api/workspace")
+    if ws is None:
+        return 1
+    recipes = ws.get("recipes", [])
+    if not recipes:
+        print(style("No recipes yet. Create them in Settings › Recipes.", "dim"))
+        return 0
+    for r in recipes:
+        head = ((r.get("emoji", "") + " ") if r.get("emoji") else "") + style(r.get("name", "?"), "bold")
+        print("  " + head + (style(f"   {r['description']}", "dim") if r.get("description") else ""))
+        if r.get("prompt"):
+            print(style(f"     {r['prompt'][:120]}", "gray"))
+    return 0
+
+
 def cmd_version(_args) -> int:
-    print("athena 0.1")
+    print("athena 0.2")
     return 0
 
 
@@ -538,10 +890,11 @@ def build_parser() -> argparse.ArgumentParser:
     desktop.add_argument("--build", action="store_true", help="build a distributable .app instead of running")
     desktop.set_defaults(func=cmd_desktop)
 
-    run = sub.add_parser("run", help="dispatch a directive to the running server")
+    run = sub.add_parser("run", help="dispatch a directive (streams the run live)")
     run.add_argument("directive", nargs="*", help="what the swarm should do (or pipe via stdin)")
     run.add_argument("--url", help="base URL of a running server (overrides --host/--port)")
     run.add_argument("--json", action="store_true", help="print the raw JSON result (for scripting)")
+    run.add_argument("--no-stream", action="store_true", help="wait for the full result instead of streaming")
     run.set_defaults(func=cmd_run)
 
     chat = sub.add_parser("chat", help="interactive terminal chat with the swarm")
@@ -560,6 +913,34 @@ def build_parser() -> argparse.ArgumentParser:
     msg.add_argument("platform", nargs="?", help="platform id (e.g. telegram) for enable/disable")
     msg.add_argument("--set", action="append", metavar="KEY=VALUE", help="set a config field (repeatable)")
     msg.set_defaults(func=cmd_messaging)
+
+    # inspecting / driving the agent
+    sub.add_parser("sessions", help="list your conversations").set_defaults(func=cmd_sessions)
+    sub.add_parser("agents", help="list the swarm's signed agents").set_defaults(func=cmd_agents)
+    sub.add_parser("skills", help="list learned skills").set_defaults(func=cmd_skills)
+    sub.add_parser("recipes", help="list saved task templates").set_defaults(func=cmd_recipes)
+    sub.add_parser("verify", help="verify the signed ledger chain").set_defaults(func=cmd_verify)
+    sub.add_parser("metrics", help="show usage metrics").set_defaults(func=cmd_metrics)
+    sub.add_parser("eval", help="run the benchmark suite").set_defaults(func=cmd_eval)
+
+    mem = sub.add_parser("memory", help="browse a memory layer")
+    mem.add_argument("layer", nargs="?", default="semantic", choices=["semantic", "episodic", "procedural"])
+    mem.add_argument("query", nargs="?", help="optional search text")
+    mem.set_defaults(func=cmd_memory)
+
+    rem = sub.add_parser("remember", help="store a fact in memory")
+    rem.add_argument("text", nargs="+", help="what to remember")
+    rem.add_argument("--layer", default="semantic", choices=["semantic", "episodic", "procedural"])
+    rem.set_defaults(func=cmd_remember)
+
+    srch = sub.add_parser("search", help="search the web via the agent's tools")
+    srch.add_argument("query", nargs="+", help="what to search for")
+    srch.add_argument("--limit", type=int, default=5, help="number of results (default 5)")
+    srch.set_defaults(func=cmd_search)
+
+    models = sub.add_parser("models", help="show or switch the LLM (e.g. --set ollama:qwen2.5:7b-instruct)")
+    models.add_argument("--set", metavar="BACKEND[:MODEL]", help="switch backend/model")
+    models.set_defaults(func=cmd_models)
 
     return p
 

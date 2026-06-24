@@ -795,3 +795,27 @@ def test_switch_to_ollama_respects_reachability():
 
 def test_unknown_backend_rejected():
     assert client.post("/api/llm", json={"backend": "gpt5"}).status_code == 400
+
+
+def test_task_stream_emits_events_and_final_result():
+    """The SSE endpoint streams start → live blocks/tokens → a done event whose
+    payload matches the blocking endpoint (used by the CLI's live `run`)."""
+    import json as _json
+
+    events = []
+    with client.stream("POST", "/api/task/stream", json={"directive": "say hi"}) as r:
+        assert r.status_code == 200
+        assert "text/event-stream" in r.headers["content-type"]
+        for line in r.iter_lines():
+            if line.startswith("data:"):
+                events.append(_json.loads(line[len("data:"):].strip()))
+
+    types = [e["type"] for e in events]
+    assert types[0] == "start"
+    assert "done" in types
+    assert any(t == "block" for t in types)  # signed agent steps streamed live
+    done = next(e for e in events if e["type"] == "done")
+    result = done["result"]
+    assert result["success"] is True
+    assert result["verification"]["valid"] is True
+    assert result["session_id"]
