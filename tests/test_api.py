@@ -523,7 +523,7 @@ def test_prometheus_endpoint():
 def test_mcp_list_and_call():
     tools = client.get("/api/mcp/tools").json()["tools"]
     names = {t["name"] for t in tools}
-    assert {"calc", "word_count", "uppercase"} <= names
+    assert {"calc", "format_json", "text_stats", "hash_text", "web_search"} <= names
 
     res = client.post("/api/mcp/call", json={"tool": "calc", "args": {"expression": "10 / 2"}}).json()
     assert res["ok"] is True and res["result"] == 5.0

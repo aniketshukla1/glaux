@@ -44,9 +44,9 @@ def _live():
 def test_local_client_list_and_call():
     c = default_local_client()
     names = {t.name for t in c.list_tools()}
-    assert {"calc", "word_count", "uppercase"} <= names
+    assert {"calc", "format_json", "text_stats", "regex_extract", "hash_text"} <= names
     assert c.call_tool("calc", {"expression": "2 * (3 + 4)"}) == {"ok": True, "result": 14}
-    assert c.call_tool("uppercase", {"text": "hi"}) == {"ok": True, "result": "HI"}
+    assert c.call_tool("text_stats", {"text": "one two three"})["result"]["words"] == 3
 
 
 def test_unknown_tool():

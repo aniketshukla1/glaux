@@ -121,25 +121,17 @@ def calc(expression: str):
     return _safe_eval(ast.parse(str(expression), mode="eval"))
 
 
-def word_count(text: str) -> int:
-    return len(str(text).split())
-
-
-def uppercase(text: str) -> str:
-    return str(text).upper()
-
-
 def default_local_client() -> LocalMCPClient:
-    """A LocalMCPClient pre-loaded with a few safe demo tools."""
+    """A LocalMCPClient pre-loaded with the real built-in skill suite (JSON/CSV/
+    regex/text-stats/hash/base64/diff/entity-extraction) plus safe arithmetic."""
+    from .skills import register_skills
+
     client = LocalMCPClient(server_name="athena-builtin")
+    register_skills(client)
     client.register(
-        "calc", "Evaluate a safe arithmetic expression", calc,
+        "calc", "Evaluate a safe arithmetic expression (numbers and + - * / % ** only).", calc,
         {"expression": "string (e.g. '2 * (3 + 4)')"},
     )
-    client.register(
-        "word_count", "Count the words in a string", word_count, {"text": "string"}
-    )
-    client.register("uppercase", "Uppercase a string", uppercase, {"text": "string"})
     return client
 
 
