@@ -177,7 +177,10 @@ def _load_eval_runs() -> list:
     out = []
     for r in data[-200:]:  # keep history bounded
         try:
-            out.append(EvalRun(timestamp=r["timestamp"], total=r["total"], passed=r["passed"]))
+            out.append(EvalRun(
+                timestamp=r["timestamp"], total=r["total"], passed=r["passed"],
+                skill_count=r.get("skill_count", 0),
+            ))
         except (KeyError, TypeError):
             continue
     return out
@@ -187,7 +190,10 @@ def _save_eval_runs(runs: list) -> None:
     p = _eval_runs_path()
     try:
         p.parent.mkdir(parents=True, exist_ok=True)
-        payload = [{"timestamp": r.timestamp, "total": r.total, "passed": r.passed} for r in runs[-200:]]
+        payload = [
+            {"timestamp": r.timestamp, "total": r.total, "passed": r.passed, "skill_count": getattr(r, "skill_count", 0)}
+            for r in runs[-200:]
+        ]
         p.write_text(json.dumps(payload, indent=2))
     except OSError:
         pass
@@ -371,8 +377,15 @@ WS = WSManager()
 
 class _State:
     def __init__(self) -> None:
-        self.memory_dir = tempfile.mkdtemp(prefix="athena-mem-")
-        self.memory = MemoryManager(self.memory_dir)
+        # Durable memory + skill library: learned skills must accumulate across
+        # restarts for self-improvement to compound (not a throwaway temp dir).
+        self.memory_dir = str(_athena_home() / "memory")
+        try:
+            os.makedirs(self.memory_dir, exist_ok=True)
+            self.memory = MemoryManager(self.memory_dir)
+        except Exception:  # noqa: BLE001 - corrupt store → fall back to a fresh one
+            self.memory_dir = tempfile.mkdtemp(prefix="athena-mem-")
+            self.memory = MemoryManager(self.memory_dir)
         self.skills = SkillLibrary(self.memory.procedural)
         self.mcp = MCPRegistry(
             builtin=default_local_client(),
@@ -494,7 +507,7 @@ class _State:
 
     def reset_memory(self) -> None:
         shutil.rmtree(self.memory_dir, ignore_errors=True)
-        self.memory_dir = tempfile.mkdtemp(prefix="athena-mem-")
+        os.makedirs(self.memory_dir, exist_ok=True)
         self.memory = MemoryManager(self.memory_dir)
         self.skills = SkillLibrary(self.memory.procedural)
 
@@ -1904,21 +1917,44 @@ async def run_eval() -> dict:
     harness = EvalHarness(STATE.skills)
     previous = STATE.eval_runs[-1] if STATE.eval_runs else None
     run = await run_in_threadpool(harness.run_suite, cases)
+    run.skill_count = len(STATE.skills.list(None))  # capability size at this run
     STATE.eval_runs.append(run)
     _save_eval_runs(STATE.eval_runs)  # persist benchmark history
     METRICS.inc("eval_runs_total")
     METRICS.set("eval_pass_rate", run.pass_rate)
-    log_json("eval", passed=run.passed, total=run.total, pass_rate=round(run.pass_rate, 3))
+    log_json("eval", passed=run.passed, total=run.total, pass_rate=round(run.pass_rate, 3), skills=run.skill_count)
     return {"run": run.to_dict(), "lift": lift(run, previous)}
+
+
+def _capability_lift() -> Optional[dict]:
+    """How much the agent has improved as it learned skills: pass rate now vs the
+    first recorded benchmark, alongside how the library grew. This is the proof
+    that the self-improvement loop compounds."""
+    runs = STATE.eval_runs
+    if len(runs) < 2:
+        return None
+    first, last = runs[0], runs[-1]
+    return {
+        "first_pass_rate": round(first.pass_rate, 4),
+        "last_pass_rate": round(last.pass_rate, 4),
+        "delta": round(last.pass_rate - first.pass_rate, 4),
+        "skills_first": getattr(first, "skill_count", 0),
+        "skills_last": getattr(last, "skill_count", 0),
+        "runs": len(runs),
+    }
 
 
 @app.get("/api/eval/runs")
 def eval_runs() -> dict:
     return {
         "runs": [
-            {"timestamp": r.timestamp, "pass_rate": round(r.pass_rate, 4), "passed": r.passed, "total": r.total}
+            {
+                "timestamp": r.timestamp, "pass_rate": round(r.pass_rate, 4),
+                "passed": r.passed, "total": r.total, "skill_count": getattr(r, "skill_count", 0),
+            }
             for r in STATE.eval_runs
-        ]
+        ],
+        "lift": _capability_lift(),
     }
 
 

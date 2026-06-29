@@ -39,6 +39,7 @@ class EvalRun:
     total: int
     passed: int
     cases: list = field(default_factory=list)
+    skill_count: int = 0  # how many learned skills the library held at run time
 
     @property
     def pass_rate(self) -> float:
@@ -50,6 +51,7 @@ class EvalRun:
             "total": self.total,
             "passed": self.passed,
             "pass_rate": round(self.pass_rate, 4),
+            "skill_count": self.skill_count,
             "cases": [asdict(c) for c in self.cases],
         }
 

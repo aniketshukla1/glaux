@@ -1,18 +1,40 @@
 import React, { useEffect, useState } from 'react'
-import { BarChart3 } from 'lucide-react'
+import { BarChart3, TrendingUp } from 'lucide-react'
 import { getEvalRuns, runEval } from '../api.js'
+
+// A tiny pass-rate sparkline over the benchmark history.
+function Sparkline({ runs = [], className = '' }) {
+  if (runs.length < 2) return null
+  const W = 120, H = 34, p = 3
+  const pts = runs.map((r, i) => {
+    const x = p + (i * (W - 2 * p)) / (runs.length - 1)
+    const y = p + (1 - (r.pass_rate || 0)) * (H - 2 * p)
+    return `${x.toFixed(1)},${y.toFixed(1)}`
+  })
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} width={W} height={H} className={className} preserveAspectRatio="none">
+      <polyline points={pts.join(' ')} fill="none" stroke="rgb(var(--accent))" strokeWidth="1.5"
+        strokeLinejoin="round" strokeLinecap="round" />
+      <circle cx={pts[pts.length - 1].split(',')[0]} cy={pts[pts.length - 1].split(',')[1]} r="2.2" fill="rgb(var(--accent))" />
+    </svg>
+  )
+}
 
 export default function EvalDashboard() {
   const [run, setRun] = useState(null)
   const [lift, setLift] = useState(null)
   const [history, setHistory] = useState([])
+  const [trend, setTrend] = useState(null) // capability lift over time
   const [busy, setBusy] = useState(false)
 
   const loadHistory = async () => {
     try {
-      setHistory((await getEvalRuns()).runs)
+      const d = await getEvalRuns()
+      setHistory(d.runs || [])
+      setTrend(d.lift || null)
     } catch {
       setHistory([])
+      setTrend(null)
     }
   }
   useEffect(() => {
@@ -45,6 +67,29 @@ export default function EvalDashboard() {
           {busy ? 'Running…' : 'Run benchmark'}
         </button>
       </div>
+
+      {trend && (
+        <div className="glass p-4 mb-3 border border-accent/20">
+          <div className="flex items-center gap-2 text-[11px] uppercase tracking-wide text-faint mb-2">
+            <TrendingUp className="w-3.5 h-3.5 text-accent" /> Capability lift over time
+          </div>
+          <div className="flex items-center gap-4">
+            <div className="flex items-baseline gap-1.5">
+              <span className="text-muted text-sm">{pct(trend.first_pass_rate)}</span>
+              <span className="text-faint">→</span>
+              <span className="text-fg text-2xl font-semibold">{pct(trend.last_pass_rate)}</span>
+              <span className={`text-sm font-medium ${trend.delta >= 0 ? 'text-emerald-300' : 'text-rose-300'}`}>
+                {trend.delta >= 0 ? '+' : ''}{(trend.delta * 100).toFixed(0)} pts
+              </span>
+            </div>
+            <Sparkline runs={history} className="ml-auto" />
+          </div>
+          <div className="text-xs text-faint mt-2">
+            pass rate across {trend.runs} benchmark runs as the library grew{' '}
+            <span className="text-muted">{trend.skills_first} → {trend.skills_last} learned skills</span>.
+          </div>
+        </div>
+      )}
 
       {run && (
         <>
