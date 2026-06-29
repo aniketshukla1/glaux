@@ -183,6 +183,14 @@ export const createRecipe = (data) =>
   request('POST', '/api/recipes', { name: data.name, prompt: data.prompt || null, description: data.description || null, emoji: data.emoji || null })
 export const updateRecipe = (id, patch) => request('PATCH', `/api/recipes/${encodeURIComponent(id)}`, patch)
 export const deleteRecipe = (id) => request('DELETE', `/api/recipes/${encodeURIComponent(id)}`)
+export async function exportLedger() {
+  const token = getToken()
+  const res = await fetch('/api/ledger/export', {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  })
+  if (!res.ok) throw new Error(`export failed (${res.status})`)
+  return res.text()
+}
 export const getSearchEngine = () => request('GET', '/api/search-engine')
 export const setSearchEngine = (provider, keys) => request('POST', '/api/search-engine', { provider, keys: keys || null })
 export const createProject = (name, instructions) =>

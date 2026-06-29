@@ -1,9 +1,21 @@
-import React from 'react'
-import { Link2 } from 'lucide-react'
+import React, { useState } from 'react'
+import { Link2, Download } from 'lucide-react'
+import { exportLedger } from '../api.js'
+import { download } from '../lib/export.js'
 
 export default function ChainAuditor({ ledger, onVerify }) {
   const v = ledger.verification
   const ok = v && v.valid
+  const [busy, setBusy] = useState(false)
+
+  const onExport = async () => {
+    setBusy(true)
+    try {
+      download('athena-ledger.jsonl', await exportLedger(), 'application/x-ndjson')
+    } catch { /* ignore */ } finally {
+      setBusy(false)
+    }
+  }
 
   return (
     <section>
@@ -28,16 +40,29 @@ export default function ChainAuditor({ ledger, onVerify }) {
           <span className="text-fg">{ledger.count}</span>
         </div>
 
-        <button
-          onClick={onVerify}
-          className="w-full px-3 py-2 rounded-lg border border-accent2/40 text-accent2 hover:bg-accent2/10 transition"
-        >
-          Re-verify chain
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={onVerify}
+            className="flex-1 px-3 py-2 rounded-lg border border-accent2/40 text-accent2 hover:bg-accent2/10 transition"
+          >
+            Re-verify chain
+          </button>
+          <button
+            onClick={onExport}
+            disabled={busy || !ledger.count}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-line/20 text-muted hover:text-fg hover:border-line/40 transition disabled:opacity-40"
+            title="Download the signed chain as a proof anyone can verify offline"
+          >
+            <Download className="w-3.5 h-3.5" /> Export proof
+          </button>
+        </div>
 
         <p className="text-xs text-faint leading-relaxed">
           Verification runs natively in Rust (athena_ledger): it recomputes every
           SHA-256, checks each prev-hash link, and validates every Ed25519 signature.
+          The chain is durable across restarts; <span className="text-muted">Export proof</span> downloads it
+          as <code className="text-muted">athena-ledger.jsonl</code> — verify it independently with{' '}
+          <code className="text-muted">python scripts/verify_ledger.py</code>.
         </p>
       </div>
     </section>

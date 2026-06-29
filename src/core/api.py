@@ -117,6 +117,51 @@ def _metrics_path() -> Path:
     return _athena_home() / "metrics.json"
 
 
+def _ledger_path() -> Path:
+    return _athena_home() / "ledger.jsonl"
+
+
+def _identities_path() -> Path:
+    return _athena_home() / "identities.json"
+
+
+def _load_identities() -> Optional[dict]:
+    """Reconstruct the swarm's persistent agent identities (so the SAME keys keep
+    signing the ledger across restarts). None if missing/incomplete."""
+    p = _identities_path()
+    if not p.exists():
+        return None
+    try:
+        import base58
+        from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
+        data = json.loads(p.read_text())
+        out: dict = {}
+        for role in ROLES:
+            d = data.get(role)
+            if not d:
+                return None
+            sk = Ed25519PrivateKey.from_private_bytes(base58.b58decode(d["seed"]))
+            out[role] = AgentIdentity(sk, d["agent_id"], d.get("namespace", "default"))
+        return out
+    except Exception:  # noqa: BLE001 - corrupt/old file → regenerate
+        return None
+
+
+def _save_identities(identities: dict) -> None:
+    try:
+        data = {
+            role: {"seed": ident.signing_key_b58(), "agent_id": ident.agent_id, "namespace": ident.namespace}
+            for role, ident in identities.items()
+        }
+        p = _identities_path()
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(json.dumps(data, indent=2))
+        os.chmod(p, 0o600)  # private signing keys
+    except OSError:
+        pass
+
+
 def _eval_runs_path() -> Path:
     return _athena_home() / "eval_runs.json"
 
@@ -361,11 +406,48 @@ class _State:
         self.eval_runs: list[EvalRun] = _load_eval_runs()  # benchmark history survives restarts
         self.approval_mode = "auto"  # auto | gated (gated => human approves synthesized skills)
         self.llm_config = _default_llm_config()
-        self.reset_ledger()
+        self._ledger_last_save = 0.0
+        self._init_signed_state()
+
+    def _on_ledger_append(self, block: dict) -> None:
+        WS.publish({"type": "block", "block": block})  # live stream
+        now = time.monotonic()
+        if now - self._ledger_last_save > 3.0:  # throttled durable write
+            self._ledger_last_save = now
+            try:
+                self.ledger.save(_ledger_path())
+            except Exception:  # noqa: BLE001
+                pass
+
+    def _init_signed_state(self) -> None:
+        """Load the durable agent identities and the tamper-evident ledger chain
+        from disk (or create them), so provenance survives restarts."""
+        self.identities = _load_identities()
+        if self.identities is None:
+            self.identities = {role: AgentIdentity.generate() for role in ROLES}
+            _save_identities(self.identities)
+        lp = _ledger_path()
+        if lp.exists():
+            try:
+                self.ledger = Ledger.load(lp)
+            except Exception:  # noqa: BLE001 - corrupt → start fresh
+                self.ledger = Ledger()
+        else:
+            self.ledger = Ledger()
+        self.ledger.on_append = self._on_ledger_append
+        self.llm = _make_llm(self.llm_config)
 
     def reset_ledger(self) -> None:
-        self.ledger = Ledger(on_append=lambda block: WS.publish({"type": "block", "block": block}))
+        """Explicitly wipe the chain and mint fresh identities (also on disk)."""
         self.identities = {role: AgentIdentity.generate() for role in ROLES}
+        _save_identities(self.identities)
+        self.ledger = Ledger()
+        self.ledger.on_append = self._on_ledger_append
+        self._ledger_last_save = 0.0
+        try:
+            self.ledger.save(_ledger_path())
+        except Exception:  # noqa: BLE001
+            pass
         self.llm = _make_llm(self.llm_config)
 
     @property
@@ -458,6 +540,10 @@ async def _lifespan(_app):
     STATE.mcp.close_all()
     STATE.local_model.stop()
     METRICS.save()  # flush the latest counters on a clean shutdown
+    try:
+        STATE.ledger.save(_ledger_path())  # persist the full signed chain
+    except Exception:  # noqa: BLE001
+        pass
 
 
 app = FastAPI(title="Athena Swarm API", version="0.2.0", lifespan=_lifespan)
@@ -1277,6 +1363,21 @@ def get_ledger() -> dict:
         "blocks": STATE.ledger.blocks(),
         "verification": _verification(),
     }
+
+
+@app.get("/api/ledger/export")
+def export_ledger() -> PlainTextResponse:
+    """The full signed chain as newline-delimited JSON — a self-contained,
+    independently verifiable proof. Re-check it offline with:
+        python scripts/verify_ledger.py <file>
+    (every line is a block with its Ed25519 signature, signing key and hashes)."""
+    lines = [json.dumps(STATE.ledger.block(i)) for i in range(len(STATE.ledger))]
+    body = "\n".join(lines) + ("\n" if lines else "")
+    return PlainTextResponse(
+        body,
+        media_type="application/x-ndjson",
+        headers={"Content-Disposition": 'attachment; filename="athena-ledger.jsonl"'},
+    )
 
 
 @app.get("/api/block/{index}")
