@@ -65,6 +65,22 @@ def _preexec(caps: Capabilities):
             resource.setrlimit(resource.RLIMIT_NOFILE, (256, 256))
         except Exception:
             pass
+        try:
+            import resource
+
+            fsize = 64 * 1024 * 1024  # cap any single file write at 64 MB (no disk-fill)
+            resource.setrlimit(resource.RLIMIT_FSIZE, (fsize, fsize))
+        except Exception:
+            pass
+        try:
+            import resource
+
+            # best-effort: shrink the process-count ceiling to blunt fork bombs
+            soft, hard = resource.getrlimit(resource.RLIMIT_NPROC)
+            if soft == resource.RLIM_INFINITY or soft > 512:
+                resource.setrlimit(resource.RLIMIT_NPROC, (512, hard))
+        except Exception:
+            pass
 
     return fn
 

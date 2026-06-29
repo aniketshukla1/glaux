@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+
 import pytest
 
 import safety
@@ -148,3 +150,54 @@ def test_dry_run_skips_execution():
     assert res.ok
     assert "dry-run" in res.stdout
     assert "should not run" not in res.stdout
+
+
+# --- runtime process / fs-bypass hardening (moat #2) ---------------------
+
+
+def test_os_system_blocked():
+    res = run("import os\nos.system('echo pwned > /tmp/ath_pwn_sys')", caps=Capabilities(time_limit_s=5))
+    assert not res.ok
+    assert "process" in (res.error or "").lower()
+    assert not os.path.exists("/tmp/ath_pwn_sys")
+
+
+def test_subprocess_blocked_even_via_dynamic_import():
+    code = "m = __import__('subprocess')\nm.run(['echo', 'x'])\n"
+    res = run(code, caps=Capabilities(time_limit_s=5))
+    assert not res.ok
+    assert "process" in (res.error or "").lower()
+
+
+def test_os_open_write_escape_blocked():
+    target = "/tmp/ath_pwn_osopen"
+    code = (
+        "import os\n"
+        f"fd = os.open({target!r}, os.O_WRONLY | os.O_CREAT)\n"
+        "os.write(fd, b'x'); os.close(fd)\n"
+    )
+    res = run(code, caps=Capabilities(time_limit_s=5))
+    assert not res.ok
+    assert "not permitted" in (res.error or "").lower()
+    assert not os.path.exists(target)
+
+
+def test_os_remove_outside_scratch_blocked():
+    # create a real file the skill must not be able to delete
+    victim = "/tmp/ath_victim_keep"
+    with open(victim, "w") as f:
+        f.write("keep me")
+    try:
+        res = run(f"import os\nos.remove({victim!r})", caps=Capabilities(time_limit_s=5))
+        assert not res.ok
+        assert os.path.exists(victim)  # not deleted
+    finally:
+        os.remove(victim)
+
+
+def test_writes_into_scratch_still_allowed():
+    # a skill may use its scratch dir freely
+    code = "open('out.txt', 'w').write('ok')\nprint(open('out.txt').read())"
+    res = run(code, caps=Capabilities(time_limit_s=5))
+    assert res.ok
+    assert "ok" in res.stdout
