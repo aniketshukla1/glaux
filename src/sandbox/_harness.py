@@ -6,8 +6,9 @@ code, entrypoint, inputs, and capability guards; installs Python-level guards
 
 This is *defense in depth*, not a hard security boundary on its own — it is
 combined with process isolation, a minimal environment, resource limits, and
-a parent-side memory/timeout watcher. The v2 migration replaces this with a
-WASM runtime that has no syscalls by default.
+a parent-side memory/timeout watcher. The v2 backend (``wasm.py``, opt-in via
+``ATHENA_SANDBOX_BACKEND``) replaces this with a WASM runtime that has no
+syscalls by default; see ``WASM_V2.md``.
 """
 
 from __future__ import annotations

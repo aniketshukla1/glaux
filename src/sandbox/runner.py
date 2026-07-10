@@ -156,6 +156,24 @@ def run(
             return_value=None,
         )
 
+    # Backend selection. Default is the subprocess sandbox below. The WASM v2
+    # backend (no ambient authority) is opt-in and, when it can't run Python
+    # skills yet, "auto" transparently falls back here.
+    backend = os.environ.get("ATHENA_SANDBOX_BACKEND", "subprocess").lower()
+    if backend in ("wasm", "auto"):
+        from .wasm import WasmSandbox
+
+        if WasmSandbox.python_available():
+            return WasmSandbox().run(code, caps=caps, inputs=inputs, entrypoint=entrypoint)
+        if backend == "wasm":
+            return SandboxResult(
+                ok=False,
+                error="ATHENA_SANDBOX_BACKEND=wasm but no CPython-WASI runtime "
+                "configured (set ATHENA_PYTHON_WASM); refusing to silently run "
+                "with weaker isolation",
+            )
+        # backend == "auto": fall through to the subprocess sandbox
+
     # Resolve declared secrets (parent-side) for injection + redaction.
     secret_values: list[str] = []
     injected: dict[str, str] = {}
