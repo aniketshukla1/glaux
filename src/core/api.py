@@ -1137,6 +1137,29 @@ def health() -> dict:
         "approval": STATE.approval_mode,
         "blocks": len(STATE.ledger),
         "memory": {layer: len(STATE.store(layer).list_all()) for layer in MEMORY_LAYERS},
+        "sandbox": _sandbox_status(),
+    }
+
+
+def _sandbox_status() -> dict:
+    """Which skill-sandbox backend is active and whether the v2 WASM runtime is
+    available (no-ambient-authority isolation)."""
+    from sandbox import WasmSandbox
+
+    backend = os.environ.get("ATHENA_SANDBOX_BACKEND", "subprocess").lower()
+    wasm_runtime = WasmSandbox.runtime_available()
+    wasm_python = WasmSandbox.python_available()
+    if backend in ("wasm", "auto") and wasm_python:
+        active = "wasm"
+    elif backend == "wasm":
+        active = "wasm-unavailable"
+    else:
+        active = "subprocess"
+    return {
+        "backend": backend,
+        "active": active,
+        "wasm_runtime": wasm_runtime,   # can run wasm modules (isolation available)
+        "wasm_python": wasm_python,      # can run Python skills in wasm (python.wasm set)
     }
 
 

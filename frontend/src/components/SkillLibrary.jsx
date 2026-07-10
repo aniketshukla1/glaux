@@ -1,6 +1,31 @@
 import React, { useEffect, useState } from 'react'
-import { Hammer, AlertTriangle, Check, X } from 'lucide-react'
-import { approveSkill, getSkills, rejectSkill, synthesizeSkill, useSkill } from '../api.js'
+import { Hammer, AlertTriangle, Check, X, Shield, ShieldCheck } from 'lucide-react'
+import { approveSkill, getHealth, getSkills, rejectSkill, synthesizeSkill, useSkill } from '../api.js'
+
+// How skill code is isolated when it runs. WASM = the v2 no-ambient-authority
+// backend (can't syscall at all); subprocess = the hardened child-process sandbox.
+function SandboxBadge({ sandbox }) {
+  if (!sandbox) return null
+  const wasm = sandbox.active === 'wasm'
+  const Icon = wasm ? ShieldCheck : Shield
+  const label = wasm ? 'WASM isolation' : 'subprocess sandbox'
+  const cls = wasm
+    ? 'text-emerald-300 border-emerald-500/40 bg-emerald-500/10'
+    : 'text-sky-300 border-sky-500/40 bg-sky-500/10'
+  const title = wasm
+    ? 'Skills run in a WebAssembly guest with no ambient authority (no syscalls by default).'
+    : sandbox.wasm_runtime
+      ? 'Hardened child-process sandbox. WASM v2 backend is available — set ATHENA_SANDBOX_BACKEND=auto + ATHENA_PYTHON_WASM to enable.'
+      : 'Hardened child-process sandbox (network/filesystem/process guards + resource limits).'
+  return (
+    <span
+      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] border ${cls}`}
+      title={title}
+    >
+      <Icon className="w-3 h-3" /> {label}
+    </span>
+  )
+}
 
 const STATUS = {
   pending_approval: 'text-violet-300 border-violet-500/40 bg-violet-500/10',
@@ -15,6 +40,7 @@ export default function SkillLibrary() {
   const [task, setTask] = useState('Reverse a string')
   const [busy, setBusy] = useState(false)
   const [result, setResult] = useState(null)
+  const [sandbox, setSandbox] = useState(null)
 
   const load = async () => {
     try {
@@ -25,6 +51,7 @@ export default function SkillLibrary() {
   }
   useEffect(() => {
     load()
+    getHealth().then((h) => setSandbox(h.sandbox)).catch(() => setSandbox(null))
   }, [])
 
   const onSynth = async (e) => {
@@ -57,7 +84,10 @@ export default function SkillLibrary() {
 
   return (
     <section>
-      <h2 className="text-fg mb-3 flex items-center gap-2"><Hammer className="w-4 h-4 text-accent" /> Skill Library</h2>
+      <div className="flex items-center gap-2 mb-3">
+        <h2 className="text-fg flex items-center gap-2"><Hammer className="w-4 h-4 text-accent" /> Skill Library</h2>
+        <span className="ml-auto"><SandboxBadge sandbox={sandbox} /></span>
+      </div>
 
       <form onSubmit={onSynth} className="flex gap-2 mb-2">
         <input
