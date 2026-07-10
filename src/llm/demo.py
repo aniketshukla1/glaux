@@ -188,6 +188,21 @@ _SKILL_CATALOG = (
     (("upper", "capital"), "to_upper", "Uppercase a string",
      "def run(s):\n    return str(s).upper()\n",
      ['assert run("ab") == "AB"', 'assert run("") == ""']),
+    (("slug", "url title"), "slugify", "Turn a title into a URL slug",
+     "import re\n"
+     "def run(text):\n"
+     "    return re.sub(r'[^a-z0-9]+', '-', str(text).lower()).strip('-')\n",
+     ['assert run("Hello, World!") == "hello-world"', 'assert run("  A  B  ") == "a-b"']),
+    (("roman", "numeral"), "roman_to_int", "Parse a Roman numeral to an integer",
+     "def run(s):\n"
+     "    vals = {'I': 1, 'V': 5, 'X': 10, 'L': 50, 'C': 100, 'D': 500, 'M': 1000}\n"
+     "    total = prev = 0\n"
+     "    for ch in reversed(str(s).upper()):\n"
+     "        v = vals.get(ch, 0)\n"
+     "        total += -v if v < prev else v\n"
+     "        prev = v\n"
+     "    return total\n",
+     ['assert run("XIV") == 14', 'assert run("MCMXCIV") == 1994']),
 )
 
 

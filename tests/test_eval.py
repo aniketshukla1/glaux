@@ -99,4 +99,4 @@ def test_load_bench_reads_repo_suite():
     repo_bench = Path(__file__).resolve().parents[1] / "bench"
     cases = load_bench(repo_bench)
     names = {c["name"] for c in cases}
-    assert {"reverse_basic", "reverse_empty", "sum_list", "is_palindrome"} <= names
+    assert {"slugify", "roman_numeral", "sum_list", "is_palindrome"} <= names

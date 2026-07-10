@@ -445,18 +445,18 @@ def test_use_unknown_skill_404():
 
 
 def test_eval_run_and_lift_from_synthesized_skill():
-    # baseline: reverse_* cases fail (no skill), inline baselines pass
+    # baseline: skill-backed cases fail (library empty), inline baselines pass
     base = client.post("/api/eval/run").json()
     base_passed = base["run"]["passed"]
     assert base["run"]["total"] >= 4
-    assert any(not c["passed"] for c in base["run"]["cases"])  # reverse_* missing
+    assert any(not c["passed"] for c in base["run"]["cases"])  # slugify/roman missing
 
-    # synthesize the reverse_string skill, then re-run -> lift
-    client.post("/api/skills/synthesize", json={"task": "reverse a string"})
+    # synthesize the roman_to_int skill, then re-run -> lift
+    client.post("/api/skills/synthesize", json={"task": "parse a roman numeral"})
     after = client.post("/api/eval/run").json()
     assert after["run"]["passed"] > base_passed
     assert after["lift"]["delta_pass_rate"] > 0
-    assert "reverse_basic" in after["lift"]["newly_passing"]
+    assert "roman_numeral" in after["lift"]["newly_passing"]
 
     # run history is tracked
     runs = client.get("/api/eval/runs").json()["runs"]
