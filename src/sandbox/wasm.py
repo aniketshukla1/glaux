@@ -35,9 +35,12 @@ from .capabilities import Capabilities, SandboxResult
 
 PYTHON_WASM_ENV = "ATHENA_PYTHON_WASM"
 
-# Wall-clock is enforced by the epoch timer; fuel is a deterministic compute
-# ceiling so a skill can't burn unbounded CPU even within its time budget.
-_FUEL_PER_SECOND = 1_500_000_000
+# Wall-clock is the primary limit (the epoch timer, matching the subprocess
+# backend). Fuel is a deterministic backstop sized well above the observed
+# Python-in-wasm rate (~120B fuel/s) so the epoch deadline reliably fires first
+# for normal timeouts; fuel only trips in a pathological case where the host
+# timer thread never runs.
+_FUEL_PER_SECOND = 1_000_000_000_000
 
 # With epoch_interruption enabled, every store must arm an epoch deadline or it
 # traps immediately. This large value effectively disables the epoch guard for
@@ -96,15 +99,55 @@ def _wt():
     return wasmtime
 
 
-class WasmSandbox:
-    """Execute skills in a WASI guest with no ambient authority."""
+# One engine + one compiled module per process. Compiling the ~25 MB python.wasm
+# takes >1s; doing it per run would dominate latency (and eat the time budget).
+# The module is instantiated fresh per run (own store/memory) but compiled once.
+_ENGINE = None
+_MODULE_CACHE: dict = {}  # wasm_path -> (mtime, size, Module)
 
-    def __init__(self) -> None:
+
+def _shared_engine():
+    global _ENGINE
+    if _ENGINE is None:
         wt = _wt()
         cfg = wt.Config()
         cfg.consume_fuel = True          # deterministic instruction budget
         cfg.epoch_interruption = True    # wall-clock deadline, OS-signal-free
-        self._engine = wt.Engine(cfg)
+        _ENGINE = wt.Engine(cfg)
+    return _ENGINE
+
+
+def _compiled_module(engine, wasm_path: str):
+    """Compile ``wasm_path`` once and reuse it. Also keeps a serialized ``.cwasm``
+    beside it so the first run after a restart skips the >1s compile too."""
+    st = os.stat(wasm_path)
+    cached = _MODULE_CACHE.get(wasm_path)
+    if cached and cached[0] == st.st_mtime and cached[1] == st.st_size:
+        return cached[2]
+    wt = _wt()
+    module = None
+    cache_file = wasm_path + ".cwasm"
+    if os.path.isfile(cache_file) and os.path.getmtime(cache_file) >= st.st_mtime:
+        try:
+            module = wt.Module.deserialize_file(engine, cache_file)
+        except Exception:
+            module = None  # stale/incompatible cache -> recompile
+    if module is None:
+        module = wt.Module.from_file(engine, wasm_path)
+        try:
+            with open(cache_file, "wb") as f:
+                f.write(module.serialize())
+        except Exception:
+            pass
+    _MODULE_CACHE[wasm_path] = (st.st_mtime, st.st_size, module)
+    return module
+
+
+class WasmSandbox:
+    """Execute skills in a WASI guest with no ambient authority."""
+
+    def __init__(self) -> None:
+        self._engine = _shared_engine()
 
     # --- availability -----------------------------------------------------
 
@@ -120,8 +163,15 @@ class WasmSandbox:
 
     @staticmethod
     def python_wasm_path() -> Optional[str]:
+        """The CPython-WASI runtime to use: an explicit ATHENA_PYTHON_WASM path,
+        else the default drop-in location <ATHENA_HOME>/python.wasm (what
+        scripts/fetch_python_wasm.sh installs). None if neither exists."""
         p = os.environ.get(PYTHON_WASM_ENV)
-        return p if p and os.path.isfile(p) else None
+        if p and os.path.isfile(p):
+            return p
+        home = os.environ.get("ATHENA_HOME") or os.path.join(os.path.expanduser("~"), ".athena")
+        default = os.path.join(home, "python.wasm")
+        return default if os.path.isfile(default) else None
 
     @classmethod
     def python_available(cls) -> bool:
@@ -211,6 +261,12 @@ class WasmSandbox:
             except Exception:
                 pass
 
+            # Compile once (cached); instantiate fresh. Do this BEFORE arming the
+            # wall-clock timer so the one-time compile can't eat the time budget.
+            linker = wt.Linker(self._engine)
+            linker.define_wasi()
+            module = _compiled_module(self._engine, wasm_path)
+
             # Wall-clock deadline: a background timer bumps the engine epoch once
             # the budget elapses, tripping the guest's epoch deadline -> trap.
             store.set_epoch_deadline(1)
@@ -222,10 +278,6 @@ class WasmSandbox:
 
             timer = threading.Thread(target=_deadline, daemon=True)
             timer.start()
-
-            linker = wt.Linker(self._engine)
-            linker.define_wasi()
-            module = wt.Module.from_file(self._engine, wasm_path)
 
             killed_reason: Optional[str] = None
             error: Optional[str] = None

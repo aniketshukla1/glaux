@@ -1146,7 +1146,7 @@ def _sandbox_status() -> dict:
     available (no-ambient-authority isolation)."""
     from sandbox import WasmSandbox
 
-    backend = os.environ.get("ATHENA_SANDBOX_BACKEND", "subprocess").lower()
+    backend = os.environ.get("ATHENA_SANDBOX_BACKEND", "auto").lower()
     wasm_runtime = WasmSandbox.runtime_available()
     wasm_python = WasmSandbox.python_available()
     if backend in ("wasm", "auto") and wasm_python:

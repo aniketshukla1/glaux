@@ -156,10 +156,10 @@ def run(
             return_value=None,
         )
 
-    # Backend selection. Default is the subprocess sandbox below. The WASM v2
-    # backend (no ambient authority) is opt-in and, when it can't run Python
-    # skills yet, "auto" transparently falls back here.
-    backend = os.environ.get("ATHENA_SANDBOX_BACKEND", "subprocess").lower()
+    # Backend selection. Default "auto": use the WASM v2 backend (no ambient
+    # authority) when a CPython-WASI runtime is available, else transparently
+    # fall back to the subprocess sandbox below. Force one with "wasm"/"subprocess".
+    backend = os.environ.get("ATHENA_SANDBOX_BACKEND", "auto").lower()
     if backend in ("wasm", "auto"):
         from .wasm import WasmSandbox
 

@@ -28,41 +28,43 @@ through WASI. We hand it nothing by default:
 ## What's built
 
 - `wasm.py::WasmSandbox` — the engine, the zero-authority WASI configuration,
-  the resource-limit wiring, and the Python-skill execution path.
+  the resource-limit wiring, and the Python-skill execution path. **Real Python
+  skills run end-to-end** in the guest (verified: `roman_to_int("MCMXCIV") ==
+  1994`, network/`/etc` access denied, wall-clock timeout enforced).
+- **Compiled-module cache** — the ~25 MB `python.wasm` compiles once per process
+  (>1s) and is reused across runs; a serialized `.cwasm` beside it skips the
+  compile even on the first run after a restart. Warm skill execution is ~0.1s.
 - `WasmSandbox.self_test()` — proves, at runtime, that the guest executes wasm
   with **0 preopened dirs / no network** and that a runaway module **traps on
   fuel exhaustion**. Exercised by `tests/test_sandbox_wasm.py`.
 - Backend dispatch in `runner.py`, selected by `ATHENA_SANDBOX_BACKEND`:
-  - unset / `subprocess` → the v1 sandbox (**default, unchanged**);
+  - unset / `auto` → **default**: use WASM when a CPython-WASI runtime is present,
+    else transparently fall back to the subprocess sandbox;
   - `wasm` → require the WASM backend; **refuse to run** if it can't (never
     silently downgrade isolation);
-  - `auto` → use WASM when a Python runtime is available, else fall back to v1.
+  - `subprocess` → force the v1 sandbox.
 
 ## Enabling Python-skill execution
 
-The runtime and isolation are done; running *Python* skills needs a CPython
-compiled to WASI (`python.wasm`), which we don't bundle (~20 MB). To enable:
+The runtime + isolation + Python execution are done. The one thing not committed
+to git is the ~25 MB CPython-WASI binary. Install it once:
 
-1. `pip install wasmtime` (already in `requirements.txt`).
-2. Obtain a CPython-WASI build — e.g. the VMware Labs
-   `webassembly-language-runtimes` release, or a `componentize-py` toolchain.
-3. Point Athena at it and turn the backend on:
+```bash
+scripts/fetch_python_wasm.sh    # pinned + checksum-verified -> ~/.athena/python.wasm
+```
 
-   ```bash
-   export ATHENA_PYTHON_WASM=/path/to/python.wasm
-   export ATHENA_SANDBOX_BACKEND=auto   # or: wasm (strict)
-   ```
-
-Every skill the eval harness and the synthesizer run then executes inside the
-WASM guest, through the exact same `sandbox.run(...)` entry point — no other
-code changes.
+That's it — the backend defaults to `auto`, so with the runtime present every
+skill the eval harness and synthesizer run executes inside the WASM guest via the
+same `sandbox.run(...)` entry point. Override the location with
+`ATHENA_PYTHON_WASM=/path/to/python.wasm` if you keep it elsewhere. `/api/health`
+reports `sandbox.active == "wasm"` and the Studio Skills panel shows the badge.
 
 ## Roadmap
 
-- Ship a pinned, checksummed `python.wasm` (or produce one at build time) so the
-  Python path is on by default.
-- Precompile skills to a module cache (`Engine` supports serialized modules) to
-  cut per-run instantiation cost.
+- Optionally vendor/produce the `python.wasm` at build time so no fetch step is
+  needed (today it's a one-line script, kept out of git to avoid a 25 MB blob).
+- Wall-clock limits use an epoch timer; fuel is a generous backstop. Could add a
+  per-skill instruction *budget* (deterministic replay) as a separate cap.
 - Move from WASI preview 1 to the **component model** (preview 2) for typed,
   capability-scoped host imports (e.g. a metered HTTP import when `net=True`)
   instead of the current all-or-nothing socket model.
