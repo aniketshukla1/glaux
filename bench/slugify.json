@@ -1,0 +1,9 @@
+{
+  "name": "slugify",
+  "description": "turn a title into a URL slug — requires a learned 'slugify' skill",
+  "skill": "slugify",
+  "entrypoint": "run",
+  "args": { "text": "Hello, World!" },
+  "expected": "hello-world",
+  "tags": ["text", "skill"]
+}

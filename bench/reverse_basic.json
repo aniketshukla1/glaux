@@ -1,9 +1,0 @@
-{
-  "name": "reverse_basic",
-  "description": "reverse a non-empty string",
-  "skill": "reverse_string",
-  "entrypoint": "run",
-  "args": { "s": "athena" },
-  "expected": "anehta",
-  "tags": ["coding", "strings"]
-}

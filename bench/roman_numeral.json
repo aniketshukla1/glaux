@@ -1,0 +1,9 @@
+{
+  "name": "roman_numeral",
+  "description": "parse a Roman numeral to an integer — requires a learned 'roman_to_int' skill",
+  "skill": "roman_to_int",
+  "entrypoint": "run",
+  "args": { "s": "XIV" },
+  "expected": 14,
+  "tags": ["algorithm", "skill"]
+}

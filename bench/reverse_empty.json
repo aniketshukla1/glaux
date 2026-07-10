@@ -1,9 +1,0 @@
-{
-  "name": "reverse_empty",
-  "description": "reversing an empty string returns empty",
-  "skill": "reverse_string",
-  "entrypoint": "run",
-  "args": { "s": "" },
-  "expected": "",
-  "tags": ["coding", "strings", "edge"]
-}
