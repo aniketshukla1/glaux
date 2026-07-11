@@ -61,15 +61,15 @@ def test_agent_calls_skill_then_finishes():
     assert res.success
     # the skill ran in the sandbox and returned 42
     call_step = res.steps[0]
-    assert call_step["observation"]["ok"] is True
-    assert call_step["observation"]["return_value"] == 42
+    assert call_step["observations"][0]["ok"] is True
+    assert call_step["observations"][0]["return_value"] == 42
 
 
 def test_unknown_skill_is_reported_not_crashed():
     llm = ScriptedLLM(responses=[_call("nope", x=1), _finish("recovered", success=False)])
     res = _agent(llm).run("do a thing", skills={})
-    assert res.steps[0]["observation"]["ok"] is False
-    assert "unknown skill" in res.steps[0]["observation"]["error"]
+    assert res.steps[0]["observations"][0]["ok"] is False
+    assert "unknown skill" in res.steps[0]["observations"][0]["error"]
 
 
 def test_repeated_failing_action_aborts():

@@ -78,3 +78,18 @@ def parse_action(text: str) -> Optional[dict]:
     if isinstance(obj, dict) and "action" in obj:
         return obj
     return None
+
+
+def parse_actions(text: str) -> list[dict]:
+    """Return one or more actions. A model may batch independent tool calls in one
+    turn as ``{"actions": [ {...}, {...} ]}``; a single ``{"action": ...}`` yields a
+    one-element list. Non-action entries are dropped."""
+    obj = extract_json(text)
+    if not isinstance(obj, dict):
+        return []
+    batch = obj.get("actions")
+    if isinstance(batch, list):
+        return [a for a in batch if isinstance(a, dict) and "action" in a]
+    if "action" in obj:
+        return [obj]
+    return []

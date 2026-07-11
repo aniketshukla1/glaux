@@ -91,7 +91,7 @@ def test_agent_calls_mcp_tool_and_logs_it():
     res = agent.run("compute 6 times 7")
     assert res.success
     # the tool ran and returned 42
-    assert res.steps[0]["observation"] == {"ok": True, "result": 42}
+    assert res.steps[0]["observations"][0] == {"ok": True, "result": 42}
     # the call was signed to the ledger as an MCP_TOOL action
     types = [b["action_type"] for b in led.blocks()]
     assert "MCP_TOOL" in types
@@ -102,8 +102,32 @@ def test_agent_without_mcp_client_reports_error():
     llm = ScriptedLLM(responses=[_mcp("calc", expression="1+1"), _finish("done")])
     agent = BaseAgent(identity=AgentIdentity.generate(), llm=llm, name="t")  # no mcp_client
     res = agent.run("x")
-    assert res.steps[0]["observation"]["ok"] is False
-    assert "no MCP client" in res.steps[0]["observation"]["error"]
+    assert res.steps[0]["observations"][0]["ok"] is False
+    assert "no MCP client" in res.steps[0]["observations"][0]["error"]
+
+
+def test_batched_tool_calls_run_concurrently():
+    import time
+
+    client = LocalMCPClient("slow")
+    client.register("slow", "slow echo", lambda x: (time.sleep(0.4) or x), {"x": "number"})
+    # one turn emits two INDEPENDENT tool calls -> they run in parallel
+    batch = (
+        '```json\n{"actions": ['
+        '{"action": "call_mcp", "tool": "slow", "args": {"x": 1}}, '
+        '{"action": "call_mcp", "tool": "slow", "args": {"x": 2}}'
+        ']}\n```'
+    )
+    llm = ScriptedLLM(responses=[batch, _finish("done")])
+    agent = BaseAgent(identity=AgentIdentity.generate(), llm=llm, name="t", mcp_client=client)
+    t0 = time.monotonic()
+    res = agent.run("run both tools")
+    elapsed = time.monotonic() - t0
+    assert res.success
+    obs = res.steps[0]["observations"]
+    assert len(obs) == 2 and all(o["ok"] for o in obs)  # both ran, in one turn
+    assert {o["result"] for o in obs} == {1, 2}
+    assert elapsed < 0.8  # 2 x 0.4s concurrently, not 0.8s back-to-back
 
 
 def test_mcp_skipped_in_dry_run():
@@ -111,7 +135,7 @@ def test_mcp_skipped_in_dry_run():
     llm = ScriptedLLM(responses=[_mcp("calc", expression="2+2"), _finish("done")])
     agent = BaseAgent(identity=AgentIdentity.generate(), llm=llm, name="t", mcp_client=default_local_client())
     res = agent.run("x")
-    assert "dry-run" in str(res.steps[0]["observation"]["result"])
+    assert "dry-run" in str(res.steps[0]["observations"][0]["result"])
 
 
 # --- real stdio MCP server -----------------------------------------------

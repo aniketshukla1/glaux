@@ -18,6 +18,7 @@ import hashlib
 import json
 import os
 import uuid
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
@@ -30,12 +31,14 @@ from llm.gateway import LLMClient, Message
 from sandbox import Capabilities, SecretsBroker, run as sandbox_run
 
 from .budget import BudgetTracker, charge_for_response
-from .protocol import CALL_AGENT, CALL_MCP, CALL_SKILL, FINISH, parse_action
+from .protocol import CALL_AGENT, CALL_MCP, CALL_SKILL, FINISH, parse_actions
 
-ACTION_INSTRUCTIONS = """Reason step by step about the goal, then emit exactly one action as a JSON object in a ```json code block. Available actions:
+ACTION_INSTRUCTIONS = """Reason step by step about the goal, then emit an action as a JSON object in a ```json code block. Available actions:
 - {"action": "call_skill", "skill_id": "<id>", "args": {...}} — run a skill from your library.
 - {"action": "call_mcp", "tool": "<name>", "args": {...}} — call an external MCP tool.
 - {"action": "finish", "result": "<answer>", "success": true} — complete the task.
+To run several INDEPENDENT tool calls at once (they don't depend on each other's
+results), batch them: {"actions": [ {...}, {...} ]} — they execute in parallel.
 Only call skills/tools that are listed as available — never invent an id. If no
 skill or tool fits, just answer directly and finish. Do not repeat an action that
 already failed. Keep all args JSON-serializable."""
@@ -197,66 +200,47 @@ class BaseAgent:
                 seed=self.seed,
             )
             charge_for_response(self.budget, resp, self.system_prompt, messages)
-            action = parse_action(resp.text)
+            actions = parse_actions(resp.text)
             self._log(
                 Action.THINK,
                 {"thought": resp.text[:2000], "prompt_hash": prompt_hash, "model_id": resp.model_id},
             )
-            step: dict = {"iteration": i, "thought": resp.text, "action": action, "observation": None}
+            step: dict = {"iteration": i, "thought": resp.text, "actions": actions, "observations": []}
             scratchpad.append(step)
 
-            if action is None:
-                step["observation"] = {"error": "no valid JSON action parsed"}
-            else:
-                atype = action.get("action")
-                if atype == FINISH:
-                    self._log(Action.OBSERVATION, {"finish": True, "result": action.get("result")})
-                    self._save_checkpoint(task_id, scratchpad, i + 1, goal)
-                    return AgentResult(
-                        success=bool(action.get("success", True)),
-                        result=action.get("result"),
-                        steps=scratchpad,
-                        iterations=i + 1,
-                        reproducibility=repro,
-                        cost=self._cost(),
-                    )
-                elif atype == CALL_SKILL:
-                    self._log(
-                        Action.CALL_SKILL,
-                        {"skill_id": action.get("skill_id"), "args": action.get("args")},
-                    )
-                    obs = self._run_skill(available, action)
-                    step["observation"] = obs
-                    self._log(
-                        Action.OBSERVATION,
-                        {
-                            "skill_id": action.get("skill_id"),
-                            "ok": obs.get("ok"),
-                            "error": obs.get("error"),
-                        },
-                    )
-                elif atype == CALL_MCP:
-                    obs = self._call_mcp(action)
-                    step["observation"] = obs
-                    self._log(
-                        Action.MCP_TOOL,
-                        {"tool": action.get("tool"), "args": action.get("args"), "ok": obs.get("ok")},
-                    )
-                elif atype == CALL_AGENT:
-                    self._log(Action.CALL_AGENT, {"target": action.get("agent_id")})
-                    step["observation"] = {
-                        "error": "agent handoff not available in single-agent runtime (Phase 3.2)"
-                    }
-                else:
-                    step["observation"] = {"error": f"unknown action {atype!r}"}
+            # finish is terminal — honor it even if the model batched it with tools.
+            finish = next((a for a in actions if a.get("action") == FINISH), None)
+            if finish is not None:
+                self._log(Action.OBSERVATION, {"finish": True, "result": finish.get("result")})
+                self._save_checkpoint(task_id, scratchpad, i + 1, goal)
+                return AgentResult(
+                    success=bool(finish.get("success", True)),
+                    result=finish.get("result"),
+                    steps=scratchpad,
+                    iterations=i + 1,
+                    reproducibility=repro,
+                    cost=self._cost(),
+                )
 
-            # Loop guard: abort if the agent keeps repeating a non-progressing
-            # action (e.g. calling a skill that doesn't exist). Prevents real
-            # models from burning iterations/tokens on a stuck loop.
-            obs = step.get("observation")
-            progressed = isinstance(obs, dict) and bool(obs.get("ok"))
+            tool_actions = [a for a in actions if a.get("action") != FINISH]
+            if not tool_actions:
+                observations = [{"error": "no valid JSON action parsed"}]
+            elif len(tool_actions) == 1:
+                observations = [self._execute_action(tool_actions[0], available)]
+            else:
+                # Independent tool calls in one turn run concurrently (ledger and
+                # budget serialize their own writes).
+                workers = min(len(tool_actions), 8)
+                with ThreadPoolExecutor(max_workers=workers, thread_name_prefix="tools") as ex:
+                    observations = list(ex.map(lambda a: self._execute_action(a, available), tool_actions))
+            step["observations"] = observations
+
+            # Loop guard: abort if the agent keeps repeating a non-progressing turn
+            # (e.g. calling a skill that doesn't exist). A batch progresses if any of
+            # its tool calls succeeded. Prevents models burning iterations on a loop.
+            progressed = any(isinstance(o, dict) and o.get("ok") for o in observations)
             if not progressed:
-                sig = self._action_signature(action)
+                sig = "|".join(self._action_signature(a) for a in tool_actions) or "none"
                 repeats[sig] = repeats.get(sig, 0) + 1
                 if repeats[sig] >= self.max_repeats:
                     self._log(
@@ -294,6 +278,28 @@ class BaseAgent:
         if atype == CALL_MCP:
             return f"call_mcp:{action.get('tool')}"
         return str(atype)
+
+    def _execute_action(self, action: dict, available: dict) -> dict:
+        """Run one tool action, log its CALL + OBSERVATION, return the observation.
+        Never raises — a tool's failure becomes an error observation so its batch
+        mates can still succeed (called concurrently for batched tool calls)."""
+        atype = action.get("action")
+        try:
+            if atype == CALL_SKILL:
+                self._log(Action.CALL_SKILL, {"skill_id": action.get("skill_id"), "args": action.get("args")})
+                obs = self._run_skill(available, action)
+                self._log(Action.OBSERVATION, {"skill_id": action.get("skill_id"), "ok": obs.get("ok"), "error": obs.get("error")})
+                return obs
+            if atype == CALL_MCP:
+                obs = self._call_mcp(action)
+                self._log(Action.MCP_TOOL, {"tool": action.get("tool"), "args": action.get("args"), "ok": obs.get("ok")})
+                return obs
+            if atype == CALL_AGENT:
+                self._log(Action.CALL_AGENT, {"target": action.get("agent_id")})
+                return {"error": "agent handoff not available in single-agent runtime (Phase 3.2)"}
+            return {"error": f"unknown action {atype!r}"}
+        except Exception as e:  # noqa: BLE001 - one tool's failure must not sink the batch
+            return {"ok": False, "error": f"{type(e).__name__}: {e}"}
 
     def _run_skill(self, available: dict, action: dict) -> dict:
         skill_id = action.get("skill_id")
@@ -367,9 +373,15 @@ class BaseAgent:
             lines.append("HISTORY:")
             for step in scratchpad:
                 lines.append(f"[{step['iteration']}] thought: {step['thought'][:500]}")
-                if step.get("observation") is not None:
-                    lines.append(f"    observation: {json.dumps(step['observation'])[:500]}")
-        lines.append("Respond with your reasoning followed by a single JSON action block.")
+                obs_list = step.get("observations")
+                if obs_list is None and step.get("observation") is not None:
+                    obs_list = [step["observation"]]  # resumed pre-batch checkpoint
+                for obs in obs_list or []:
+                    lines.append(f"    observation: {json.dumps(obs)[:500]}")
+        lines.append(
+            "Respond with your reasoning, then a JSON action block "
+            '(or {"actions": [ ... ]} to run independent tool calls in parallel).'
+        )
         return [Message(role="user", content="\n".join(lines))]
 
     def _log(self, action_type: str, payload: dict) -> None:
