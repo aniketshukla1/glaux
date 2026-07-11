@@ -290,6 +290,7 @@ def test_final_synthesis_tolerates_non_string_step_results():
         specialists={"coder": coder, "researcher": researcher},
         reflector=reflector,
         ledger=led,
+        fast_replies=False,  # exercise the planned/reflected path
     )
     res = swarm.run("produce and explain")
     assert res.success
@@ -314,7 +315,7 @@ def test_swarm_retries_on_reflector_rejection():
             ]
         ),
     )
-    swarm = Swarm(router=router, specialists={"coder": coder}, reflector=reflector, max_retries=1)
+    swarm = Swarm(router=router, specialists={"coder": coder}, reflector=reflector, max_retries=1, fast_replies=False)
     res = swarm.run("do the tricky thing")
     assert res.success
     assert res.steps["s1"].attempts == 2
@@ -324,7 +325,27 @@ def test_swarm_retries_on_reflector_rejection():
 def test_swarm_handles_unknown_role():
     plan = _swarm_plan({"id": "s1", "role": "ghost", "task": "x", "depends_on": []})
     router = Router(identity=AgentIdentity.generate(), llm=ScriptedLLM([plan]))
-    swarm = Swarm(router=router, specialists={"coder": _plain_agent([_finish("x")])})
+    swarm = Swarm(router=router, specialists={"coder": _plain_agent([_finish("x")])}, fast_replies=False)
     res = swarm.run("do x")
     assert not res.success
     assert not res.steps["s1"].accepted
+
+
+def test_fast_path_answers_simple_query_without_planning_or_reflecting():
+    # A plainly-simple query answers via the lean responder in one call: the
+    # router's planning LLM call and the reflector are both skipped, and the
+    # tool-carrying specialist is bypassed (all pure latency for a trivial Q).
+    def _boom(*_a, **_k):
+        raise AssertionError("must not be called on the fast path")
+
+    router = Router(identity=AgentIdentity.generate(), llm=ScriptedLLM(handler=_boom))
+    reflector = Reflector(identity=AgentIdentity.generate(), llm=ScriptedLLM(handler=_boom))
+    researcher = _plain_agent([_finish("via specialist (should be unused)")], name="researcher")
+    responder = _plain_agent([_finish("A hash maps data to a fixed-size value.")], name="responder")
+    swarm = Swarm(
+        router=router, specialists={"researcher": researcher}, reflector=reflector, responder=responder
+    )
+    res = swarm.run("what is a hash function?")
+    assert res.success
+    assert "hash" in res.final.lower()
+    assert list(res.steps) == ["s1"]

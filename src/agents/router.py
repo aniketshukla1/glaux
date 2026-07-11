@@ -120,3 +120,16 @@ class Router:
                 },
             )
         return Plan(steps=steps, raw=resp.text)
+
+    def heuristic_plan(self, directive: str, role: str) -> Plan:
+        """A one-step plan for a plainly simple directive, decided locally with no
+        LLM call — the model would only have said "one step" anyway. Signed like
+        any plan (marked ``heuristic``) so the trace stays auditable."""
+        step = Step(id="s1", role=role, task=directive)
+        if self.ledger is not None:
+            self.ledger.append(
+                self.identity,
+                Action.PLAN,
+                {"directive": directive, "plan": [step.to_dict()], "heuristic": True},
+            )
+        return Plan(steps=[step], raw="")

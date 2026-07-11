@@ -127,7 +127,7 @@ def test_swarm_stops_dispatching_when_budget_hit():
         identity=AgentIdentity.generate(), llm=ScriptedLLM([_finish("a"), _finish("b")])
     )
     # budget of 2 LLM calls: router(1) + step1 coder(1) -> step2 is skipped
-    swarm = Swarm(router=router, specialists={"coder": coder})
+    swarm = Swarm(router=router, specialists={"coder": coder}, fast_replies=False)
     res = swarm.run("two steps", budget=Budget(max_llm_calls=2))
     assert res.budget_halt is not None
     assert res.steps["s2"].attempts == 0  # never dispatched

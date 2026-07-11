@@ -15,9 +15,10 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 from core.ledger import Action, Ledger
+from identity.keypair import AgentIdentity
 from llm.gateway import Message, stream_complete
 
-from .base import AgentResult, HandoffRejected
+from .base import AgentResult, BaseAgent, HandoffRejected
 from .budget import Budget, BudgetTracker, charge_for_response
 from .canvas import extract_canvas
 from .handoff import delegate
@@ -40,6 +41,40 @@ FINAL_SYNTH_SYSTEM = (
     '{"type":"chart","kind":"bar|line","labels":[...],"series":[{"name","data":[...]}]}, '
     '{"type":"divider"}. Only include a Canvas when it adds real value; otherwise omit it.'
 )
+
+
+# Signals that a directive genuinely needs a planned, multi-specialist (or
+# tool/reflect) run. If none are present and the ask is short and single-line,
+# it's a plain question we can answer in one call — no planning/reflection round-trip.
+_COMPLEX_SIGNALS = (
+    "build", "implement", "create", "develop", "program ", "refactor", "debug",
+    "fix ", "design", "architect", "deploy", "benchmark", "compare", "analy",
+    "evaluate", "research", "investigate", "audit", "roadmap", "strategy",
+    "outline", "step by step", "step-by-step", "and then", "write code",
+    "write a script", "write a function", "write a program",
+)
+
+
+_RESPONDER_SYSTEM = (
+    "You are Athena, answering the user directly. Give a correct, concise answer from "
+    "your own knowledge — do NOT call tools or skills, and do not deliberate. Reply with "
+    'a single JSON object in a ```json block: {"action": "finish", "result": "<your full '
+    'answer>", "success": true}.'
+)
+
+
+def _looks_simple(directive: str) -> bool:
+    d = (directive or "").strip()
+    if not d or len(d) > 240 or "\n" in d:
+        return False
+    low = d.lower()
+    return not any(sig in low for sig in _COMPLEX_SIGNALS)
+
+
+def _is_live(llm) -> bool:
+    """True for a real model backend. The demo backend is instant, so the fast
+    path gives it nothing and would only reshape the demo's multi-agent trace."""
+    return getattr(llm, "model_id", "") not in ("", "demo-offline")
 
 
 def _as_text(value) -> str:
@@ -113,6 +148,8 @@ class Swarm:
         synthesizer=None,
         skill_library=None,
         require_approval: bool = False,
+        fast_replies: bool = True,
+        responder=None,
     ) -> None:
         self.router = router
         self.specialists = specialists
@@ -123,6 +160,31 @@ class Swarm:
         self.synthesizer = synthesizer
         self.skill_library = skill_library
         self.require_approval = require_approval
+        # Answer plainly-simple queries in a single call (skip planning + reflection).
+        self.fast_replies = fast_replies
+        self._responder = responder  # lean, tool-free agent for the fast path
+
+    def _answerer_role(self) -> Optional[str]:
+        for pref in ("researcher", "writer", "analyst"):
+            if pref in self.specialists:
+                return pref
+        return next(iter(self.specialists), None)
+
+    def _responder_agent(self) -> BaseAgent:
+        """A lean answerer for the fast path: no tools, no skills, one shot. The
+        specialists carry tool-use scaffolding that makes them fumble (and loop on)
+        a trivial question; this one just answers and finishes."""
+        if self._responder is None:
+            self._responder = BaseAgent(
+                identity=AgentIdentity.generate(),
+                llm=self.router.llm,
+                ledger=self.ledger,
+                name="responder",
+                system_prompt=_RESPONDER_SYSTEM,
+                max_iterations=2,
+                mcp_client=None,
+            )
+        return self._responder
 
     def run(
         self,
@@ -143,8 +205,20 @@ class Swarm:
         for agent in self.specialists.values():
             agent.budget = tracker
 
-        catalog = {role: getattr(agent, "description", "") for role, agent in self.specialists.items()}
-        plan = self.router.plan(directive, roles=list(self.specialists.keys()), role_catalog=catalog)
+        # Fast path: a plainly-simple query gets one direct answer — skip the
+        # router's planning call and the reflector (both are pure latency here).
+        answerer = self._answerer_role()
+        fast = self.fast_replies and answerer is not None and _is_live(self.router.llm) and _looks_simple(directive)
+        responder = None
+        if fast:
+            plan = self.router.heuristic_plan(directive, answerer)
+            step_reflector = None
+            responder = self._responder_agent()
+            responder.budget = tracker
+        else:
+            catalog = {role: getattr(agent, "description", "") for role, agent in self.specialists.items()}
+            plan = self.router.plan(directive, roles=list(self.specialists.keys()), role_catalog=catalog)
+            step_reflector = self.reflector
         order = topo_sort(plan.steps)
         results: dict[str, StepResult] = {}
         success = True
@@ -167,7 +241,7 @@ class Swarm:
                 )
                 success = False
                 continue
-            target = self.specialists.get(step.role)
+            target = responder if fast else self.specialists.get(step.role)
             if target is None:
                 results[step.id] = StepResult(
                     step, AgentResult(False, f"no specialist for role {step.role!r}", [], 0), False, 0
@@ -178,7 +252,8 @@ class Swarm:
             context = {
                 dep: results[dep].result.result for dep in step.depends_on if dep in results
             }
-            skills = (skills_by_role or {}).get(step.role)
+            # Fast path offers no skills — the responder answers from its own knowledge.
+            skills = {} if fast else (skills_by_role or {}).get(step.role)
 
             accepted = False
             attempts = 0
@@ -202,10 +277,10 @@ class Swarm:
                     result = AgentResult(False, f"handoff rejected: {e}", [], 0)
                     break
 
-                if self.reflector is None:
+                if step_reflector is None:
                     accepted = result.success
                     break
-                verdict = self.reflector.review(step.task, result)
+                verdict = step_reflector.review(step.task, result)
                 if verdict.accept:
                     accepted = True
                     break
