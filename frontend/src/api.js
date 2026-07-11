@@ -160,6 +160,15 @@ export const setLlm = (backend, model, apiKey, baseUrl) =>
     api_key: apiKey || null,
     base_url: baseUrl || null,
   })
+// model tiering: a fast/cheap model for routing + reflection
+export const setFastLlm = (backend, model, apiKey, baseUrl) =>
+  request('POST', '/api/llm/fast', {
+    backend,
+    model: model || null,
+    api_key: apiKey || null,
+    base_url: baseUrl || null,
+  })
+export const clearFastLlm = () => request('DELETE', '/api/llm/fast')
 // local model files (.gguf / .safetensors / .bin / .pt)
 export const planLocalModel = (path) => request('POST', '/api/llm/local/plan', { path })
 export const loadLocalModel = (path) => request('POST', '/api/llm/local', { path })

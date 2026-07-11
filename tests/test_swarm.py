@@ -374,6 +374,30 @@ def test_independent_branches_run_concurrently():
     assert elapsed < 2 * delay  # ran concurrently, not back-to-back
 
 
+def test_tiering_uses_primary_model_for_final_answer():
+    # Under model tiering the router runs on a cheap/aux model, but the user-facing
+    # final answer must come from the primary (synthesis_llm), not the aux model.
+    led = Ledger()
+    plan = _swarm_plan(
+        {"id": "s1", "role": "coder", "task": "A", "depends_on": []},
+        {"id": "s2", "role": "researcher", "task": "B", "depends_on": ["s1"]},
+    )
+    aux = ScriptedLLM([plan])  # only enough for router.plan — exhausted afterwards
+    router = Router(identity=AgentIdentity.generate(), llm=aux, ledger=led)
+    coder = coder_agent(identity=AgentIdentity.generate(), llm=ScriptedLLM([_finish("codeA")]), ledger=led)
+    researcher = researcher_agent(
+        identity=AgentIdentity.generate(), llm=ScriptedLLM([_finish("resB")]), ledger=led
+    )
+    primary = ScriptedLLM(["INTEGRATED BY PRIMARY"])
+    swarm = Swarm(
+        router=router, specialists={"coder": coder, "researcher": researcher},
+        ledger=led, fast_replies=False, synthesis_llm=primary,
+    )
+    res = swarm.run("build and summarize")
+    assert res.success
+    assert res.final == "INTEGRATED BY PRIMARY"  # not the aux model, not a fallback
+
+
 def test_fast_path_answers_simple_query_without_planning_or_reflecting():
     # A plainly-simple query answers via the lean responder in one call: the
     # router's planning LLM call and the reflector are both skipped, and the

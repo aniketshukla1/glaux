@@ -135,10 +135,15 @@ class AnthropicClient:
             "messages": [{"role": m.role, "content": m.content} for m in messages],
         }
         if system:
-            # cache the (stable) system prompt across calls
-            kwargs["system"] = [
-                {"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}
-            ]
+            # Cache the (stable) system prompt across calls. Default is Anthropic's
+            # 5-minute ephemeral cache; ATHENA_ANTHROPIC_CACHE_TTL=1h opts into the
+            # extended 1-hour cache (keeps the prefix warm across sparse sessions).
+            cache_control: dict = {"type": "ephemeral"}
+            ttl = os.environ.get("ATHENA_ANTHROPIC_CACHE_TTL", "").strip().lower()
+            if ttl in ("1h", "1hr", "3600s"):
+                cache_control["ttl"] = "1h"
+                kwargs["extra_headers"] = {"anthropic-beta": "extended-cache-ttl-2025-04-11"}
+            kwargs["system"] = [{"type": "text", "text": system, "cache_control": cache_control}]
         msg = self._client.messages.create(**kwargs)
         text = "".join(block.text for block in msg.content if block.type == "text")
         usage = {

@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react'
-import { Check, Loader2, KeyRound, Boxes, Copy, ChevronDown, HardDrive, Square } from 'lucide-react'
-import { getLlm, setLlm, loadLocalModel, unloadLocalModel } from '../api.js'
+import { Check, Loader2, KeyRound, Boxes, Copy, ChevronDown, HardDrive, Square, Zap } from 'lucide-react'
+import { getLlm, setLlm, setFastLlm, clearFastLlm, loadLocalModel, unloadLocalModel } from '../api.js'
 
 const KIND_LABELS = {
   cloud: 'Frontier & major',
@@ -30,6 +30,13 @@ export default function LlmControl({ onChange }) {
   const [lmPath, setLmPath] = useState('')
   const [lmBusy, setLmBusy] = useState(false)
   const [lmErr, setLmErr] = useState(null)
+  // model tiering: fast/cheap model for routing + reflection
+  const [fastOpen, setFastOpen] = useState(false)
+  const [fastBackend, setFastBackend] = useState('demo')
+  const [fastModel, setFastModel] = useState('')
+  const [fastKey, setFastKey] = useState('')
+  const [fastBusy, setFastBusy] = useState(false)
+  const [fastErr, setFastErr] = useState(null)
 
   const load = async () => {
     try {
@@ -92,6 +99,42 @@ export default function LlmControl({ onChange }) {
       }
     } finally {
       setBusy(false)
+    }
+  }
+
+  const applyFast = async () => {
+    setFastBusy(true)
+    setFastErr(null)
+    try {
+      await setFastLlm(fastBackend, fastModel, fastKey, baseUrl)
+      setFastKey('')
+      await load()
+      onChange && onChange()
+    } catch (e) {
+      try {
+        const r = await fetch('/api/llm/fast', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ backend: fastBackend, model: fastModel || null, api_key: fastKey || null, base_url: baseUrl || null }),
+        })
+        const j = await r.json().catch(() => ({}))
+        setFastErr(j.detail || e.message || 'Failed to set fast model')
+      } catch {
+        setFastErr(e.message || 'Failed to set fast model')
+      }
+    } finally {
+      setFastBusy(false)
+    }
+  }
+
+  const clearFast = async () => {
+    setFastBusy(true)
+    try {
+      await clearFastLlm()
+      await load()
+      onChange && onChange()
+    } finally {
+      setFastBusy(false)
     }
   }
 
@@ -245,6 +288,54 @@ export default function LlmControl({ onChange }) {
       </div>
 
       {err && <div className="text-xs" style={{ color: 'rgb(251 113 133)' }}>{err}</div>}
+
+      {/* Model tiering: a fast/cheap model for routing + reflection */}
+      <div className="card p-3 mt-1">
+        <button onClick={() => setFastOpen((o) => !o)} className="flex items-center gap-2 text-muted text-sm w-full">
+          <Zap className="w-3.5 h-3.5 text-accent" /> Fast model — routing &amp; reflection
+          {llm.fast && <span className="text-xs text-accent ml-1 truncate">{llm.fast.model_id}</span>}
+          <ChevronDown className={`w-3.5 h-3.5 ml-auto transition ${fastOpen ? 'rotate-180' : ''}`} />
+        </button>
+        {fastOpen && (
+          <div className="mt-3 space-y-2.5">
+            <p className="text-faint text-xs leading-relaxed">
+              Route planning and reflection to a cheap, fast model (e.g. Haiku or Groq) while your
+              primary model does the real work and writes the final answer — lower latency and cost.
+            </p>
+            <select value={fastBackend} onChange={(e) => setFastBackend(e.target.value)} className={inputCls}>
+              <optgroup label="Built-in">
+                <option value="demo">Demo (offline)</option>
+                <option value="anthropic" disabled={!llm.anthropic_key}>Anthropic (Claude){llm.anthropic_key ? '' : ' — no key'}</option>
+                <option value="ollama" disabled={!llm.ollama?.reachable}>Ollama (local){llm.ollama?.reachable ? '' : ' — offline'}</option>
+              </optgroup>
+              {grouped.map(([kind, list]) => (
+                <optgroup key={kind} label={KIND_LABELS[kind]}>
+                  {list.map((p) => (
+                    <option key={p.id} value={p.id}>{p.label}{p.requires_key ? (p.key_present ? ' ✓' : '') : ''}</option>
+                  ))}
+                </optgroup>
+              ))}
+            </select>
+            {fastBackend !== 'demo' && (
+              <input value={fastModel} onChange={(e) => setFastModel(e.target.value)} placeholder="model id (e.g. claude-haiku-4-5)" className={inputCls} />
+            )}
+            <div className="flex items-center gap-2 flex-wrap">
+              <button onClick={applyFast} disabled={fastBusy} className="btn-accent px-3 py-2 text-sm flex items-center gap-2 disabled:opacity-50">
+                {fastBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : null} Apply
+              </button>
+              {llm.fast && (
+                <button onClick={clearFast} disabled={fastBusy} className="px-3 py-2 rounded-lg border border-line/20 text-muted text-sm hover:text-fg disabled:opacity-50">
+                  Clear
+                </button>
+              )}
+              <span className="text-faint text-xs truncate">
+                {llm.fast ? <>tiering on: <span className="text-accent">{llm.fast.model_id}</span></> : 'off — one model for everything'}
+              </span>
+            </div>
+            {fastErr && <div className="text-xs" style={{ color: 'rgb(251 113 133)' }}>{fastErr}</div>}
+          </div>
+        )}
+      </div>
 
       {/* Run any model off the Hugging Face Hub */}
       {runtimes.length > 0 && (

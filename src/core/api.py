@@ -286,6 +286,36 @@ def _persist_llm_config(config: dict) -> None:
         pass  # best-effort; a non-writable home just means no persistence
 
 
+def _fast_llm_config_path() -> Path:
+    return _athena_home() / "llm_fast.json"
+
+
+def _load_persisted_fast_llm_config() -> Optional[dict]:
+    """The optional fast/cheap model used for routing + reflection (model tiering).
+    None means "use the primary model for everything"."""
+    try:
+        data = json.loads(_fast_llm_config_path().read_text())
+    except (OSError, ValueError):
+        return None
+    if not isinstance(data, dict) or not data.get("backend"):
+        return None
+    return {"backend": str(data["backend"]), "model": data.get("model"),
+            "api_key": None, "base_url": data.get("base_url")}
+
+
+def _persist_fast_llm_config(config: Optional[dict]) -> None:
+    try:
+        _athena_home().mkdir(parents=True, exist_ok=True)
+        if not config:
+            _fast_llm_config_path().unlink(missing_ok=True)
+            return
+        payload = {"backend": config.get("backend"), "model": config.get("model"),
+                   "base_url": config.get("base_url")}
+        _fast_llm_config_path().write_text(json.dumps(payload, indent=2))
+    except OSError:
+        pass
+
+
 def _default_llm_config() -> dict:
     # An explicit env override wins; otherwise restore the last UI choice; else default.
     backend = os.environ.get("ATHENA_LLM")
@@ -419,8 +449,16 @@ class _State:
         self.eval_runs: list[EvalRun] = _load_eval_runs()  # benchmark history survives restarts
         self.approval_mode = "auto"  # auto | gated (gated => human approves synthesized skills)
         self.llm_config = _default_llm_config()
+        # Model tiering: an optional fast/cheap model for routing + reflection.
+        self.fast_llm_config = _load_persisted_fast_llm_config()
+        self.fast_llm = _make_llm(self.fast_llm_config) if self.fast_llm_config else None
         self._ledger_last_save = 0.0
         self._init_signed_state()
+
+    def aux_llm(self):
+        """The fast/cheap model for lightweight roles (router, reflector, quick
+        replies), or the primary model when no tier is configured."""
+        return self.fast_llm or self.llm
 
     def _on_ledger_append(self, block: dict) -> None:
         WS.publish({"type": "block", "block": block})  # live stream
@@ -524,12 +562,16 @@ class _State:
         return {"final": result.final, "ok": result.success, "cost": result.cost}
 
     def build_swarm(self) -> Swarm:
-        router = Router(identity=self.identities["router"], llm=self.llm, ledger=self.ledger)
+        # Model tiering: routing + reflection (and quick replies, which reuse the
+        # router's client) go to the fast/cheap model; the specialists that do the
+        # actual work use the primary model.
+        aux = self.aux_llm()
+        router = Router(identity=self.identities["router"], llm=aux, ledger=self.ledger)
         # Register the full specialist roster; the router composes a team per directive.
         specialists = build_specialists(
             identities=self.identities, llm=self.llm, ledger=self.ledger, mcp_client=self.mcp
         )
-        reflector = Reflector(identity=self.identities["reflector"], llm=self.llm, ledger=self.ledger)
+        reflector = Reflector(identity=self.identities["reflector"], llm=aux, ledger=self.ledger)
         return Swarm(
             router=router,
             specialists=specialists,
@@ -539,6 +581,7 @@ class _State:
             synthesizer=SkillSynthesizer(self.llm),
             skill_library=self.skills,
             require_approval=(self.approval_mode == "gated"),
+            synthesis_llm=self.llm,  # the final answer uses the primary model
         )
 
 
@@ -1541,6 +1584,11 @@ def get_llm() -> dict:
         "backend": STATE.llm_config["backend"],
         "model": STATE.llm_config.get("model"),
         "model_id": STATE.llm.model_id,
+        # optional fast/cheap model for routing + reflection (model tiering)
+        "fast": (
+            {"backend": STATE.fast_llm_config["backend"], "model_id": STATE.fast_llm.model_id}
+            if STATE.fast_llm is not None else None
+        ),
         # demo + native clients, then every OpenAI-compatible provider in the catalog
         "native": ["demo", "anthropic", "ollama"],
         "anthropic_key": bool(os.environ.get("ANTHROPIC_API_KEY")),
@@ -1553,11 +1601,10 @@ def get_llm() -> dict:
     }
 
 
-@app.post("/api/llm")
-def set_llm(req: LLMRequest) -> dict:
+def _validate_llm_backend(backend: str, api_key: Optional[str], base_url: Optional[str]) -> None:
+    """Raise HTTPException(400) if this backend can't be used right now."""
     from llm.providers import PROVIDERS, key_available
 
-    backend = req.backend
     if backend == "ollama":
         from llm.ollama import ollama_status
 
@@ -1574,9 +1621,9 @@ def set_llm(req: LLMRequest) -> dict:
         pass
     elif backend in PROVIDERS:
         provider = PROVIDERS[backend]
-        if backend == "custom" and not req.base_url:
+        if backend == "custom" and not base_url:
             raise HTTPException(status_code=400, detail="custom backend requires a base_url")
-        if provider.requires_key and not key_available(backend, req.api_key):
+        if provider.requires_key and not key_available(backend, api_key):
             raise HTTPException(
                 status_code=400,
                 detail=f"{provider.label} needs an API key — provide one or set {provider.key_env}",
@@ -1584,15 +1631,41 @@ def set_llm(req: LLMRequest) -> dict:
     else:
         raise HTTPException(status_code=400, detail=f"unknown backend {backend!r}")
 
+
+@app.post("/api/llm")
+def set_llm(req: LLMRequest) -> dict:
+    _validate_llm_backend(req.backend, req.api_key, req.base_url)
     STATE.llm_config = {
-        "backend": backend,
+        "backend": req.backend,
         "model": req.model,
         "api_key": req.api_key,
         "base_url": req.base_url,
     }
     STATE.llm = _make_llm(STATE.llm_config)
     _persist_llm_config(STATE.llm_config)  # remember across restarts (no key)
-    return {"backend": backend, "model_id": STATE.llm.model_id}
+    return {"backend": req.backend, "model_id": STATE.llm.model_id}
+
+
+@app.post("/api/llm/fast")
+def set_fast_llm(req: LLMRequest) -> dict:
+    """Configure the fast/cheap model used for routing + reflection (model tiering)."""
+    _validate_llm_backend(req.backend, req.api_key, req.base_url)
+    STATE.fast_llm_config = {
+        "backend": req.backend, "model": req.model,
+        "api_key": req.api_key, "base_url": req.base_url,
+    }
+    STATE.fast_llm = _make_llm(STATE.fast_llm_config)
+    _persist_fast_llm_config(STATE.fast_llm_config)
+    return {"fast": {"backend": req.backend, "model_id": STATE.fast_llm.model_id}}
+
+
+@app.delete("/api/llm/fast")
+def clear_fast_llm() -> dict:
+    """Disable model tiering — use the primary model for every role."""
+    STATE.fast_llm_config = None
+    STATE.fast_llm = None
+    _persist_fast_llm_config(None)
+    return {"fast": None}
 
 
 # --- local model files (.gguf / .safetensors / .bin / .pt) ---------------

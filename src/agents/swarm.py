@@ -167,6 +167,7 @@ class Swarm:
         fast_replies: bool = True,
         responder=None,
         max_parallel: int = 8,
+        synthesis_llm=None,
     ) -> None:
         self.router = router
         self.specialists = specialists
@@ -181,6 +182,9 @@ class Swarm:
         self.fast_replies = fast_replies
         self._responder = responder  # lean, tool-free agent for the fast path
         self.max_parallel = max_parallel  # concurrency cap for independent branches
+        # The user-facing final answer uses the primary model even under tiering
+        # (routing/reflection may run on a cheap model, but the deliverable shouldn't).
+        self._synthesis_llm = synthesis_llm
 
     def _answerer_role(self) -> Optional[str]:
         for pref in ("researcher", "writer", "analyst"):
@@ -392,11 +396,12 @@ class Swarm:
             "\n\nWrite the complete final answer to the original request now."
         )
         messages = [Message(role="user", content=content)]
+        synth_llm = self._synthesis_llm or self.router.llm
         try:
             # Stream the final answer when a token sink is wired (so the UI types it
             # out); falls back to a single call otherwise.
             resp = stream_complete(
-                self.router.llm, messages, on_delta=on_token,
+                synth_llm, messages, on_delta=on_token,
                 system=FINAL_SYNTH_SYSTEM, temperature=0.0, max_tokens=1200,
             )
         except Exception:  # noqa: BLE001 - synthesis is best-effort; fall back to last output
