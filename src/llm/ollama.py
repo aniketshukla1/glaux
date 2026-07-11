@@ -43,12 +43,16 @@ class OllamaClient:
         host: Optional[str] = None,
         timeout: float = 180.0,
         default_max_tokens: int = 1024,
+        keep_alive: str = "30m",
     ) -> None:
         self.model = model
         self.model_id = f"ollama:{model}"
         self.host = _host(host)
         self.timeout = timeout
         self._default_max_tokens = default_max_tokens
+        # Keep the model resident between requests so an occasional query doesn't
+        # pay a multi-second cold reload. Ollama's default is only 5 minutes.
+        self.keep_alive = keep_alive
 
     def complete(
         self,
@@ -67,7 +71,7 @@ class OllamaClient:
         options = {"temperature": temperature, "num_predict": max_tokens or self._default_max_tokens}
         if seed is not None:
             options["seed"] = seed
-        payload = {"model": self.model, "messages": chat, "stream": False, "options": options}
+        payload = {"model": self.model, "messages": chat, "stream": False, "options": options, "keep_alive": self.keep_alive}
 
         req = urllib.request.Request(
             f"{self.host}/api/chat",
@@ -113,7 +117,7 @@ class OllamaClient:
         options = {"temperature": temperature, "num_predict": max_tokens or self._default_max_tokens}
         if seed is not None:
             options["seed"] = seed
-        payload = {"model": self.model, "messages": chat, "stream": True, "options": options}
+        payload = {"model": self.model, "messages": chat, "stream": True, "options": options, "keep_alive": self.keep_alive}
         req = urllib.request.Request(
             f"{self.host}/api/chat",
             data=json.dumps(payload).encode("utf-8"),
