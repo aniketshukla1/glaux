@@ -10,7 +10,8 @@ outputs are threaded into dependents' context.
 from __future__ import annotations
 
 import json
-from collections import deque
+from collections import defaultdict, deque
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from typing import Optional
 
@@ -114,6 +115,21 @@ def topo_sort(steps: list[Step]) -> list[Step]:
     return [by_id[i] for i in ordered]
 
 
+def dependency_levels(steps: list[Step]) -> list[list[Step]]:
+    """Group steps into dependency levels: every step in a level depends only on
+    steps in earlier levels, so a level's steps are mutually independent and can
+    run concurrently. Preserves plan order within a level. Raises on a cycle."""
+    by_id = {s.id: s for s in steps}
+    depth: dict[str, int] = {}
+    for s in topo_sort(steps):  # also enforces acyclicity
+        deps = [d for d in s.depends_on if d in by_id]
+        depth[s.id] = 1 + max((depth[d] for d in deps), default=-1)
+    groups: dict[int, list[Step]] = defaultdict(list)
+    for s in steps:  # plan order within each level
+        groups[depth[s.id]].append(s)
+    return [groups[k] for k in sorted(groups)]
+
+
 @dataclass
 class StepResult:
     step: Step
@@ -150,6 +166,7 @@ class Swarm:
         require_approval: bool = False,
         fast_replies: bool = True,
         responder=None,
+        max_parallel: int = 8,
     ) -> None:
         self.router = router
         self.specialists = specialists
@@ -163,6 +180,7 @@ class Swarm:
         # Answer plainly-simple queries in a single call (skip planning + reflection).
         self.fast_replies = fast_replies
         self._responder = responder  # lean, tool-free agent for the fast path
+        self.max_parallel = max_parallel  # concurrency cap for independent branches
 
     def _answerer_role(self) -> Optional[str]:
         for pref in ("researcher", "writer", "analyst"):
@@ -185,6 +203,42 @@ class Swarm:
                 mcp_client=None,
             )
         return self._responder
+
+    def _run_step(self, step, target, context, skills, step_reflector, cancel):
+        """Run one plan step: delegate under a capability token, then reflect/retry
+        until accepted or retries run out. Returns (StepResult, verdict). Safe to
+        call from a worker thread — ledger/budget writes serialize themselves."""
+        accepted = False
+        attempts = 0
+        result: Optional[AgentResult] = None
+        verdict = None
+        while attempts <= self.max_retries:
+            attempts += 1
+            try:
+                result = delegate(
+                    self.router.identity,
+                    target,
+                    step.task,
+                    capability=f"task:{step.role}",
+                    ledger=self.ledger,
+                    ttl=self.handoff_ttl,
+                    context=context or None,
+                    skills=skills,
+                    cancel=cancel,
+                )
+            except HandoffRejected as e:
+                result = AgentResult(False, f"handoff rejected: {e}", [], 0)
+                break
+            if step_reflector is None:
+                accepted = result.success
+                break
+            verdict = step_reflector.review(step.task, result)
+            if verdict.accept:
+                accepted = True
+                break
+            # feed the critique back into the next attempt
+            context = {**(context or {}), "reflector_feedback": verdict.reason}
+        return StepResult(step, result, accepted, attempts), verdict
 
     def run(
         self,
@@ -220,86 +274,71 @@ class Swarm:
             plan = self.router.plan(directive, roles=list(self.specialists.keys()), role_catalog=catalog)
             step_reflector = self.reflector
         order = topo_sort(plan.steps)
+        levels = dependency_levels(plan.steps)
         results: dict[str, StepResult] = {}
         success = True
         budget_halt: Optional[str] = None
         cancelled = False
         synthesized: list = []
 
-        for step in order:
-            # User pressed stop — don't dispatch any further steps.
+        # Execute level by level. Steps within a level are independent (they only
+        # depend on earlier levels), so we run them concurrently; the ledger and
+        # budget tracker serialize their own writes.
+        for level in levels:
             if cancel is not None and cancel():
                 cancelled = True
                 success = False
                 break
-            # Stop dispatching new work once the task's budget is spent.
             reason = tracker.exceeded()
             if reason is not None:
                 budget_halt = reason
-                results[step.id] = StepResult(
-                    step, AgentResult(False, f"skipped: {reason}", [], 0), False, 0
-                )
-                success = False
-                continue
-            target = responder if fast else self.specialists.get(step.role)
-            if target is None:
-                results[step.id] = StepResult(
-                    step, AgentResult(False, f"no specialist for role {step.role!r}", [], 0), False, 0
-                )
-                success = False
-                continue
-
-            context = {
-                dep: results[dep].result.result for dep in step.depends_on if dep in results
-            }
-            # Fast path offers no skills — the responder answers from its own knowledge.
-            skills = {} if fast else (skills_by_role or {}).get(step.role)
-
-            accepted = False
-            attempts = 0
-            result: Optional[AgentResult] = None
-            verdict = None
-            while attempts <= self.max_retries:
-                attempts += 1
-                try:
-                    result = delegate(
-                        self.router.identity,
-                        target,
-                        step.task,
-                        capability=f"task:{step.role}",
-                        ledger=self.ledger,
-                        ttl=self.handoff_ttl,
-                        context=context or None,
-                        skills=skills,
-                        cancel=cancel,
+                for step in level:
+                    results[step.id] = StepResult(
+                        step, AgentResult(False, f"skipped: {reason}", [], 0), False, 0
                     )
-                except HandoffRejected as e:
-                    result = AgentResult(False, f"handoff rejected: {e}", [], 0)
-                    break
-
-                if step_reflector is None:
-                    accepted = result.success
-                    break
-                verdict = step_reflector.review(step.task, result)
-                if verdict.accept:
-                    accepted = True
-                    break
-                # feed the critique back into the next attempt
-                context = {**(context or {}), "reflector_feedback": verdict.reason}
-
-            results[step.id] = StepResult(step, result, accepted, attempts)
-            if not accepted:
                 success = False
+                break
 
-            # Reflector-triggered autonomous skill synthesis.
-            if (
-                accepted
-                and verdict is not None
-                and verdict.synthesize
-                and self.synthesizer is not None
-                and self.skill_library is not None
-            ):
-                self._synthesize(verdict.synthesize, synthesized)
+            runnable = []
+            for step in level:
+                target = responder if fast else self.specialists.get(step.role)
+                if target is None:
+                    results[step.id] = StepResult(
+                        step, AgentResult(False, f"no specialist for role {step.role!r}", [], 0), False, 0
+                    )
+                    success = False
+                    continue
+                context = {
+                    dep: results[dep].result.result for dep in step.depends_on if dep in results
+                }
+                # Fast path offers no skills — the responder answers from its own knowledge.
+                skills = {} if fast else (skills_by_role or {}).get(step.role)
+                runnable.append((step, target, context, skills))
+
+            level_out: list = []  # (StepResult, verdict)
+            if len(runnable) == 1:
+                level_out.append(self._run_step(*runnable[0], step_reflector, cancel))
+            elif runnable:
+                workers = min(len(runnable), self.max_parallel)
+                with ThreadPoolExecutor(max_workers=workers, thread_name_prefix="swarm") as ex:
+                    futs = [
+                        ex.submit(self._run_step, step, target, context, skills, step_reflector, cancel)
+                        for step, target, context, skills in runnable
+                    ]
+                    for fut in as_completed(futs):
+                        level_out.append(fut.result())
+
+            # Fold results back on the main thread (order-independent), then run any
+            # reflector-triggered synthesis serially (it mutates the skill library).
+            for sr, verdict in level_out:
+                results[sr.step.id] = sr
+                if not sr.accepted:
+                    success = False
+                if (
+                    sr.accepted and verdict is not None and verdict.synthesize
+                    and self.synthesizer is not None and self.skill_library is not None
+                ):
+                    self._synthesize(verdict.synthesize, synthesized)
 
         if cancelled:
             done = [_as_text(results[s.id].result.result) for s in order

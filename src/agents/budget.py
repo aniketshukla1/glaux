@@ -11,6 +11,7 @@ char/4 estimate (so the guard works offline with ScriptedLLM/DemoLLM too).
 
 from __future__ import annotations
 
+import threading
 from dataclasses import dataclass, field
 from typing import Optional
 
@@ -50,17 +51,20 @@ class BudgetTracker:
     output_tokens: int = 0
     usd: float = 0.0
     llm_calls: int = 0
+    # Concurrent plan branches charge the same tracker; guard the running totals.
+    _lock: threading.Lock = field(default_factory=threading.Lock, repr=False, compare=False)
 
     @property
     def total_tokens(self) -> int:
         return self.input_tokens + self.output_tokens
 
     def charge(self, model_id: str, input_tokens: int, output_tokens: int) -> None:
-        self.input_tokens += input_tokens
-        self.output_tokens += output_tokens
-        self.llm_calls += 1
         p_in, p_out = _PRICES.get(model_id, _DEFAULT_PRICE)
-        self.usd += (input_tokens / 1e6) * p_in + (output_tokens / 1e6) * p_out
+        with self._lock:
+            self.input_tokens += input_tokens
+            self.output_tokens += output_tokens
+            self.llm_calls += 1
+            self.usd += (input_tokens / 1e6) * p_in + (output_tokens / 1e6) * p_out
 
     def exceeded(self) -> Optional[str]:
         """Reason string if any limit is reached, else None."""

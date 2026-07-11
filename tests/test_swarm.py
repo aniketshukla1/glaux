@@ -17,6 +17,7 @@ from agents import (  # noqa: E402
     Swarm,
     coder_agent,
     delegate,
+    dependency_levels,
     researcher_agent,
     topo_sort,
 )
@@ -329,6 +330,48 @@ def test_swarm_handles_unknown_role():
     res = swarm.run("do x")
     assert not res.success
     assert not res.steps["s1"].accepted
+
+
+def test_dependency_levels_groups_independent_steps():
+    steps = [
+        Step("a", "researcher", "", []),
+        Step("b", "researcher", "", []),
+        Step("c", "researcher", "", ["a", "b"]),
+    ]
+    levels = dependency_levels(steps)
+    assert [sorted(s.id for s in lv) for lv in levels] == [["a", "b"], ["c"]]
+
+
+def test_independent_branches_run_concurrently():
+    import time
+
+    plan = _swarm_plan(
+        {"id": "s1", "role": "coder", "task": "A", "depends_on": []},
+        {"id": "s2", "role": "researcher", "task": "B", "depends_on": []},
+    )
+    router = Router(identity=AgentIdentity.generate(), llm=ScriptedLLM([plan, "combined"]))
+    delay = 0.4
+
+    def slow(result):
+        def handler(_messages, _system):
+            time.sleep(delay)
+            return _finish(result)
+
+        return handler
+
+    coder = BaseAgent(identity=AgentIdentity.generate(), llm=ScriptedLLM(handler=slow("a")), name="coder")
+    researcher = BaseAgent(
+        identity=AgentIdentity.generate(), llm=ScriptedLLM(handler=slow("b")), name="researcher"
+    )
+    swarm = Swarm(
+        router=router, specialists={"coder": coder, "researcher": researcher}, fast_replies=False
+    )
+    t0 = time.monotonic()
+    res = swarm.run("do two independent things")
+    elapsed = time.monotonic() - t0
+    assert res.success
+    assert set(res.steps) == {"s1", "s2"}
+    assert elapsed < 2 * delay  # ran concurrently, not back-to-back
 
 
 def test_fast_path_answers_simple_query_without_planning_or_reflecting():

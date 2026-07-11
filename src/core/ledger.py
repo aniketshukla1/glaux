@@ -16,6 +16,7 @@ there is no Python/Rust canonical-bytes coupling to keep in sync.
 from __future__ import annotations
 
 import json
+import threading
 from dataclasses import dataclass
 from typing import Optional
 
@@ -64,6 +65,9 @@ class Ledger:
         self._led = _native if _native is not None else athena_ledger.Ledger()
         # optional callback(block_dict) fired after each append (e.g. live streaming)
         self.on_append = on_append
+        # Serialize appends: the swarm runs independent plan branches concurrently,
+        # and the hash chain must be extended one block at a time.
+        self._lock = threading.Lock()
 
     def __len__(self) -> int:
         return len(self._led)
@@ -81,14 +85,15 @@ class Ledger:
         timestamp: Optional[float] = None,
     ) -> dict:
         """Sign and append a block for `identity`. Returns the block as a dict."""
-        block_json = self._led.append(
-            identity.agent_id,
-            identity.public_key_b58,
-            identity.signing_key_b58(),
-            action_type,
-            json.dumps(payload),
-            timestamp,
-        )
+        with self._lock:
+            block_json = self._led.append(
+                identity.agent_id,
+                identity.public_key_b58,
+                identity.signing_key_b58(),
+                action_type,
+                json.dumps(payload),
+                timestamp,
+            )
         block = json.loads(block_json)
         if self.on_append is not None:
             try:
