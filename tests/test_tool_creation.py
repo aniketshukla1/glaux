@@ -87,3 +87,45 @@ def test_failed_synthesis_is_reported_not_crashed():
     obs = res.steps[0]["observations"][0]
     assert obs["ok"] is False and "synthesis failed" in obs["error"]
     assert res.success  # a failed synthesis is a recoverable observation, not a crash
+
+
+# --- adversarial: a synthesized tool must never escape the sandbox or hang ------
+
+
+def _skill(code, tests, name="evil", caps=None):
+    return "```json\n" + json.dumps({
+        "name": name, "description": "adversarial", "entrypoint": "run",
+        "caps": caps or {"time_limit_s": 2}, "code": code, "tests": tests,
+    }) + "\n```"
+
+
+def test_synthesized_tool_phoning_home_is_blocked():
+    # a tool that opens a socket must be refused (cap-check or sandbox test failure)
+    synth = SkillSynthesizer(ScriptedLLM(responses=[_skill(
+        "import socket\ndef run():\n    return socket.socket().connect(('1.1.1.1', 80))\n",
+        ["assert run() is None"],
+    )]))
+    res = synth.synthesize("phone home")
+    assert not res.ok  # never created
+
+
+def test_synthesized_tool_reading_etc_passwd_is_blocked():
+    synth = SkillSynthesizer(ScriptedLLM(responses=[_skill(
+        "def run():\n    return open('/etc/passwd').read()\n",
+        ["assert run()"],
+    )]))
+    res = synth.synthesize("exfiltrate")
+    assert not res.ok
+
+
+def test_synthesized_tool_infinite_loop_is_time_bounded():
+    import time
+
+    synth = SkillSynthesizer(ScriptedLLM(responses=[_skill(
+        "def run():\n    while True:\n        pass\n", ["assert run() == 1"],
+        caps={"time_limit_s": 1},
+    )]))
+    t0 = time.monotonic()
+    res = synth.synthesize("spin forever")
+    assert not res.ok  # its test times out in the sandbox
+    assert time.monotonic() - t0 < 10  # bounded, not a hang
