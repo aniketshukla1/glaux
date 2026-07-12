@@ -51,6 +51,13 @@ def test_health_reports_demo_mode():
     assert set(h["memory"]) == {"semantic", "episodic", "procedural"}
 
 
+def test_rejects_oversized_directive():
+    # a pathologically large directive must be rejected fast, not hang the task
+    r = client.post("/api/task", json={"directive": "x" * 20000})
+    assert r.status_code == 413
+    assert "too long" in r.json()["detail"]
+
+
 def test_dispatch_builds_a_verifiable_signed_chain():
     r = client.post("/api/task", json={"directive": "build a thing and summarize it"})
     assert r.status_code == 200

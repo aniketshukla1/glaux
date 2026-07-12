@@ -1344,10 +1344,27 @@ def _finalize_run(req: TaskRequest, result, before: int, sources: list, elapsed:
     }
 
 
+MAX_DIRECTIVE_CHARS = 16000  # a task instruction; long documents belong in attachments
+
+
+def _validate_directive(directive: str) -> None:
+    """Reject empty or pathologically large directives. A huge directive is
+    re-embedded, hashed and signed on every agent iteration, so an unbounded one
+    can hang a task (and cost a fortune on a real model) — attachments are the
+    right home for long content."""
+    if not (directive or "").strip():
+        raise HTTPException(status_code=400, detail="directive is required")
+    if len(directive) > MAX_DIRECTIVE_CHARS:
+        raise HTTPException(
+            status_code=413,
+            detail=f"directive too long ({len(directive)} chars, max {MAX_DIRECTIVE_CHARS}); "
+            "attach long documents instead of putting them in the task",
+        )
+
+
 @app.post("/api/task")
 async def run_task(req: TaskRequest) -> dict:
-    if not req.directive.strip():
-        raise HTTPException(status_code=400, detail="directive is required")
+    _validate_directive(req.directive)
     before = len(STATE.ledger)
     swarm, budget, run_directive, model_id = _prepare_run(req)
     uid = _current_user_id.get()
@@ -1389,8 +1406,7 @@ async def run_task_stream(req: TaskRequest):
     `start`, live `block` events (each signed agent step), `token` deltas (the
     answer typing out), then a final `done` carrying the full result. Lets the
     CLI render the multi-agent run live with nothing but stdlib urllib."""
-    if not req.directive.strip():
-        raise HTTPException(status_code=400, detail="directive is required")
+    _validate_directive(req.directive)
     before = len(STATE.ledger)
     swarm, budget, run_directive, model_id = _prepare_run(req)
     uid = _current_user_id.get()
