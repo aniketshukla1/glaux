@@ -10,7 +10,6 @@ outputs are threaded into dependents' context.
 from __future__ import annotations
 
 import json
-import re
 from collections import defaultdict, deque
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
@@ -24,6 +23,7 @@ from .base import ACTION_INSTRUCTIONS, AgentResult, BaseAgent, HandoffRejected
 from .budget import Budget, BudgetTracker, charge_for_response
 from .canvas import extract_canvas
 from .handoff import delegate
+from .tier_router import route_tier
 from .reflector import Reflector
 from .router import Plan, Router, Step
 
@@ -45,18 +45,6 @@ FINAL_SYNTH_SYSTEM = (
 )
 
 
-# Signals that a directive genuinely needs a planned, multi-specialist (or
-# tool/reflect) run. If none are present and the ask is short and single-line,
-# it's a plain question we can answer in one call — no planning/reflection round-trip.
-_COMPLEX_SIGNALS = (
-    "build", "implement", "create", "develop", "program ", "refactor", "debug",
-    "fix ", "design", "architect", "deploy", "benchmark", "compare", "analy",
-    "evaluate", "research", "investigate", "audit", "roadmap", "strategy",
-    "outline", "step by step", "step-by-step", "and then", "write code",
-    "write a script", "write a function", "write a program",
-)
-
-
 _RESPONDER_SYSTEM = (
     "You are Athena, answering the user directly. Give a correct, concise answer from "
     "your own knowledge — do NOT call tools or skills, and do not deliberate. Reply with "
@@ -71,42 +59,6 @@ GENERALIST_SYSTEM = (
     "then finish with a complete, correct answer. Prefer the fewest steps that do the "
     "job, and batch independent tool calls into one step.\n" + ACTION_INSTRUCTIONS
 )
-
-
-def _looks_simple(directive: str) -> bool:
-    d = (directive or "").strip()
-    if not d or len(d) > 240 or "\n" in d:
-        return False
-    low = d.lower()
-    return not any(sig in low for sig in _COMPLEX_SIGNALS)
-
-
-# Explicit multi-phase / sequencing cues that genuinely warrant a planned team.
-_TEAM_SIGNALS = (
-    "and then", "step by step", "step-by-step", "after that", "followed by",
-    "first,", "finally,", "phase", "pipeline",
-)
-
-
-def _needs_team(directive: str) -> bool:
-    """True when a directive genuinely needs the full planned+reflected swarm — a
-    multi-phase or multi-specialist ask. Otherwise a single capable agent (the
-    "medium" tier) can handle it directly, skipping the planning and reflection
-    round-trips. Errs toward the single agent (that's how lean agents work), and
-    reserves the swarm for clearly multi-part work."""
-    d = (directive or "").strip()
-    low = d.lower()
-    if "\n" in d or len(d) > 320:  # multi-line / very long -> likely multi-part
-        return True
-    if any(s in low for s in _TEAM_SIGNALS):
-        return True
-    build = any(w in low for w in ("build", "implement", "create", "develop", "write code", "program "))
-    verify = any(w in low for w in ("test", "verify", "benchmark", "unit test"))
-    gather = any(w in low for w in ("research", "investigate", "gather", "analyze", "compare"))
-    produce = any(w in low for w in ("report", "summariz", "write up", "write-up", "document", "recommend"))
-    if (build and verify) or (gather and produce):  # two distinct phases
-        return True
-    return len([s for s in re.split(r"[.!?]+", d) if s.strip()]) >= 3  # 3+ sentences
 
 
 def _is_live(llm) -> bool:
@@ -308,10 +260,12 @@ class Swarm:
         # router's planning call and the reflector (both are pure latency here).
         # Three tiers, cheapest first — both shortcuts skip the router-planning call
         # and the reflector, and route the one step to a single agent instead of a team.
+        # The tier is chosen by an embedding classifier (keyword fallback) on the text.
         answerer = self._answerer_role()
         live = self.fast_replies and _is_live(self.router.llm)
-        fast = live and answerer is not None and _looks_simple(directive)
-        medium = (not fast) and live and self.generalist is not None and not _needs_team(directive)
+        content_tier = route_tier(directive) if live else "full"
+        fast = live and answerer is not None and content_tier == "fast"
+        medium = (not fast) and live and self.generalist is not None and content_tier == "medium"
 
         single_agent = None   # responder (fast) or generalist (medium); None for the swarm
         single_skills = None  # skills override for the single agent
