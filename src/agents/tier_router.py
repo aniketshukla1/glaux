@@ -109,6 +109,13 @@ _EXEMPLARS: dict[str, list[str]] = {
         "optimize this loop for performance",
         "explain what this stack trace means",
         "generate sample data for a users table",
+        "compute the crc32 checksum of a string",
+        "calculate the sha256 hash of some text",
+        "convert a number into roman numerals",
+        "compute the nth fibonacci number",
+        "calculate the exact factorial of a number",
+        "validate this credit card number with the luhn algorithm",
+        "write a tool to parse and evaluate this expression",
     ],
     "full": [
         "research the top vector databases and write a comparison report",

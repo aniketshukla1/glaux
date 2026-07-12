@@ -31,7 +31,7 @@ from llm.gateway import LLMClient, Message
 from sandbox import Capabilities, SecretsBroker, run as sandbox_run
 
 from .budget import BudgetTracker, charge_for_response
-from .protocol import CALL_AGENT, CALL_MCP, CALL_SKILL, FINISH, parse_actions
+from .protocol import CALL_AGENT, CALL_MCP, CALL_SKILL, CREATE_SKILL, FINISH, parse_actions
 
 ACTION_INSTRUCTIONS = """Reason step by step about the goal, then emit an action as a JSON object in a ```json code block. Available actions:
 - {"action": "call_skill", "skill_id": "<id>", "args": {...}} — run a skill from your library.
@@ -95,6 +95,8 @@ class BaseAgent:
         checkpoint_dir: Optional[str] = None,
         budget: Optional[BudgetTracker] = None,
         mcp_client=None,
+        synthesizer=None,
+        skill_library=None,
     ) -> None:
         self.identity = identity
         self.llm = llm
@@ -103,6 +105,10 @@ class BaseAgent:
         self.secrets_broker = secrets_broker
         self.budget = budget
         self.mcp_client = mcp_client
+        # On-the-fly tool creation: when set, the agent can synthesize a new skill
+        # mid-task (sandbox-tested) and call it in the same run.
+        self.synthesizer = synthesizer
+        self.skill_library = skill_library
         self.name = name
         # A provided prompt is used verbatim (so specialists can include their
         # own JSON examples without str.format choking on the braces).
@@ -277,7 +283,50 @@ class BaseAgent:
             return f"call_skill:{action.get('skill_id')}"
         if atype == CALL_MCP:
             return f"call_mcp:{action.get('tool')}"
+        if atype == CREATE_SKILL:
+            return f"create_skill:{action.get('name') or (action.get('task') or '')[:24]}"
         return str(atype)
+
+    def _create_skill(self, action: dict, available: dict) -> dict:
+        """On-the-fly tool creation. When no existing skill/tool fits, the agent
+        describes what it needs; Athena synthesizes the code, static-cap-checks it,
+        runs its auto-generated tests in the sandbox, and — if they pass — adds it
+        to this run's skills so the agent can call_skill it next. Signed to the
+        ledger, so the whole creation is auditable."""
+        if self.synthesizer is None:
+            return {"ok": False, "error": "tool creation is not enabled for this agent"}
+        task = (action.get("task") or action.get("description") or "").strip()
+        if not task:
+            return {"ok": False, "error": "create_skill needs a 'task' describing what the tool should do"}
+        self.synthesizer.budget = self.budget  # charge the same task budget
+        res = self.synthesizer.synthesize(task)
+        cand = res.candidate
+        if not res.ok or cand is None:
+            return {
+                "ok": False,
+                "error": f"tool synthesis failed: {res.reason}",
+                "cap_violations": res.cap_violations,
+                "failed_tests": [t.get("error") for t in res.test_results if not t.get("ok")][:3],
+            }
+        sid = str(action.get("name") or cand.name)
+        available[sid] = {
+            "code": cand.code, "caps": cand.caps, "entrypoint": cand.entrypoint,
+            "name": cand.name, "description": cand.description,
+        }
+        if self.skill_library is not None:
+            try:
+                self.skill_library.add_candidate(cand)  # persist for reuse
+            except Exception:  # noqa: BLE001 - persistence is best-effort
+                pass
+        self._log(Action.SYNTHESIZE, {
+            "name": sid, "description": cand.description,
+            "entrypoint": cand.entrypoint, "tests_passed": True, "on_the_fly": True,
+        })
+        return {
+            "ok": True, "created": sid, "entrypoint": cand.entrypoint,
+            "description": cand.description,
+            "message": f"tool {sid!r} created and sandbox-tested — call it with call_skill next.",
+        }
 
     def _execute_action(self, action: dict, available: dict) -> dict:
         """Run one tool action, log its CALL + OBSERVATION, return the observation.
@@ -290,9 +339,14 @@ class BaseAgent:
                 obs = self._run_skill(available, action)
                 self._log(Action.OBSERVATION, {"skill_id": action.get("skill_id"), "ok": obs.get("ok"), "error": obs.get("error")})
                 return obs
+            if atype == CREATE_SKILL:
+                return self._create_skill(action, available)
             if atype == CALL_MCP:
                 obs = self._call_mcp(action)
                 self._log(Action.MCP_TOOL, {"tool": action.get("tool"), "args": action.get("args"), "ok": obs.get("ok")})
+                if not obs.get("ok") and self.synthesizer is not None:
+                    obs["hint"] = ("this tool did not do it — do NOT retry it; if no available "
+                                   "tool fits, create one with create_skill")
                 return obs
             if atype == CALL_AGENT:
                 self._log(Action.CALL_AGENT, {"target": action.get("agent_id")})
@@ -369,6 +423,13 @@ class BaseAgent:
                 lines.append("AVAILABLE MCP TOOLS:")
                 for t in tools:
                     lines.append(f"- {t.name}: {t.description} args={t.input_schema}")
+        if self.synthesizer is not None:
+            lines.append(
+                'If NO available skill or tool does what you need, CREATE one: '
+                '{"action": "create_skill", "name": "<id>", "task": "<precise description of the '
+                'tool: inputs, output, behavior>"} — Athena writes it, sandbox-tests it, and adds '
+                'it so you can call_skill it on the next step.'
+            )
         if scratchpad:
             lines.append("HISTORY:")
             for step in scratchpad:

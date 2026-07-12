@@ -16,6 +16,7 @@ FINISH = "finish"
 CALL_SKILL = "call_skill"
 CALL_AGENT = "call_agent"
 CALL_MCP = "call_mcp"
+CREATE_SKILL = "create_skill"  # synthesize a new tool on the fly, then call it
 
 # greedy capture so nested objects (e.g. a plan with step objects) are kept whole
 _FENCED = re.compile(r"```(?:json)?\s*(\{.*\})\s*```", re.DOTALL)

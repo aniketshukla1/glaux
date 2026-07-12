@@ -594,6 +594,9 @@ class _State:
             system_prompt=GENERALIST_SYSTEM,
             mcp_client=self.mcp,
             max_iterations=6,
+            # On-the-fly tool creation: no tool for the job? synthesize + test + use one.
+            synthesizer=SkillSynthesizer(self.llm),
+            skill_library=self.skills,
         )
         return Swarm(
             router=router,
