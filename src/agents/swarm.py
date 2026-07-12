@@ -10,6 +10,7 @@ outputs are threaded into dependents' context.
 from __future__ import annotations
 
 import json
+import re
 from collections import defaultdict, deque
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
@@ -19,7 +20,7 @@ from core.ledger import Action, Ledger
 from identity.keypair import AgentIdentity
 from llm.gateway import Message, stream_complete
 
-from .base import AgentResult, BaseAgent, HandoffRejected
+from .base import ACTION_INSTRUCTIONS, AgentResult, BaseAgent, HandoffRejected
 from .budget import Budget, BudgetTracker, charge_for_response
 from .canvas import extract_canvas
 from .handoff import delegate
@@ -63,6 +64,14 @@ _RESPONDER_SYSTEM = (
     'answer>", "success": true}.'
 )
 
+# The medium-tier generalist: one capable agent that finishes the whole task itself.
+GENERALIST_SYSTEM = (
+    "You are Athena, a capable generalist agent. Complete the user's task end to end "
+    "yourself: reason about it, use available skills and tools when they genuinely help, "
+    "then finish with a complete, correct answer. Prefer the fewest steps that do the "
+    "job, and batch independent tool calls into one step.\n" + ACTION_INSTRUCTIONS
+)
+
 
 def _looks_simple(directive: str) -> bool:
     d = (directive or "").strip()
@@ -70,6 +79,34 @@ def _looks_simple(directive: str) -> bool:
         return False
     low = d.lower()
     return not any(sig in low for sig in _COMPLEX_SIGNALS)
+
+
+# Explicit multi-phase / sequencing cues that genuinely warrant a planned team.
+_TEAM_SIGNALS = (
+    "and then", "step by step", "step-by-step", "after that", "followed by",
+    "first,", "finally,", "phase", "pipeline",
+)
+
+
+def _needs_team(directive: str) -> bool:
+    """True when a directive genuinely needs the full planned+reflected swarm — a
+    multi-phase or multi-specialist ask. Otherwise a single capable agent (the
+    "medium" tier) can handle it directly, skipping the planning and reflection
+    round-trips. Errs toward the single agent (that's how lean agents work), and
+    reserves the swarm for clearly multi-part work."""
+    d = (directive or "").strip()
+    low = d.lower()
+    if "\n" in d or len(d) > 320:  # multi-line / very long -> likely multi-part
+        return True
+    if any(s in low for s in _TEAM_SIGNALS):
+        return True
+    build = any(w in low for w in ("build", "implement", "create", "develop", "write code", "program "))
+    verify = any(w in low for w in ("test", "verify", "benchmark", "unit test"))
+    gather = any(w in low for w in ("research", "investigate", "gather", "analyze", "compare"))
+    produce = any(w in low for w in ("report", "summariz", "write up", "write-up", "document", "recommend"))
+    if (build and verify) or (gather and produce):  # two distinct phases
+        return True
+    return len([s for s in re.split(r"[.!?]+", d) if s.strip()]) >= 3  # 3+ sentences
 
 
 def _is_live(llm) -> bool:
@@ -168,6 +205,7 @@ class Swarm:
         responder=None,
         max_parallel: int = 8,
         synthesis_llm=None,
+        generalist=None,
     ) -> None:
         self.router = router
         self.specialists = specialists
@@ -185,6 +223,9 @@ class Swarm:
         # The user-facing final answer uses the primary model even under tiering
         # (routing/reflection may run on a cheap model, but the deliverable shouldn't).
         self._synthesis_llm = synthesis_llm
+        # Medium tier: one capable tool-using agent for non-trivial-but-single-focus
+        # tasks — no planning call, no reflector. None -> fall through to the swarm.
+        self.generalist = generalist
 
     def _answerer_role(self) -> Optional[str]:
         for pref in ("researcher", "writer", "analyst"):
@@ -265,18 +306,31 @@ class Swarm:
 
         # Fast path: a plainly-simple query gets one direct answer — skip the
         # router's planning call and the reflector (both are pure latency here).
+        # Three tiers, cheapest first — both shortcuts skip the router-planning call
+        # and the reflector, and route the one step to a single agent instead of a team.
         answerer = self._answerer_role()
-        fast = self.fast_replies and answerer is not None and _is_live(self.router.llm) and _looks_simple(directive)
-        responder = None
+        live = self.fast_replies and _is_live(self.router.llm)
+        fast = live and answerer is not None and _looks_simple(directive)
+        medium = (not fast) and live and self.generalist is not None and not _needs_team(directive)
+
+        single_agent = None   # responder (fast) or generalist (medium); None for the swarm
+        single_skills = None  # skills override for the single agent
         if fast:
             plan = self.router.heuristic_plan(directive, answerer)
             step_reflector = None
-            responder = self._responder_agent()
-            responder.budget = tracker
+            single_agent = self._responder_agent()
+            single_skills = {}  # tool-free: answer from own knowledge
+        elif medium:
+            plan = self.router.heuristic_plan(directive, "generalist")
+            step_reflector = None
+            single_agent = self.generalist
+            single_skills = None  # the agent uses its own tools + retrieved skills
         else:
             catalog = {role: getattr(agent, "description", "") for role, agent in self.specialists.items()}
             plan = self.router.plan(directive, roles=list(self.specialists.keys()), role_catalog=catalog)
             step_reflector = self.reflector
+        if single_agent is not None:
+            single_agent.budget = tracker
         order = topo_sort(plan.steps)
         levels = dependency_levels(plan.steps)
         results: dict[str, StepResult] = {}
@@ -305,7 +359,7 @@ class Swarm:
 
             runnable = []
             for step in level:
-                target = responder if fast else self.specialists.get(step.role)
+                target = single_agent if single_agent is not None else self.specialists.get(step.role)
                 if target is None:
                     results[step.id] = StepResult(
                         step, AgentResult(False, f"no specialist for role {step.role!r}", [], 0), False, 0
@@ -315,8 +369,7 @@ class Swarm:
                 context = {
                     dep: results[dep].result.result for dep in step.depends_on if dep in results
                 }
-                # Fast path offers no skills — the responder answers from its own knowledge.
-                skills = {} if fast else (skills_by_role or {}).get(step.role)
+                skills = single_skills if single_agent is not None else (skills_by_role or {}).get(step.role)
                 runnable.append((step, target, context, skills))
 
             level_out: list = []  # (StepResult, verdict)

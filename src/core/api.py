@@ -55,6 +55,8 @@ def _signup_policy() -> str:
 import safety
 from agents import (
     Budget,
+    BaseAgent,
+    GENERALIST_SYSTEM,
     MCPRegistry,
     MCPServerConfig,
     SPECIALISTS,
@@ -76,7 +78,7 @@ from llm.demo import DemoLLM
 from memory import MemoryManager
 from skills import SkillLibrary, SkillSynthesizer
 
-ROLES = ["router", "reflector", *SPECIALISTS.keys()]
+ROLES = ["router", "reflector", "generalist", *SPECIALISTS.keys()]
 MEMORY_LAYERS = ("semantic", "episodic", "procedural")
 BENCH_DIR = Path(__file__).resolve().parents[2] / "bench"
 
@@ -140,9 +142,19 @@ def _load_identities() -> Optional[dict]:
         for role in ROLES:
             d = data.get(role)
             if not d:
-                return None
+                continue  # a role added after this file was written — backfill below
             sk = Ed25519PrivateKey.from_private_bytes(base58.b58decode(d["seed"]))
             out[role] = AgentIdentity(sk, d["agent_id"], d.get("namespace", "default"))
+        if not out:
+            return None  # empty/unusable → regenerate the whole set
+        # Backfill any newly-added roles WITHOUT rotating the existing persistent
+        # keys (adding an agent role must not silently reset the whole ledger's
+        # signing identities).
+        added = [r for r in ROLES if r not in out]
+        if added:
+            for role in added:
+                out[role] = AgentIdentity.generate()
+            _save_identities(out)
         return out
     except Exception:  # noqa: BLE001 - corrupt/old file → regenerate
         return None
@@ -572,6 +584,17 @@ class _State:
             identities=self.identities, llm=self.llm, ledger=self.ledger, mcp_client=self.mcp
         )
         reflector = Reflector(identity=self.identities["reflector"], llm=aux, ledger=self.ledger)
+        # Medium tier: one capable tool-using agent (primary model) for non-trivial
+        # single-focus tasks — handles them directly, skipping planning + reflection.
+        generalist = BaseAgent(
+            identity=self.identities.get("generalist") or AgentIdentity.generate(),
+            llm=self.llm,
+            ledger=self.ledger,
+            name="generalist",
+            system_prompt=GENERALIST_SYSTEM,
+            mcp_client=self.mcp,
+            max_iterations=6,
+        )
         return Swarm(
             router=router,
             specialists=specialists,
@@ -582,6 +605,7 @@ class _State:
             skill_library=self.skills,
             require_approval=(self.approval_mode == "gated"),
             synthesis_llm=self.llm,  # the final answer uses the primary model
+            generalist=generalist,
         )
 
 

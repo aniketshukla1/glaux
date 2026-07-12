@@ -28,7 +28,7 @@ from .web import (
 from .reflector import Reflector, Verdict
 from .router import Plan, Router, Step
 from .specialists import SPECIALISTS, build_specialists, coder_agent, make_specialist, researcher_agent
-from .swarm import StepResult, Swarm, SwarmResult, dependency_levels, topo_sort
+from .swarm import GENERALIST_SYSTEM, StepResult, Swarm, SwarmResult, dependency_levels, topo_sort
 
 __all__ = [
     "BaseAgent",

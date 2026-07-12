@@ -398,6 +398,49 @@ def test_tiering_uses_primary_model_for_final_answer():
     assert res.final == "INTEGRATED BY PRIMARY"  # not the aux model, not a fallback
 
 
+def test_medium_tier_uses_generalist_without_planning_or_reflecting():
+    # A non-trivial single-focus task (not simple, not a multi-phase team ask) goes
+    # straight to the generalist: no router-planning call, no reflector, no team.
+    def _boom(*_a, **_k):
+        raise AssertionError("must not be called on the medium tier")
+
+    router = Router(identity=AgentIdentity.generate(), llm=ScriptedLLM(handler=_boom))
+    reflector = Reflector(identity=AgentIdentity.generate(), llm=ScriptedLLM(handler=_boom))
+    generalist = _plain_agent([_finish("refactored it")], name="generalist")
+    swarm = Swarm(
+        router=router,
+        specialists={"coder": _plain_agent([_finish("unused")], name="coder")},
+        reflector=reflector,
+        responder=_plain_agent([_finish("unused")], name="responder"),
+        generalist=generalist,
+    )
+    res = swarm.run("refactor this messy sorting helper to read cleanly")
+    assert res.success
+    assert res.final == "refactored it"
+    assert list(res.steps) == ["s1"]
+
+
+def test_medium_tier_off_for_multi_phase_task():
+    # A clearly multi-phase (build + test) task still goes through the full swarm.
+    plan = _swarm_plan(
+        {"id": "s1", "role": "coder", "task": "build", "depends_on": []},
+        {"id": "s2", "role": "tester", "task": "test", "depends_on": ["s1"]},
+    )
+    router = Router(identity=AgentIdentity.generate(), llm=ScriptedLLM([plan, "shipped"]))
+    generalist = _plain_agent([_finish("SHOULD NOT RUN")], name="generalist")
+    swarm = Swarm(
+        router=router,
+        specialists={
+            "coder": _plain_agent([_finish("built")], name="coder"),
+            "tester": _plain_agent([_finish("tested")], name="tester"),
+        },
+        generalist=generalist,
+    )
+    res = swarm.run("build a queue and write tests for it")
+    assert res.success
+    assert res.final == "shipped"  # integrated by the swarm, not the generalist
+
+
 def test_fast_path_answers_simple_query_without_planning_or_reflecting():
     # A plainly-simple query answers via the lean responder in one call: the
     # router's planning LLM call and the reflector are both skipped, and the
