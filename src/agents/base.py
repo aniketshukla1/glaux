@@ -328,6 +328,41 @@ class BaseAgent:
             "message": f"tool {sid!r} created and sandbox-tested — call it with call_skill next.",
         }
 
+    def _maybe_heal_skill(self, action: dict, available: dict, obs: dict):
+        """Self-healing: if a skill call failed with a *logic* error (not a sandbox
+        denial or a resource kill), synthesize a repaired version, and if its tests
+        pass, swap it in, sign the repair, and retry the call once. Returns the
+        retried observation, or None if it couldn't/shouldn't heal."""
+        if self.synthesizer is None:
+            return None
+        skill_id = action.get("skill_id")
+        skill = available.get(skill_id)
+        if not skill or "code" not in skill:
+            return None
+        err = obs.get("error") or ""
+        # Never "repair" a capability denial (would be helping it escape) or a
+        # resource kill (timeout/memory) — those aren't code bugs.
+        if obs.get("killed_reason") or "not permitted" in err or "PermissionError" in err:
+            return None
+        self.synthesizer.budget = self.budget
+        rep = self.synthesizer.repair(skill_id, skill["code"], err, skill.get("description", ""))
+        if not rep.ok or rep.candidate is None:
+            return None
+        cand = rep.candidate
+        available[skill_id] = {
+            "code": cand.code, "caps": cand.caps, "entrypoint": cand.entrypoint,
+            "name": cand.name, "description": cand.description,
+        }
+        if self.skill_library is not None:
+            try:
+                self.skill_library.add_candidate(cand)  # persist the fix
+            except Exception:  # noqa: BLE001
+                pass
+        self._log(Action.SYNTHESIZE, {"name": skill_id, "self_heal": True, "fixed_error": err[:160]})
+        retried = self._run_skill(available, action)
+        retried["self_healed"] = True
+        return retried
+
     def _execute_action(self, action: dict, available: dict) -> dict:
         """Run one tool action, log its CALL + OBSERVATION, return the observation.
         Never raises — a tool's failure becomes an error observation so its batch
@@ -337,6 +372,10 @@ class BaseAgent:
             if atype == CALL_SKILL:
                 self._log(Action.CALL_SKILL, {"skill_id": action.get("skill_id"), "args": action.get("args")})
                 obs = self._run_skill(available, action)
+                if not obs.get("ok"):
+                    healed = self._maybe_heal_skill(action, available, obs)
+                    if healed is not None:
+                        obs = healed
                 self._log(Action.OBSERVATION, {"skill_id": action.get("skill_id"), "ok": obs.get("ok"), "error": obs.get("error")})
                 return obs
             if atype == CREATE_SKILL:

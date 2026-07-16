@@ -67,15 +67,32 @@ class SkillSynthesizer:
         self.budget: Optional[BudgetTracker] = None  # set by the Swarm per task
 
     def synthesize(self, task: str) -> SynthesisResult:
-        messages = [Message(role="user", content=f"TASK: {task}")]
+        """Propose a brand-new skill for a task, then cap-check + sandbox-test it."""
+        return self._complete_and_test([Message(role="user", content=f"TASK: {task}")])
+
+    def repair(self, name: str, code: str, error: str, description: str = "") -> SynthesisResult:
+        """Self-healing: given a skill that FAILED at call time, produce a corrected
+        version (fixed code + fresh tests) and re-check + re-test it in the sandbox.
+        Only a repaired skill whose tests pass comes back ok=True."""
+        content = (
+            f"NAME: {name}\nDESCRIPTION: {description}\n\n"
+            f"This skill FAILED at runtime with this error:\n{error}\n\n"
+            f"BROKEN CODE:\n{code}\n\n"
+            "Return a CORRECTED skill in the same JSON format that fixes this error. "
+            "Keep the same entrypoint and intended behavior, and include a test that "
+            "covers the case that failed."
+        )
+        return self._complete_and_test([Message(role="user", content=content)])
+
+    def _complete_and_test(self, messages: list) -> SynthesisResult:
         resp = self.llm.complete(
-            messages,
-            system=SYNTH_SYSTEM,
-            temperature=self.temperature,
-            max_tokens=self.max_tokens,
+            messages, system=SYNTH_SYSTEM,
+            temperature=self.temperature, max_tokens=self.max_tokens,
         )
         charge_for_response(self.budget, resp, SYNTH_SYSTEM, messages)
-        data = extract_json(resp.text)
+        return self._build_and_test(extract_json(resp.text))
+
+    def _build_and_test(self, data) -> SynthesisResult:
         if not isinstance(data, dict) or "code" not in data:
             return SynthesisResult(False, "LLM did not return a valid skill JSON")
 

@@ -129,3 +129,36 @@ def test_synthesized_tool_infinite_loop_is_time_bounded():
     res = synth.synthesize("spin forever")
     assert not res.ok  # its test times out in the sandbox
     assert time.monotonic() - t0 < 10  # bounded, not a hang
+
+
+# --- self-healing: a broken stored skill is auto-repaired at call time ---------
+
+
+def test_skill_self_heals_on_runtime_error():
+    led = Ledger()
+    # a stored skill that crashes on b == 0
+    skills = {"divide": {
+        "code": "def run(a, b):\n    return a / b\n",
+        "caps": {"time_limit_s": 5}, "entrypoint": "run",
+        "name": "divide", "description": "divide a by b",
+    }}
+    # the synthesizer returns a fixed version that handles the zero case
+    fixed = json.dumps({
+        "name": "divide", "description": "safe divide", "entrypoint": "run",
+        "caps": {"time_limit_s": 5},
+        "code": "def run(a, b):\n    return a / b if b else 0\n",
+        "tests": ["assert run(1, 0) == 0", "assert run(6, 3) == 2"],
+    })
+    synth = SkillSynthesizer(ScriptedLLM(responses=[f"```json\n{fixed}\n```"]))
+    llm = ScriptedLLM(responses=[_call("divide", a=1, b=0), _finish("0")])
+    agent = BaseAgent(
+        identity=AgentIdentity.generate(), llm=llm, ledger=led, name="g", synthesizer=synth,
+    )
+    res = agent.run("divide 1 by 0", skills=skills)
+    obs = res.steps[0]["observations"][0]
+    # the call crashed, was auto-repaired, and the retry succeeded
+    assert obs["ok"] is True and obs.get("self_healed") is True
+    assert obs["return_value"] == 0
+    # the repair was signed to the ledger and the chain verifies
+    assert "SYNTHESIZE_SKILL" in [b["action_type"] for b in led.blocks()]
+    assert led.verify().valid
