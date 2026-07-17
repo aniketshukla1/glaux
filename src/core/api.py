@@ -71,6 +71,7 @@ from agents import (
     default_local_client,
     search_status,
 )
+from agents.workspace import Workspace, register_workspace, unregister_workspace
 from core.ledger import Ledger
 from identity import AgentIdentity
 from eval import EvalHarness, EvalRun, lift, load_bench
@@ -435,6 +436,11 @@ class _State:
             config_path=_mcp_config_path(),
         )
         self.mcp.load(connect=True)
+        # Workspace (opt-in): real files under one jailed dir. Default from env,
+        # toggleable at runtime via /api/fs.
+        self.workspace = Workspace()
+        self.workspace_enabled = False
+        self.set_workspace_enabled(bool(os.environ.get("ATHENA_WORKSPACE")))
         METRICS.bind(_metrics_path())  # counters survive restarts → real cumulative data
         self.search_config = _load_search_config()
         configure_search(self.search_config.get("provider", ""), self.search_config.get("keys", {}))
@@ -471,6 +477,14 @@ class _State:
         """The fast/cheap model for lightweight roles (router, reflector, quick
         replies), or the primary model when no tier is configured."""
         return self.fast_llm or self.llm
+
+    def set_workspace_enabled(self, enabled: bool) -> None:
+        """Add or remove the jailed workspace file tools from the builtin MCP client."""
+        if enabled:
+            register_workspace(self.mcp.builtin, self.workspace)
+        else:
+            unregister_workspace(self.mcp.builtin)
+        self.workspace_enabled = bool(enabled)
 
     def _on_ledger_append(self, block: dict) -> None:
         WS.publish({"type": "block", "block": block})  # live stream
@@ -1208,10 +1222,7 @@ def health() -> dict:
         "blocks": len(STATE.ledger),
         "memory": {layer: len(STATE.store(layer).list_all()) for layer in MEMORY_LAYERS},
         "sandbox": _sandbox_status(),
-        "workspace": {
-            "enabled": bool(os.environ.get("ATHENA_WORKSPACE")),
-            "root": str(_athena_home() / "workspace"),
-        },
+        "workspace": {"enabled": STATE.workspace_enabled, "root": str(STATE.workspace.root)},
     }
 
 
@@ -1235,6 +1246,23 @@ def _sandbox_status() -> dict:
         "wasm_runtime": wasm_runtime,   # can run wasm modules (isolation available)
         "wasm_python": wasm_python,      # can run Python skills in wasm (python.wasm set)
     }
+
+
+class WorkspaceRequest(BaseModel):
+    enabled: bool
+
+
+@app.get("/api/fs")
+def get_fs_workspace() -> dict:
+    files = STATE.workspace.list_files() if STATE.workspace_enabled else []
+    return {"enabled": STATE.workspace_enabled, "root": str(STATE.workspace.root), "files": files}
+
+
+@app.post("/api/fs")
+def set_fs_workspace(req: WorkspaceRequest) -> dict:
+    """Toggle the jailed file workspace (opt-in power mode: agents create real files)."""
+    STATE.set_workspace_enabled(req.enabled)
+    return {"enabled": STATE.workspace_enabled, "root": str(STATE.workspace.root)}
 
 
 @app.get("/api/agents")

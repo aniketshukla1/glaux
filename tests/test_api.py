@@ -58,6 +58,15 @@ def test_rejects_oversized_directive():
     assert "too long" in r.json()["detail"]
 
 
+def test_fs_workspace_toggle_adds_and_removes_file_tools():
+    assert client.get("/api/fs").json()["enabled"] is False
+    assert "write_file" not in {t.name for t in STATE.mcp.builtin.list_tools()}
+    assert client.post("/api/fs", json={"enabled": True}).json()["enabled"] is True
+    assert "write_file" in {t.name for t in STATE.mcp.builtin.list_tools()}
+    client.post("/api/fs", json={"enabled": False})
+    assert "write_file" not in {t.name for t in STATE.mcp.builtin.list_tools()}
+
+
 def test_dispatch_builds_a_verifiable_signed_chain():
     r = client.post("/api/task", json={"directive": "build a thing and summarize it"})
     assert r.status_code == 200

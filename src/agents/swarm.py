@@ -59,8 +59,10 @@ GENERALIST_SYSTEM = (
     "then finish with a complete, correct answer. Prefer the fewest steps that do the job, "
     "and batch independent tool calls into one step. If the answer needs an exact "
     "computation you cannot do reliably from memory (hashes, checksums, big-number math, "
-    "encodings, parsing), use a tool. If NO available tool fits, do NOT keep retrying one "
-    "that doesn't — create a purpose-built tool with create_skill, then call it.\n"
+    "encodings, parsing), use a tool. To create, read, or edit FILES, use the write_file / "
+    "read_file / list_files tools when available — never create_skill for file operations. "
+    "create_skill is ONLY for a missing computation/logic tool: if no available tool fits, "
+    "do NOT keep retrying one that doesn't — create a purpose-built one, then call it.\n"
     + ACTION_INSTRUCTIONS
 )
 

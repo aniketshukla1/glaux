@@ -6,8 +6,10 @@ real artifacts (a file, a small project) can, but only inside one directory it c
 never escape, with per-file and total-size caps, and with every write callable
 through the MCP surface so the swarm signs it to the ledger.
 
-Enable by exposing the tools (``register_workspace``); the daemon does so only when
-``ATHENA_WORKSPACE`` is set. Default location: ``<ATHENA_HOME>/workspace``.
+Enable by exposing the tools (``register_workspace``). The daemon toggles this at
+runtime via ``STATE.set_workspace_enabled`` (Settings / ``POST /api/fs``); the
+``ATHENA_WORKSPACE`` env var only seeds the initial state. Default location:
+``<ATHENA_HOME>/workspace``.
 """
 
 from __future__ import annotations
@@ -95,6 +97,14 @@ class Workspace:
         elif p.exists():
             p.unlink()
         return {"path": self._rel(p), "deleted": True}
+
+
+WORKSPACE_TOOLS = ("write_file", "read_file", "list_files", "make_dir", "delete_path")
+
+
+def unregister_workspace(client) -> None:
+    for name in WORKSPACE_TOOLS:
+        client.unregister(name)
 
 
 def register_workspace(client, workspace: Workspace) -> None:

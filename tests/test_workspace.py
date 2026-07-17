@@ -9,7 +9,13 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from agents.workspace import Workspace, WorkspaceError  # noqa: E402
+from agents.mcp import LocalMCPClient  # noqa: E402
+from agents.workspace import (  # noqa: E402
+    Workspace,
+    WorkspaceError,
+    register_workspace,
+    unregister_workspace,
+)
 
 
 def test_write_read_list(tmp_path):
@@ -54,14 +60,12 @@ def test_delete_and_root_protection(tmp_path):
         ws.delete_path(".")  # never delete the root
 
 
-def test_tools_registered_only_when_enabled(monkeypatch, tmp_path):
-    monkeypatch.setenv("ATHENA_HOME", str(tmp_path))
-    from agents.mcp import default_local_client
-
-    monkeypatch.delenv("ATHENA_WORKSPACE", raising=False)
-    off = {t.name for t in default_local_client().list_tools()}
-    assert "write_file" not in off
-
-    monkeypatch.setenv("ATHENA_WORKSPACE", "1")
-    on = {t.name for t in default_local_client().list_tools()}
-    assert {"write_file", "read_file", "list_files", "make_dir", "delete_path"} <= on
+def test_register_and_unregister_tools(tmp_path):
+    client = LocalMCPClient()
+    assert "write_file" not in {t.name for t in client.list_tools()}
+    register_workspace(client, Workspace(root=tmp_path))
+    assert {"write_file", "read_file", "list_files", "make_dir", "delete_path"} <= {
+        t.name for t in client.list_tools()
+    }
+    unregister_workspace(client)
+    assert "write_file" not in {t.name for t in client.list_tools()}
