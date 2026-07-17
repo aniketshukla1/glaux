@@ -1208,6 +1208,10 @@ def health() -> dict:
         "blocks": len(STATE.ledger),
         "memory": {layer: len(STATE.store(layer).list_all()) for layer in MEMORY_LAYERS},
         "sandbox": _sandbox_status(),
+        "workspace": {
+            "enabled": bool(os.environ.get("ATHENA_WORKSPACE")),
+            "root": str(_athena_home() / "workspace"),
+        },
     }
 
 

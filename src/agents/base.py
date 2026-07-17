@@ -65,6 +65,17 @@ def _caps_from_dict(d: dict) -> Capabilities:
     return Capabilities.from_dict(d)
 
 
+def _loggable_args(args) -> dict:
+    """Truncate long string args before signing them to the ledger (a big file
+    write shouldn't bloat a block) — the content's size/hash is in the result."""
+    if not isinstance(args, dict):
+        return args
+    out = {}
+    for k, v in args.items():
+        out[k] = (v[:300] + f"…(+{len(v) - 300} chars)") if isinstance(v, str) and len(v) > 300 else v
+    return out
+
+
 def _hash_prompt(system: Optional[str], messages: list[Message]) -> str:
     h = hashlib.sha256()
     h.update((system or "").encode("utf-8"))
@@ -382,7 +393,10 @@ class BaseAgent:
                 return self._create_skill(action, available)
             if atype == CALL_MCP:
                 obs = self._call_mcp(action)
-                self._log(Action.MCP_TOOL, {"tool": action.get("tool"), "args": action.get("args"), "ok": obs.get("ok")})
+                self._log(Action.MCP_TOOL, {
+                    "tool": action.get("tool"), "args": _loggable_args(action.get("args")),
+                    "ok": obs.get("ok"),
+                })
                 if not obs.get("ok") and self.synthesizer is not None:
                     obs["hint"] = ("this tool did not do it — do NOT retry it; if no available "
                                    "tool fits, create one with create_skill")

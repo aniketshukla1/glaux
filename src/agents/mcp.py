@@ -123,7 +123,12 @@ def calc(expression: str):
 
 def default_local_client() -> LocalMCPClient:
     """A LocalMCPClient pre-loaded with the real built-in skill suite (JSON/CSV/
-    regex/text-stats/hash/base64/diff/entity-extraction) plus safe arithmetic."""
+    regex/text-stats/hash/base64/diff/entity-extraction) plus safe arithmetic.
+
+    When ATHENA_WORKSPACE is set, also exposes the jailed workspace file tools
+    (opt-in "power mode": the agent can create real files under one capped dir)."""
+    import os
+
     from .skills import register_skills
 
     client = LocalMCPClient(server_name="athena-builtin")
@@ -132,6 +137,10 @@ def default_local_client() -> LocalMCPClient:
         "calc", "Evaluate a safe arithmetic expression (numbers and + - * / % ** only).", calc,
         {"expression": "string (e.g. '2 * (3 + 4)')"},
     )
+    if os.environ.get("ATHENA_WORKSPACE"):
+        from .workspace import Workspace, register_workspace
+
+        register_workspace(client, Workspace())
     return client
 
 
