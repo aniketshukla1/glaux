@@ -64,8 +64,61 @@ def test_register_and_unregister_tools(tmp_path):
     client = LocalMCPClient()
     assert "write_file" not in {t.name for t in client.list_tools()}
     register_workspace(client, Workspace(root=tmp_path))
-    assert {"write_file", "read_file", "list_files", "make_dir", "delete_path"} <= {
-        t.name for t in client.list_tools()
-    }
+    assert {
+        "write_file", "read_file", "list_files", "make_dir", "delete_path",
+        "edit_file", "glob", "grep",
+    } <= {t.name for t in client.list_tools()}
     unregister_workspace(client)
-    assert "write_file" not in {t.name for t in client.list_tools()}
+    names = {t.name for t in client.list_tools()}
+    assert not ({"write_file", "edit_file", "glob", "grep"} & names)
+
+
+def test_edit_file_unique_replacement(tmp_path):
+    ws = Workspace(root=tmp_path)
+    ws.write_file("a.py", "x = 1\ny = 2\n")
+    r = ws.edit_file("a.py", "y = 2", "y = 3")
+    assert r["replacements"] == 1 and r["sha256"]
+    assert ws.read_file("a.py") == "x = 1\ny = 3\n"
+
+
+def test_edit_file_rejects_ambiguous_unless_replace_all(tmp_path):
+    ws = Workspace(root=tmp_path)
+    ws.write_file("a.txt", "dup\ndup\n")
+    with pytest.raises(WorkspaceError):
+        ws.edit_file("a.txt", "dup", "x")  # 2 matches, ambiguous
+    r = ws.edit_file("a.txt", "dup", "x", replace_all=True)
+    assert r["replacements"] == 2
+    assert ws.read_file("a.txt") == "x\nx\n"
+
+
+def test_edit_file_missing_target_or_string(tmp_path):
+    ws = Workspace(root=tmp_path)
+    ws.write_file("a.txt", "hello")
+    with pytest.raises(WorkspaceError):
+        ws.edit_file("a.txt", "nope", "x")  # old_string absent
+    with pytest.raises(WorkspaceError):
+        ws.edit_file("missing.txt", "a", "b")  # no such file
+
+
+def test_glob_matches_by_pattern(tmp_path):
+    ws = Workspace(root=tmp_path)
+    ws.write_file("a.py", "1")
+    ws.write_file("pkg/b.py", "2")
+    ws.write_file("pkg/c.txt", "3")
+    assert set(ws.glob("**/*.py")) == {"a.py", "pkg/b.py"}
+    assert ws.glob("**/*.txt") == ["pkg/c.txt"]
+
+
+def test_grep_finds_matches_with_locations(tmp_path):
+    ws = Workspace(root=tmp_path)
+    ws.write_file("a.py", "import os\nx = 1\n")
+    ws.write_file("b.py", "y = 2\nimport sys\n")
+    assert {h["file"] for h in ws.grep(r"^import ")} == {"a.py", "b.py"}
+    assert ws.grep("sys") == [{"file": "b.py", "line": 2, "text": "import sys"}]
+
+
+def test_grep_rejects_bad_regex(tmp_path):
+    ws = Workspace(root=tmp_path)
+    ws.write_file("a.txt", "hi")
+    with pytest.raises(WorkspaceError):
+        ws.grep("[unclosed")

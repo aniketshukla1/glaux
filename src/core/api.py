@@ -72,7 +72,7 @@ from agents import (
     search_status,
 )
 from agents.context import ContextManager
-from agents.workspace import Workspace, register_workspace, unregister_workspace
+from agents.workspace import WORKSPACE_TOOLS, Workspace, register_workspace, unregister_workspace
 from core.ledger import Ledger
 from identity import AgentIdentity
 from eval import EvalHarness, EvalRun, lift, load_bench
@@ -1261,7 +1261,12 @@ class WorkspaceRequest(BaseModel):
 @app.get("/api/fs")
 def get_fs_workspace() -> dict:
     files = STATE.workspace.list_files() if STATE.workspace_enabled else []
-    return {"enabled": STATE.workspace_enabled, "root": str(STATE.workspace.root), "files": files}
+    return {
+        "enabled": STATE.workspace_enabled,
+        "root": str(STATE.workspace.root),
+        "files": files,
+        "tools": list(WORKSPACE_TOOLS) if STATE.workspace_enabled else [],
+    }
 
 
 @app.post("/api/fs")

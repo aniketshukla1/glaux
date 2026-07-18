@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import re
 import shutil
 from pathlib import Path
 
@@ -98,8 +99,89 @@ class Workspace:
             p.unlink()
         return {"path": self._rel(p), "deleted": True}
 
+    def edit_file(
+        self, path: str, old_string: str, new_string: str = "", replace_all: bool = False
+    ) -> dict:
+        """Surgical edit: replace an exact substring. Refuses an ambiguous edit — the
+        old string must be unique unless ``replace_all`` — so the agent can't silently
+        change the wrong occurrence."""
+        p = self._resolve(path)
+        if not p.is_file():
+            raise WorkspaceError(f"no such file {path!r}")
+        if not isinstance(old_string, str) or old_string == "":
+            raise WorkspaceError("edit_file needs a non-empty 'old_string' to find")
+        text = p.read_text(errors="replace")
+        count = text.count(old_string)
+        if count == 0:
+            raise WorkspaceError(f"'old_string' not found in {path!r}")
+        if count > 1 and not replace_all:
+            raise WorkspaceError(
+                f"'old_string' is not unique in {path!r} ({count} matches) — add surrounding "
+                "context to target one occurrence, or pass replace_all=true"
+            )
+        updated = text.replace(old_string, new_string) if replace_all else text.replace(old_string, new_string, 1)
+        data = updated.encode("utf-8")
+        if len(data) > self.max_file_bytes:
+            raise WorkspaceError(f"file too large after edit ({len(data)} bytes, max {self.max_file_bytes})")
+        if self._total_bytes() - p.stat().st_size + len(data) > self.max_total_bytes:
+            raise WorkspaceError("workspace size limit reached")
+        p.write_bytes(data)
+        return {
+            "path": self._rel(p),
+            "replacements": count if replace_all else 1,
+            "bytes": len(data),
+            "sha256": hashlib.sha256(data).hexdigest()[:16],
+        }
 
-WORKSPACE_TOOLS = ("write_file", "read_file", "list_files", "make_dir", "delete_path")
+    def glob(self, pattern: str, path: str = ".") -> list[str]:
+        """List workspace files matching a glob pattern (e.g. ``**/*.py``)."""
+        if not isinstance(pattern, str) or not pattern.strip():
+            raise WorkspaceError("glob needs a 'pattern' (e.g. '**/*.py')")
+        base = self._resolve(path)
+        if not base.is_dir():
+            base = self.root
+        out = []
+        for f in sorted(base.glob(pattern)):
+            if f.is_file() and self._within_root(f):
+                out.append(self._rel(f))
+        return out
+
+    def grep(
+        self, pattern: str, path: str = ".", include: str = "**/*", max_results: int = 200
+    ) -> list[dict]:
+        """Search file contents by regex. Returns ``{file, line, text}`` matches, capped
+        at ``max_results``; binary/unreadable files are skipped."""
+        try:
+            rx = re.compile(pattern)
+        except re.error as e:
+            raise WorkspaceError(f"invalid regex: {e}")
+        base = self._resolve(path)
+        root = base if base.is_dir() else self.root
+        hits: list[dict] = []
+        for f in sorted(root.glob(include)):
+            if not f.is_file() or not self._within_root(f):
+                continue
+            try:
+                text = f.read_text(errors="strict")
+            except (UnicodeDecodeError, OSError):
+                continue  # skip binary / unreadable files
+            for i, line in enumerate(text.splitlines(), 1):
+                if rx.search(line):
+                    hits.append({"file": self._rel(f), "line": i, "text": line[:200]})
+                    if len(hits) >= max_results:
+                        return hits
+        return hits
+
+    def _within_root(self, p: Path) -> bool:
+        """Guard against a symlink inside the workspace pointing outside it."""
+        rp = p.resolve()
+        return rp == self.root or self.root in rp.parents
+
+
+WORKSPACE_TOOLS = (
+    "write_file", "read_file", "list_files", "make_dir", "delete_path",
+    "edit_file", "glob", "grep",
+)
 
 
 def unregister_workspace(client) -> None:
@@ -129,4 +211,30 @@ def register_workspace(client, workspace: Workspace) -> None:
     client.register(
         "delete_path", "Delete a file or directory in the workspace.",
         workspace.delete_path, {"path": "string (relative)"},
+    )
+    client.register(
+        "edit_file",
+        "Replace an exact substring in a workspace file (surgical edit). Fails if old_string "
+        "isn't unique unless replace_all is true.",
+        workspace.edit_file,
+        {
+            "path": "string (relative)",
+            "old_string": "string (exact text to find)",
+            "new_string": "string (replacement)",
+            "replace_all": "bool (optional)",
+        },
+    )
+    client.register(
+        "glob", "Find workspace files matching a glob pattern, e.g. '**/*.py'.",
+        workspace.glob, {"pattern": "string", "path": "string (optional base dir)"},
+    )
+    client.register(
+        "grep", "Search workspace file contents with a regex; returns {file,line,text} matches.",
+        workspace.grep,
+        {
+            "pattern": "string (regex)",
+            "path": "string (optional base dir)",
+            "include": "string glob (optional, default '**/*')",
+            "max_results": "int (optional)",
+        },
     )

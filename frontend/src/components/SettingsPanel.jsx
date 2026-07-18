@@ -248,7 +248,16 @@ function AdvancedTab({ health, onRefresh }) {
           <Toggle on={!!ws?.enabled} busy={wsBusy} onChange={toggleWs} />
         </div>
         {ws?.enabled && (
-          <div className="text-faint text-xs mt-2">{(ws.files || []).length} file(s) in the workspace</div>
+          <>
+            <div className="text-faint text-xs mt-2">{(ws.files || []).length} file(s) in the workspace</div>
+            {(ws.tools || []).length > 0 && (
+              <div className="flex flex-wrap gap-1.5 mt-2">
+                {ws.tools.map((t) => (
+                  <span key={t} className="px-2 py-0.5 rounded-md text-[11px] font-mono bg-line/10 text-muted">{t}</span>
+                ))}
+              </div>
+            )}
+          </>
         )}
         <Notice msg={wsMsg} />
       </Section>
