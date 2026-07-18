@@ -1,9 +1,12 @@
 import React, { useEffect, useState } from 'react'
 import {
   Settings, Palette, ShieldHalf, Cpu, Lock, Check, UserCog, KeyRound, LogOut, Trash2, Loader2, X, Sparkles, BookMarked,
-  SlidersHorizontal,
+  SlidersHorizontal, ScrollText,
 } from 'lucide-react'
-import { getFsWorkspace, setFsWorkspace } from '../api.js'
+import {
+  getFsWorkspace, setFsWorkspace,
+  getPlaybooks, setPlaybooksEnabled, savePlaybook, deletePlaybook,
+} from '../api.js'
 import Modal from './Modal.jsx'
 import LlmControl from './LlmControl.jsx'
 import SafetyControl from './SafetyControl.jsx'
@@ -28,6 +31,7 @@ const TABS = [
   { key: 'appearance', label: 'Appearance', Icon: Palette },
   { key: 'model', label: 'Model', Icon: Cpu },
   { key: 'advanced', label: 'Advanced', Icon: SlidersHorizontal },
+  { key: 'playbooks', label: 'Playbooks', Icon: ScrollText },
   { key: 'safety', label: 'Safety', Icon: ShieldHalf },
   { key: 'security', label: 'Security', Icon: Lock },
 ]
@@ -279,6 +283,100 @@ function AdvancedTab({ health, onRefresh }) {
   )
 }
 
+// Authored playbooks: list, toggle exposure to the swarm, and author new ones.
+function PlaybooksTab({ onRefresh }) {
+  const [data, setData] = useState(null)
+  const [busy, setBusy] = useState(false)
+  const [msg, setMsg] = useState(null)
+  const [name, setName] = useState('')
+  const [desc, setDesc] = useState('')
+  const [body, setBody] = useState('')
+
+  const load = () => getPlaybooks().then(setData).catch(() => {})
+  useEffect(() => { load() }, [])
+
+  const toggle = async (next) => {
+    setBusy(true); setMsg(null)
+    try { await setPlaybooksEnabled(next); await load(); onRefresh && onRefresh() }
+    catch (e) { setMsg({ kind: 'err', text: e.message }) }
+    finally { setBusy(false) }
+  }
+
+  const save = async () => {
+    if (!name.trim()) { setMsg({ kind: 'err', text: 'Name is required.' }); return }
+    setBusy(true); setMsg(null)
+    try {
+      await savePlaybook(name.trim(), desc.trim(), body)
+      setName(''); setDesc(''); setBody('')
+      setMsg({ kind: 'ok', text: 'Playbook saved.' })
+      await load()
+    } catch (e) { setMsg({ kind: 'err', text: e.message }) }
+    finally { setBusy(false) }
+  }
+
+  const remove = async (slug) => {
+    setMsg(null)
+    try { await deletePlaybook(slug); await load() }
+    catch (e) { setMsg({ kind: 'err', text: e.message }) }
+  }
+
+  const playbooks = data?.playbooks || []
+
+  return (
+    <div>
+      <Section
+        title="Playbooks"
+        hint="Authored markdown instructions the swarm can list and follow on demand — reusable know-how alongside its synthesized code skills."
+        first
+      >
+        <div className="glass rounded-lg px-4 py-3 flex items-center justify-between gap-4">
+          <div className="min-w-0">
+            <div className="text-fg text-sm">{data?.enabled ? 'Available to the swarm' : 'Not exposed'}</div>
+            <div className="text-faint text-xs mt-0.5">{playbooks.length} playbook(s)</div>
+          </div>
+          <Toggle on={!!data?.enabled} busy={busy} onChange={toggle} />
+        </div>
+      </Section>
+
+      <Section title="Your playbooks">
+        {playbooks.length === 0 ? (
+          <p className="text-faint text-xs">None yet — author one below.</p>
+        ) : (
+          <div className="space-y-1.5">
+            {playbooks.map((p) => (
+              <div key={p.slug} className="glass rounded-lg px-3.5 py-2.5 flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="text-fg text-sm truncate">{p.name}</div>
+                  {p.description && <div className="text-faint text-xs truncate mt-0.5">{p.description}</div>}
+                </div>
+                <button onClick={() => remove(p.slug)} className="btn p-1.5 text-muted hover:text-rose-300 shrink-0" aria-label="Delete playbook">
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </Section>
+
+      <Section title="New playbook" hint="A name, a one-line description, and the instructions.">
+        <div className="space-y-2.5">
+          <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Name (e.g. Deploy checklist)" />
+          <Input value={desc} onChange={(e) => setDesc(e.target.value)} placeholder="One-line description" />
+          <textarea
+            value={body} onChange={(e) => setBody(e.target.value)} rows={6}
+            placeholder="Markdown instructions the swarm should follow…"
+            className="w-full glass px-3.5 py-2.5 rounded-lg bg-transparent outline-none text-sm text-fg placeholder-faint focus:border-line/30 resize-y font-mono"
+          />
+        </div>
+        <div className="mt-3.5 flex items-center gap-3">
+          <Btn onClick={save} busy={busy} disabled={!name.trim()} kind="accent">Save playbook</Btn>
+          <Notice msg={msg} />
+        </div>
+      </Section>
+    </div>
+  )
+}
+
 export default function SettingsPanel({
   open, onClose, theme, onSetTheme, safety, onSafety, approval, onApproval, auth,
   initialTab, user, onUpdateProfile, onChangePassword, onSignOut, onSignOutEverywhere, onDeleteAccount,
@@ -348,6 +446,8 @@ export default function SettingsPanel({
             )}
 
             {tab === 'advanced' && <AdvancedTab health={health} onRefresh={onRefresh} />}
+
+            {tab === 'playbooks' && <PlaybooksTab onRefresh={onRefresh} />}
 
             {tab === 'safety' && (
               <>

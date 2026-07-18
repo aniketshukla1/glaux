@@ -72,6 +72,7 @@ from agents import (
     search_status,
 )
 from agents.context import ContextManager
+from agents.playbook import PlaybookError, Playbooks, register_playbooks, unregister_playbooks
 from agents.workspace import WORKSPACE_TOOLS, Workspace, register_workspace, unregister_workspace
 from core.ledger import Ledger
 from identity import AgentIdentity
@@ -445,6 +446,10 @@ class _State:
         # Long-horizon context management: shared budget config for the swarm so a
         # long run keeps the prompt bounded (tunable via ATHENA_CONTEXT_* env vars).
         self.context = ContextManager.from_env()
+        # Playbooks (opt-in): authored markdown instructions the swarm can consult.
+        self.playbooks = Playbooks()
+        self.playbooks_enabled = False
+        self.set_playbooks_enabled(bool(os.environ.get("ATHENA_PLAYBOOKS")))
         METRICS.bind(_metrics_path())  # counters survive restarts → real cumulative data
         self.search_config = _load_search_config()
         configure_search(self.search_config.get("provider", ""), self.search_config.get("keys", {}))
@@ -489,6 +494,14 @@ class _State:
         else:
             unregister_workspace(self.mcp.builtin)
         self.workspace_enabled = bool(enabled)
+
+    def set_playbooks_enabled(self, enabled: bool) -> None:
+        """Add or remove the authored-playbook tools from the builtin MCP client."""
+        if enabled:
+            register_playbooks(self.mcp.builtin, self.playbooks)
+        else:
+            unregister_playbooks(self.mcp.builtin)
+        self.playbooks_enabled = bool(enabled)
 
     def _on_ledger_append(self, block: dict) -> None:
         WS.publish({"type": "block", "block": block})  # live stream
@@ -1229,6 +1242,7 @@ def health() -> dict:
         "sandbox": _sandbox_status(),
         "workspace": {"enabled": STATE.workspace_enabled, "root": str(STATE.workspace.root)},
         "context": STATE.context.config(),
+        "playbooks": {"enabled": STATE.playbooks_enabled, "count": len(STATE.playbooks.list())},
     }
 
 
@@ -1274,6 +1288,53 @@ def set_fs_workspace(req: WorkspaceRequest) -> dict:
     """Toggle the jailed file workspace (opt-in power mode: agents create real files)."""
     STATE.set_workspace_enabled(req.enabled)
     return {"enabled": STATE.workspace_enabled, "root": str(STATE.workspace.root)}
+
+
+class PlaybookToggle(BaseModel):
+    enabled: bool
+
+
+class PlaybookDoc(BaseModel):
+    name: str
+    description: str = ""
+    body: str = ""
+
+
+@app.get("/api/playbooks")
+def list_playbooks() -> dict:
+    return {
+        "enabled": STATE.playbooks_enabled,
+        "root": str(STATE.playbooks.root),
+        "playbooks": STATE.playbooks.list(),
+    }
+
+
+@app.get("/api/playbooks/{slug}")
+def read_playbook(slug: str) -> dict:
+    try:
+        return STATE.playbooks.read(slug)
+    except PlaybookError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
+@app.post("/api/playbooks/enabled")
+def set_playbooks_enabled(req: PlaybookToggle) -> dict:
+    """Toggle whether the swarm gets the authored-playbook tools."""
+    STATE.set_playbooks_enabled(req.enabled)
+    return {"enabled": STATE.playbooks_enabled}
+
+
+@app.post("/api/playbooks")
+def save_playbook(doc: PlaybookDoc) -> dict:
+    try:
+        return STATE.playbooks.save(doc.name, doc.description, doc.body)
+    except PlaybookError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.delete("/api/playbooks/{slug}")
+def delete_playbook(slug: str) -> dict:
+    return STATE.playbooks.delete(slug)
 
 
 @app.get("/api/agents")

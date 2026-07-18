@@ -82,6 +82,12 @@ export const getAuth = () => request('GET', '/api/auth')
 export const getFsWorkspace = () => request('GET', '/api/fs')
 export const setFsWorkspace = (enabled) => request('POST', '/api/fs', { enabled })
 
+// authored playbooks: markdown instructions the swarm can follow
+export const getPlaybooks = () => request('GET', '/api/playbooks')
+export const setPlaybooksEnabled = (enabled) => request('POST', '/api/playbooks/enabled', { enabled })
+export const savePlaybook = (name, description, body) => request('POST', '/api/playbooks', { name, description, body })
+export const deletePlaybook = (slug) => request('DELETE', `/api/playbooks/${slug}`)
+
 // accounts (signup / login / profile)
 export const getAuthState = () => request('GET', '/api/auth/state')
 export const signup = (email, password, name) =>
