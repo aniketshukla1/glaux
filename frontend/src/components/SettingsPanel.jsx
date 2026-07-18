@@ -1,11 +1,12 @@
 import React, { useEffect, useState } from 'react'
 import {
   Settings, Palette, ShieldHalf, Cpu, Lock, Check, UserCog, KeyRound, LogOut, Trash2, Loader2, X, Sparkles, BookMarked,
-  SlidersHorizontal, ScrollText,
+  SlidersHorizontal, ScrollText, Bot,
 } from 'lucide-react'
 import {
   getFsWorkspace, setFsWorkspace,
   getPlaybooks, setPlaybooksEnabled, savePlaybook, deletePlaybook,
+  getSubagents, saveSubagent, deleteSubagent,
 } from '../api.js'
 import Modal from './Modal.jsx'
 import LlmControl from './LlmControl.jsx'
@@ -32,6 +33,7 @@ const TABS = [
   { key: 'model', label: 'Model', Icon: Cpu },
   { key: 'advanced', label: 'Advanced', Icon: SlidersHorizontal },
   { key: 'playbooks', label: 'Playbooks', Icon: ScrollText },
+  { key: 'subagents', label: 'Sub-agents', Icon: Bot },
   { key: 'safety', label: 'Safety', Icon: ShieldHalf },
   { key: 'security', label: 'Security', Icon: Lock },
 ]
@@ -377,6 +379,101 @@ function PlaybooksTab({ onRefresh }) {
   )
 }
 
+// Custom sub-agents: view the built-in roster and define your own specialists.
+function SubagentsTab() {
+  const [data, setData] = useState(null)
+  const [busy, setBusy] = useState(false)
+  const [msg, setMsg] = useState(null)
+  const [name, setName] = useState('')
+  const [desc, setDesc] = useState('')
+  const [iters, setIters] = useState(8)
+  const [prompt, setPrompt] = useState('')
+
+  const load = () => getSubagents().then(setData).catch(() => {})
+  useEffect(() => { load() }, [])
+
+  const save = async () => {
+    if (!name.trim() || !prompt.trim()) { setMsg({ kind: 'err', text: 'Name and system prompt are required.' }); return }
+    setBusy(true); setMsg(null)
+    try {
+      await saveSubagent(name.trim(), desc.trim(), prompt, Number(iters) || 8)
+      setName(''); setDesc(''); setPrompt(''); setIters(8)
+      setMsg({ kind: 'ok', text: 'Saved — the router can dispatch to it on the next task.' })
+      await load()
+    } catch (e) { setMsg({ kind: 'err', text: e.message }) }
+    finally { setBusy(false) }
+  }
+
+  const remove = async (slug) => {
+    setMsg(null)
+    try { await deleteSubagent(slug); await load() }
+    catch (e) { setMsg({ kind: 'err', text: e.message }) }
+  }
+
+  const builtin = data?.builtin || []
+  const custom = data?.custom || []
+
+  return (
+    <div>
+      <Section title="Built-in specialists" hint="The fixed roster the router composes a team from for each directive." first>
+        <div className="space-y-1.5">
+          {builtin.map((b) => (
+            <div key={b.role} className="glass rounded-lg px-3.5 py-2.5">
+              <div className="text-fg text-sm font-mono">{b.role}</div>
+              <div className="text-faint text-xs mt-0.5">{b.description}</div>
+            </div>
+          ))}
+        </div>
+      </Section>
+
+      <Section title="Your sub-agents" hint="Custom specialists you define — merged into the roster so the router can dispatch to them.">
+        {custom.length === 0 ? (
+          <p className="text-faint text-xs">None yet — define one below.</p>
+        ) : (
+          <div className="space-y-1.5">
+            {custom.map((c) => (
+              <div key={c.slug} className="glass rounded-lg px-3.5 py-2.5 flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="text-fg text-sm truncate">
+                    {c.name} <span className="text-faint font-mono text-xs">· {c.iterations} iters</span>
+                  </div>
+                  {c.description && <div className="text-faint text-xs truncate mt-0.5">{c.description}</div>}
+                </div>
+                <button onClick={() => remove(c.slug)} className="btn p-1.5 text-muted hover:text-rose-300 shrink-0" aria-label="Delete sub-agent">
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </Section>
+
+      <Section title="New sub-agent" hint="A name, a one-line description the router reads to pick it, and its system prompt.">
+        <div className="space-y-2.5">
+          <div className="flex gap-2.5">
+            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Name (e.g. Legal reviewer)" />
+            <input
+              type="number" min={1} max={20} value={iters} onChange={(e) => setIters(e.target.value)}
+              className="w-24 glass px-3 py-2.5 rounded-lg bg-transparent outline-none text-sm text-fg focus:border-line/30"
+              title="ReAct iteration budget"
+            />
+          </div>
+          <Input value={desc} onChange={(e) => setDesc(e.target.value)} placeholder="One-line description (what it's good at)" />
+          <textarea
+            value={prompt} onChange={(e) => setPrompt(e.target.value)} rows={6}
+            placeholder="System prompt — who this specialist is and how it should work…"
+            className="w-full glass px-3.5 py-2.5 rounded-lg bg-transparent outline-none text-sm text-fg placeholder-faint focus:border-line/30 resize-y"
+          />
+        </div>
+        <div className="mt-3.5 flex items-center gap-3">
+          <Btn onClick={save} busy={busy} disabled={!name.trim() || !prompt.trim()} kind="accent">Save sub-agent</Btn>
+          <Notice msg={msg} />
+        </div>
+      </Section>
+    </div>
+  )
+}
+
 export default function SettingsPanel({
   open, onClose, theme, onSetTheme, safety, onSafety, approval, onApproval, auth,
   initialTab, user, onUpdateProfile, onChangePassword, onSignOut, onSignOutEverywhere, onDeleteAccount,
@@ -448,6 +545,8 @@ export default function SettingsPanel({
             {tab === 'advanced' && <AdvancedTab health={health} onRefresh={onRefresh} />}
 
             {tab === 'playbooks' && <PlaybooksTab onRefresh={onRefresh} />}
+
+            {tab === 'subagents' && <SubagentsTab />}
 
             {tab === 'safety' && (
               <>

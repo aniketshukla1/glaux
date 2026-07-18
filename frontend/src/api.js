@@ -88,6 +88,12 @@ export const setPlaybooksEnabled = (enabled) => request('POST', '/api/playbooks/
 export const savePlaybook = (name, description, body) => request('POST', '/api/playbooks', { name, description, body })
 export const deletePlaybook = (slug) => request('DELETE', `/api/playbooks/${slug}`)
 
+// custom sub-agents: user-defined specialists merged into the router roster
+export const getSubagents = () => request('GET', '/api/subagents')
+export const saveSubagent = (name, description, prompt, iterations) =>
+  request('POST', '/api/subagents', { name, description, prompt, iterations })
+export const deleteSubagent = (slug) => request('DELETE', `/api/subagents/${slug}`)
+
 // accounts (signup / login / profile)
 export const getAuthState = () => request('GET', '/api/auth/state')
 export const signup = (email, password, name) =>

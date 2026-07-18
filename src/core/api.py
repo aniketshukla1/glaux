@@ -72,6 +72,7 @@ from agents import (
     search_status,
 )
 from agents.context import ContextManager
+from agents.custom_agents import CustomAgentError, CustomAgents, build_custom_specialists
 from agents.playbook import PlaybookError, Playbooks, register_playbooks, unregister_playbooks
 from agents.workspace import WORKSPACE_TOOLS, Workspace, register_workspace, unregister_workspace
 from core.ledger import Ledger
@@ -450,6 +451,8 @@ class _State:
         self.playbooks = Playbooks()
         self.playbooks_enabled = False
         self.set_playbooks_enabled(bool(os.environ.get("ATHENA_PLAYBOOKS")))
+        # User-defined sub-agents: custom specialists merged into the router's roster.
+        self.custom_agents = CustomAgents()
         METRICS.bind(_metrics_path())  # counters survive restarts → real cumulative data
         self.search_config = _load_search_config()
         configure_search(self.search_config.get("provider", ""), self.search_config.get("keys", {}))
@@ -613,6 +616,25 @@ class _State:
         # Register the full specialist roster; the router composes a team per directive.
         specialists = build_specialists(
             identities=self.identities, llm=self.llm, ledger=self.ledger, mcp_client=self.mcp
+        )
+        # User-defined sub-agents: mint + persist a stable identity for each (so they
+        # sign the ledger like any specialist), then merge them into the roster. They
+        # can never shadow a built-in role.
+        reserved = set(SPECIALISTS) | {"router", "reflector", "generalist"}
+        new_ids = False
+        for spec in self.custom_agents.list():
+            slug = spec["slug"]
+            if slug not in reserved and slug not in self.identities:
+                self.identities[slug] = AgentIdentity.generate()
+                new_ids = True
+        if new_ids:
+            _save_identities(self.identities)
+        specialists.update(
+            build_custom_specialists(
+                self.custom_agents, identities=self.identities, llm=self.llm,
+                reserved=reserved, ledger=self.ledger, mcp_client=self.mcp,
+                context_manager=self.context,
+            )
         )
         reflector = Reflector(identity=self.identities["reflector"], llm=aux, ledger=self.ledger)
         # Medium tier: one capable tool-using agent (primary model) for non-trivial
@@ -1243,6 +1265,7 @@ def health() -> dict:
         "workspace": {"enabled": STATE.workspace_enabled, "root": str(STATE.workspace.root)},
         "context": STATE.context.config(),
         "playbooks": {"enabled": STATE.playbooks_enabled, "count": len(STATE.playbooks.list())},
+        "subagents": {"builtin": len(SPECIALISTS), "custom": len(STATE.custom_agents.list())},
     }
 
 
@@ -1335,6 +1358,40 @@ def save_playbook(doc: PlaybookDoc) -> dict:
 @app.delete("/api/playbooks/{slug}")
 def delete_playbook(slug: str) -> dict:
     return STATE.playbooks.delete(slug)
+
+
+class SubAgentDoc(BaseModel):
+    name: str
+    description: str = ""
+    prompt: str = ""
+    iterations: int = 8
+
+
+@app.get("/api/subagents")
+def list_subagents() -> dict:
+    """The router's roster: the fixed built-in specialists plus user-defined ones."""
+    builtin = [{"role": role, "description": spec["description"]} for role, spec in SPECIALISTS.items()]
+    return {"builtin": builtin, "custom": STATE.custom_agents.list()}
+
+
+@app.post("/api/subagents")
+def save_subagent(doc: SubAgentDoc) -> dict:
+    reserved = set(SPECIALISTS) | {"router", "reflector", "generalist"}
+    try:
+        slug = STATE.custom_agents._slug(doc.name)
+    except CustomAgentError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    if slug in reserved:
+        raise HTTPException(status_code=400, detail=f"{slug!r} is a built-in role — pick another name")
+    try:
+        return STATE.custom_agents.save(doc.name, doc.description, doc.prompt, doc.iterations)
+    except CustomAgentError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.delete("/api/subagents/{slug}")
+def delete_subagent(slug: str) -> dict:
+    return STATE.custom_agents.delete(slug)
 
 
 @app.get("/api/agents")
