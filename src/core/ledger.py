@@ -43,6 +43,7 @@ class Action:
     REFLECT = "REFLECT"
     SYNTHESIZE = "SYNTHESIZE_SKILL"
     MCP_TOOL = "MCP_TOOL"
+    COMPACT = "COMPACT_CONTEXT"
 
 
 @dataclass

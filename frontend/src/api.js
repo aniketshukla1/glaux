@@ -78,6 +78,10 @@ export const getHealth = () => request('GET', '/api/health')
 export const getAgents = () => request('GET', '/api/agents')
 export const getAuth = () => request('GET', '/api/auth')
 
+// runtime capabilities: jailed workspace file tools (on/off)
+export const getFsWorkspace = () => request('GET', '/api/fs')
+export const setFsWorkspace = (enabled) => request('POST', '/api/fs', { enabled })
+
 // accounts (signup / login / profile)
 export const getAuthState = () => request('GET', '/api/auth/state')
 export const signup = (email, password, name) =>

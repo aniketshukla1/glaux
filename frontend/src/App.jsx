@@ -418,6 +418,7 @@ export default function App() {
       <SettingsPanel
         open={settingsOpen} onClose={() => setSettingsOpen(false)}
         initialTab={settingsTab}
+        health={health} onRefresh={refresh}
         theme={theme} onSetTheme={applyTheme}
         safety={safety} onSafety={onSafety}
         approval={approval} onApproval={onApproval}

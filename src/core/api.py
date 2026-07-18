@@ -71,6 +71,7 @@ from agents import (
     default_local_client,
     search_status,
 )
+from agents.context import ContextManager
 from agents.workspace import Workspace, register_workspace, unregister_workspace
 from core.ledger import Ledger
 from identity import AgentIdentity
@@ -441,6 +442,9 @@ class _State:
         self.workspace = Workspace()
         self.workspace_enabled = False
         self.set_workspace_enabled(bool(os.environ.get("ATHENA_WORKSPACE")))
+        # Long-horizon context management: shared budget config for the swarm so a
+        # long run keeps the prompt bounded (tunable via ATHENA_CONTEXT_* env vars).
+        self.context = ContextManager.from_env()
         METRICS.bind(_metrics_path())  # counters survive restarts → real cumulative data
         self.search_config = _load_search_config()
         configure_search(self.search_config.get("provider", ""), self.search_config.get("keys", {}))
@@ -611,6 +615,7 @@ class _State:
             # On-the-fly tool creation: no tool for the job? synthesize + test + use one.
             synthesizer=SkillSynthesizer(self.llm),
             skill_library=self.skills,
+            context_manager=self.context,  # bounded HISTORY on long runs
         )
         return Swarm(
             router=router,
@@ -1223,6 +1228,7 @@ def health() -> dict:
         "memory": {layer: len(STATE.store(layer).list_all()) for layer in MEMORY_LAYERS},
         "sandbox": _sandbox_status(),
         "workspace": {"enabled": STATE.workspace_enabled, "root": str(STATE.workspace.root)},
+        "context": STATE.context.config(),
     }
 
 

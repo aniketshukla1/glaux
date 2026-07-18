@@ -31,6 +31,7 @@ from llm.gateway import LLMClient, Message
 from sandbox import Capabilities, SecretsBroker, run as sandbox_run
 
 from .budget import BudgetTracker, charge_for_response
+from .context import ContextManager
 from .protocol import CALL_AGENT, CALL_MCP, CALL_SKILL, CREATE_SKILL, FINISH, parse_actions
 
 ACTION_INSTRUCTIONS = """Reason step by step about the goal, then emit an action as a JSON object in a ```json code block. Available actions:
@@ -59,6 +60,7 @@ class AgentResult:
     halted: bool = False
     reproducibility: dict = field(default_factory=dict)
     cost: dict = field(default_factory=dict)
+    context: dict = field(default_factory=dict)
 
 
 def _caps_from_dict(d: dict) -> Capabilities:
@@ -108,6 +110,7 @@ class BaseAgent:
         mcp_client=None,
         synthesizer=None,
         skill_library=None,
+        context_manager: Optional[ContextManager] = None,
     ) -> None:
         self.identity = identity
         self.llm = llm
@@ -134,6 +137,11 @@ class BaseAgent:
         self.seed = seed
         self.max_tokens = max_tokens
         self.checkpoint_dir = checkpoint_dir
+        # Long-horizon context management: bounds the HISTORY the model sees so a
+        # long run can't blow the context window. Shared default is fine; every
+        # agent gets one so specialists/router/reflector are covered too.
+        self.context = context_manager or ContextManager.from_env()
+        self._compaction_logged = False
 
     # --- public ----------------------------------------------------------
 
@@ -169,6 +177,7 @@ class BaseAgent:
         cancel=None,
     ) -> AgentResult:
         task_id = task_id or uuid.uuid4().hex
+        self._compaction_logged = False
 
         if safety.is_halted():
             return AgentResult(False, "execution halted by kill switch", [], 0, halted=True)
@@ -193,7 +202,7 @@ class BaseAgent:
                 self._log(Action.OBSERVATION, {"aborted": True, "reason": "stopped by user"})
                 return AgentResult(
                     False, "stopped by user", scratchpad, i,
-                    reproducibility=repro, cost=self._cost(),
+                    reproducibility=repro, cost=self._cost(), context=self.context.last_stats.to_dict(),
                 )
             # Cost/budget guard: stop cleanly *before* spending more.
             if self.budget is not None:
@@ -202,10 +211,19 @@ class BaseAgent:
                     self._log(Action.OBSERVATION, {"budget_halt": True, "reason": reason})
                     return AgentResult(
                         False, f"halted: {reason}", scratchpad, i,
-                        reproducibility=repro, cost=self._cost(),
+                        reproducibility=repro, cost=self._cost(), context=self.context.last_stats.to_dict(),
                     )
 
             messages = self._build_messages(goal, scratchpad, available, context)
+            cstats = self.context.last_stats
+            if cstats.compacted and not self._compaction_logged:
+                # Record once per run that history was compacted — the ledger keeps
+                # a signed note of what got folded, so a long run stays auditable.
+                self._log(Action.COMPACT, {
+                    "total_steps": cstats.total_steps, "kept_verbatim": cstats.verbatim,
+                    "digested": cstats.digested, "elided": cstats.elided,
+                })
+                self._compaction_logged = True
             prompt_hash = _hash_prompt(self.system_prompt, messages)
             repro["prompt_hashes"].append(prompt_hash)
 
@@ -236,7 +254,7 @@ class BaseAgent:
                     steps=scratchpad,
                     iterations=i + 1,
                     reproducibility=repro,
-                    cost=self._cost(),
+                    cost=self._cost(), context=self.context.last_stats.to_dict(),
                 )
 
             tool_actions = [a for a in actions if a.get("action") != FINISH]
@@ -270,14 +288,14 @@ class BaseAgent:
                         scratchpad,
                         i + 1,
                         reproducibility=repro,
-                        cost=self._cost(),
+                        cost=self._cost(), context=self.context.last_stats.to_dict(),
                     )
 
             self._save_checkpoint(task_id, scratchpad, i + 1, goal)
 
         return AgentResult(
             False, "max iterations reached", scratchpad, self.max_iterations,
-            reproducibility=repro, cost=self._cost(),
+            reproducibility=repro, cost=self._cost(), context=self.context.last_stats.to_dict(),
         )
 
     # --- internals -------------------------------------------------------
@@ -484,14 +502,8 @@ class BaseAgent:
                 'it so you can call_skill it on the next step.'
             )
         if scratchpad:
-            lines.append("HISTORY:")
-            for step in scratchpad:
-                lines.append(f"[{step['iteration']}] thought: {step['thought'][:500]}")
-                obs_list = step.get("observations")
-                if obs_list is None and step.get("observation") is not None:
-                    obs_list = [step["observation"]]  # resumed pre-batch checkpoint
-                for obs in obs_list or []:
-                    lines.append(f"    observation: {json.dumps(obs)[:500]}")
+            hist_lines, _ = self.context.render_history(scratchpad)
+            lines.extend(hist_lines)
         lines.append(
             "Respond with your reasoning, then a JSON action block "
             '(or {"actions": [ ... ]} to run independent tool calls in parallel).'

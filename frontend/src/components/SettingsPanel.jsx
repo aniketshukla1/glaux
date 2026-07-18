@@ -1,7 +1,9 @@
 import React, { useEffect, useState } from 'react'
 import {
   Settings, Palette, ShieldHalf, Cpu, Lock, Check, UserCog, KeyRound, LogOut, Trash2, Loader2, X, Sparkles, BookMarked,
+  SlidersHorizontal,
 } from 'lucide-react'
+import { getFsWorkspace, setFsWorkspace } from '../api.js'
 import Modal from './Modal.jsx'
 import LlmControl from './LlmControl.jsx'
 import SafetyControl from './SafetyControl.jsx'
@@ -25,6 +27,7 @@ const TABS = [
   { key: 'recipes', label: 'Recipes', Icon: BookMarked },
   { key: 'appearance', label: 'Appearance', Icon: Palette },
   { key: 'model', label: 'Model', Icon: Cpu },
+  { key: 'advanced', label: 'Advanced', Icon: SlidersHorizontal },
   { key: 'safety', label: 'Safety', Icon: ShieldHalf },
   { key: 'security', label: 'Security', Icon: Lock },
 ]
@@ -189,11 +192,90 @@ function Field({ title, hint, children }) {
   )
 }
 
+function Toggle({ on, busy, onChange }) {
+  return (
+    <button
+      onClick={() => onChange(!on)} disabled={busy} role="switch" aria-checked={on}
+      className={`relative w-11 h-6 rounded-full transition shrink-0 disabled:opacity-50 ${on ? 'bg-accent' : 'bg-line/25'}`}
+    >
+      <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-all ${on ? 'left-[22px]' : 'left-0.5'}`} />
+    </button>
+  )
+}
+
+function StatRow({ label, value }) {
+  return (
+    <div className="flex items-center justify-between py-2">
+      <span className="text-muted text-sm">{label}</span>
+      <span className="text-fg text-xs font-mono">{value}</span>
+    </div>
+  )
+}
+
+// Runtime capabilities: the jailed workspace file tools (toggle) and the
+// long-horizon context-management budget (read-only, from /api/health).
+function AdvancedTab({ health, onRefresh }) {
+  const [ws, setWs] = useState(null)
+  const [wsBusy, setWsBusy] = useState(false)
+  const [wsMsg, setWsMsg] = useState(null)
+  const ctx = health?.context
+
+  useEffect(() => { getFsWorkspace().then(setWs).catch(() => {}) }, [])
+
+  const toggleWs = async (next) => {
+    setWsBusy(true); setWsMsg(null)
+    try {
+      setWs(await setFsWorkspace(next))
+      setWsMsg({ kind: 'ok', text: next ? 'File tools enabled.' : 'File tools disabled.' })
+      onRefresh && onRefresh()
+    } catch (e) {
+      setWsMsg({ kind: 'err', text: e.message })
+    } finally { setWsBusy(false) }
+  }
+
+  return (
+    <div>
+      <Section
+        title="Workspace file tools"
+        hint="Let the swarm create real files in one jailed, size-capped directory it can never escape. Every write is signed to the ledger."
+        first
+      >
+        <div className="glass rounded-lg px-4 py-3 flex items-center justify-between gap-4">
+          <div className="min-w-0">
+            <div className="text-fg text-sm">{ws?.enabled ? 'Enabled' : 'Disabled'}</div>
+            <div className="text-faint text-xs truncate mt-0.5 font-mono">{ws?.root || '—'}</div>
+          </div>
+          <Toggle on={!!ws?.enabled} busy={wsBusy} onChange={toggleWs} />
+        </div>
+        {ws?.enabled && (
+          <div className="text-faint text-xs mt-2">{(ws.files || []).length} file(s) in the workspace</div>
+        )}
+        <Notice msg={wsMsg} />
+      </Section>
+
+      <Section
+        title="Context management"
+        hint="Long runs stay under a fixed prompt budget: recent steps kept verbatim, older ones digested to one line, deepest history elided — every compaction signed to the ledger."
+      >
+        <div className="glass rounded-lg px-4 py-1 divide-y divide-line/8">
+          <StatRow label="History budget" value={ctx ? `${ctx.max_history_chars.toLocaleString()} chars` : '—'} />
+          <StatRow label="Recent steps kept verbatim" value={ctx ? ctx.keep_recent_steps : '—'} />
+          <StatRow label="Per-thought clip" value={ctx ? `${ctx.thought_chars} chars` : '—'} />
+          <StatRow label="Per-observation clip" value={ctx ? `${ctx.obs_chars} chars` : '—'} />
+          <StatRow label="LLM summarizer" value={ctx ? (ctx.summarize ? 'on' : 'off · deterministic') : '—'} />
+        </div>
+        <p className="text-faint text-xs mt-2">Tune with the <span className="font-mono">ATHENA_CONTEXT_*</span> environment variables.</p>
+      </Section>
+    </div>
+  )
+}
+
 export default function SettingsPanel({
   open, onClose, theme, onSetTheme, safety, onSafety, approval, onApproval, auth,
   initialTab, user, onUpdateProfile, onChangePassword, onSignOut, onSignOutEverywhere, onDeleteAccount,
   personas, onCreatePersona, onUpdatePersona, onDeletePersona,
   recipes, onCreateRecipe, onUpdateRecipe, onDeleteRecipe,
+  health, onRefresh,
 }) {
   const [tab, setTab] = useState(initialTab || 'account')
   useEffect(() => { if (open) setTab(initialTab || 'account') }, [open, initialTab])
@@ -255,6 +337,8 @@ export default function SettingsPanel({
                 <LlmControl />
               </Field>
             )}
+
+            {tab === 'advanced' && <AdvancedTab health={health} onRefresh={onRefresh} />}
 
             {tab === 'safety' && (
               <>
