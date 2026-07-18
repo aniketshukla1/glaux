@@ -1,12 +1,13 @@
 import React, { useEffect, useState } from 'react'
 import {
   Settings, Palette, ShieldHalf, Cpu, Lock, Check, UserCog, KeyRound, LogOut, Trash2, Loader2, X, Sparkles, BookMarked,
-  SlidersHorizontal, ScrollText, Bot,
+  SlidersHorizontal, ScrollText, Bot, Dna,
 } from 'lucide-react'
 import {
   getFsWorkspace, setFsWorkspace,
   getPlaybooks, setPlaybooksEnabled, savePlaybook, deletePlaybook,
   getSubagents, saveSubagent, deleteSubagent,
+  getEvolution, evolveHarness, revertEvolution,
 } from '../api.js'
 import Modal from './Modal.jsx'
 import LlmControl from './LlmControl.jsx'
@@ -34,6 +35,7 @@ const TABS = [
   { key: 'advanced', label: 'Advanced', Icon: SlidersHorizontal },
   { key: 'playbooks', label: 'Playbooks', Icon: ScrollText },
   { key: 'subagents', label: 'Sub-agents', Icon: Bot },
+  { key: 'evolution', label: 'Evolution', Icon: Dna },
   { key: 'safety', label: 'Safety', Icon: ShieldHalf },
   { key: 'security', label: 'Security', Icon: Lock },
 ]
@@ -474,6 +476,92 @@ function SubagentsTab() {
   )
 }
 
+// Self-evolving harness: watch routing accuracy, trigger a gated evolution, revert.
+function EvolutionTab({ onRefresh }) {
+  const [data, setData] = useState(null)
+  const [busy, setBusy] = useState(false)
+  const [msg, setMsg] = useState(null)
+
+  const load = () => getEvolution().then(setData).catch(() => {})
+  useEffect(() => { load() }, [])
+
+  const pct = (v) => (v == null ? '—' : `${Math.round(v * 100)}%`)
+
+  const evolve = async () => {
+    setBusy(true); setMsg(null)
+    try {
+      const r = await evolveHarness()
+      if (r.applied) setMsg({ kind: 'ok', text: `Evolved — routing accuracy ${pct(r.baseline_accuracy)} → ${pct(r.accuracy)}.` })
+      else setMsg({ kind: 'err', text: r.reason || 'No change.' })
+      await load(); onRefresh && onRefresh()
+    } catch (e) { setMsg({ kind: 'err', text: e.message }) }
+    finally { setBusy(false) }
+  }
+
+  const revert = async () => {
+    setBusy(true); setMsg(null)
+    try { await revertEvolution(); setMsg({ kind: 'ok', text: 'Reverted the last evolution.' }); await load(); onRefresh && onRefresh() }
+    catch (e) { setMsg({ kind: 'err', text: e.message }) }
+    finally { setBusy(false) }
+  }
+
+  const learned = data?.learned || {}
+  const muts = (data?.mutations || []).slice().reverse()
+
+  return (
+    <div>
+      <Section
+        title="Self-evolving router"
+        hint="The harness learns better fast / medium / full routing from task outcomes. A proposed change is applied only if it improves routing accuracy on the recorded episodes — and every change is signed to the ledger and reversible."
+        first
+      >
+        <div className="grid grid-cols-2 gap-3">
+          <div className="glass rounded-lg px-4 py-3">
+            <div className="text-2xl text-fg font-semibold">{pct(data?.accuracy)}</div>
+            <div className="text-faint text-xs mt-0.5">routing accuracy</div>
+          </div>
+          <div className="glass rounded-lg px-4 py-3">
+            <div className="text-2xl text-fg font-semibold">{data?.episodes ?? '—'}</div>
+            <div className="text-faint text-xs mt-0.5">episodes recorded</div>
+          </div>
+        </div>
+        <div className="flex flex-wrap gap-1.5 mt-3">
+          {['fast', 'medium', 'full'].map((t) => (
+            <span key={t} className="px-2 py-0.5 rounded-md text-[11px] font-mono bg-line/10 text-muted">
+              {t}: {learned[t] || 0} learned
+            </span>
+          ))}
+        </div>
+        <div className="mt-4 flex items-center gap-3">
+          <Btn onClick={evolve} busy={busy} kind="accent">Evolve now</Btn>
+          {data?.can_revert && <Btn onClick={revert} busy={busy}>Revert last</Btn>}
+          <Notice msg={msg} />
+        </div>
+      </Section>
+
+      <Section title="Evolution log" hint="Every accepted mutation — each also signed to the ledger.">
+        {muts.length === 0 ? (
+          <p className="text-faint text-xs">No evolutions yet. Run some tasks, then evolve.</p>
+        ) : (
+          <div className="space-y-1.5">
+            {muts.map((m, i) => (
+              <div key={i} className="glass rounded-lg px-3.5 py-2.5 text-xs">
+                <div className="text-fg font-mono">{m.kind}</div>
+                {m.accuracy != null && (
+                  <div className="text-faint mt-0.5">
+                    accuracy {pct(m.baseline_accuracy)} → {pct(m.accuracy)}
+                    {m.learned_counts && ` · learned ${JSON.stringify(m.learned_counts)}`}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </Section>
+    </div>
+  )
+}
+
 export default function SettingsPanel({
   open, onClose, theme, onSetTheme, safety, onSafety, approval, onApproval, auth,
   initialTab, user, onUpdateProfile, onChangePassword, onSignOut, onSignOutEverywhere, onDeleteAccount,
@@ -547,6 +635,8 @@ export default function SettingsPanel({
             {tab === 'playbooks' && <PlaybooksTab onRefresh={onRefresh} />}
 
             {tab === 'subagents' && <SubagentsTab />}
+
+            {tab === 'evolution' && <EvolutionTab onRefresh={onRefresh} />}
 
             {tab === 'safety' && (
               <>

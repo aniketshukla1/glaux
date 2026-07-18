@@ -44,6 +44,7 @@ class Action:
     SYNTHESIZE = "SYNTHESIZE_SKILL"
     MCP_TOOL = "MCP_TOOL"
     COMPACT = "COMPACT_CONTEXT"
+    EVOLVE = "EVOLVE_HARNESS"
 
 
 @dataclass

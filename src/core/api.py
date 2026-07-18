@@ -73,6 +73,7 @@ from agents import (
 )
 from agents.context import ContextManager
 from agents.custom_agents import CustomAgentError, CustomAgents, build_custom_specialists
+from agents.evolution import Evolver
 from agents.playbook import PlaybookError, Playbooks, register_playbooks, unregister_playbooks
 from agents.workspace import WORKSPACE_TOOLS, Workspace, register_workspace, unregister_workspace
 from core.ledger import Ledger
@@ -453,6 +454,9 @@ class _State:
         self.set_playbooks_enabled(bool(os.environ.get("ATHENA_PLAYBOOKS")))
         # User-defined sub-agents: custom specialists merged into the router's roster.
         self.custom_agents = CustomAgents()
+        # Self-evolving harness: learns better tier routing from task outcomes, gated
+        # by a replay metric + signed to the ledger. Loads + applies learned exemplars.
+        self.evolver = Evolver()
         METRICS.bind(_metrics_path())  # counters survive restarts → real cumulative data
         self.search_config = _load_search_config()
         configure_search(self.search_config.get("provider", ""), self.search_config.get("keys", {}))
@@ -505,6 +509,17 @@ class _State:
         else:
             unregister_playbooks(self.mcp.builtin)
         self.playbooks_enabled = bool(enabled)
+
+    def record_episode(self, directive: str, result) -> None:
+        """Log a finished task so the self-evolving harness can learn from it. Best
+        effort — telemetry must never break a task."""
+        try:
+            self.evolver.record(
+                directive, getattr(result, "tier", "full"), bool(result.success),
+                n_roles=getattr(result, "n_roles", 0),
+            )
+        except Exception:  # noqa: BLE001
+            pass
 
     def _on_ledger_append(self, block: dict) -> None:
         WS.publish({"type": "block", "block": block})  # live stream
@@ -1266,6 +1281,10 @@ def health() -> dict:
         "context": STATE.context.config(),
         "playbooks": {"enabled": STATE.playbooks_enabled, "count": len(STATE.playbooks.list())},
         "subagents": {"builtin": len(SPECIALISTS), "custom": len(STATE.custom_agents.list())},
+        "evolution": {
+            "learned": sum(len(v) for v in STATE.evolver.learned.values()),
+            "can_revert": STATE.evolver.prev_path.exists(),
+        },
     }
 
 
@@ -1394,6 +1413,25 @@ def delete_subagent(slug: str) -> dict:
     return STATE.custom_agents.delete(slug)
 
 
+@app.get("/api/evolution")
+def evolution_status() -> dict:
+    """The self-evolving harness: episode count, current routing accuracy on the
+    recorded episodes, learned exemplars, and the mutation log."""
+    return STATE.evolver.status()
+
+
+@app.post("/api/evolution/evolve")
+def evolution_evolve() -> dict:
+    """Propose + gate + (maybe) commit one evolution of the router. Human-in-the-loop
+    over self-modification: only applied if it improves routing accuracy, and signed."""
+    return STATE.evolver.evolve(ledger=STATE.ledger, identity=STATE.identities["router"])
+
+
+@app.post("/api/evolution/revert")
+def evolution_revert() -> dict:
+    return STATE.evolver.revert(ledger=STATE.ledger, identity=STATE.identities["router"])
+
+
 @app.get("/api/agents")
 def agents() -> dict:
     return {
@@ -1466,6 +1504,9 @@ def _finalize_run(req: TaskRequest, result, before: int, sources: list, elapsed:
     for s in result.synthesized:
         if s.get("ok"):
             METRICS.inc("skills_synthesized_total")
+    # Self-evolving harness: record the episode so the router can learn from outcomes.
+    if not result.cancelled:
+        STATE.record_episode(req.directive, result)
     log_json(
         "task", outcome=outcome, blocks=len(new_blocks), duration_s=round(elapsed, 3),
         cost=result.cost, synthesized=len(result.synthesized),

@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import re
 import zlib
+from contextlib import contextmanager
 
 # --- keyword fallback (conservative; used when the embedding is unsure) -------
 
@@ -166,6 +167,49 @@ def _exemplar_embeddings() -> dict:
     return _EMB_CACHE
 
 
+# --- learned exemplars (the self-evolving harness writes these) ---------------
+#
+# The Evolver appends directives it has learned belong to a given tier (from
+# mis-tiered episode outcomes). They score alongside the built-in exemplars, so
+# the router's decisions improve over time without any code change. Every update
+# is gated + ledger-signed by the Evolver (see agents/evolution.py).
+
+_LEARNED: dict[str, list[str]] = {}
+_LEARNED_EMB: dict | None = None
+
+
+def set_learned_exemplars(mapping: dict) -> None:
+    """Replace the learned exemplars and invalidate their embedding cache."""
+    global _LEARNED, _LEARNED_EMB
+    _LEARNED = {tier: list(mapping.get(tier, [])) for tier in _EXEMPLARS}
+    _LEARNED_EMB = None
+
+
+def _learned_embeddings() -> dict:
+    global _LEARNED_EMB
+    if _LEARNED_EMB is None:
+        _LEARNED_EMB = {tier: [_embed(x) for x in xs] for tier, xs in _LEARNED.items()}
+    return _LEARNED_EMB
+
+
+@contextmanager
+def using_learned(mapping: dict):
+    """Temporarily route with `mapping` as the learned set (for evaluating a
+    candidate mutation without committing it), then restore the previous set."""
+    global _LEARNED, _LEARNED_EMB
+    prev, prev_emb = _LEARNED, _LEARNED_EMB
+    try:
+        set_learned_exemplars(mapping)
+        yield
+    finally:
+        _LEARNED, _LEARNED_EMB = prev, prev_emb
+
+
+def _all_embeddings() -> dict:
+    base, learned = _exemplar_embeddings(), _learned_embeddings()
+    return {tier: base.get(tier, []) + learned.get(tier, []) for tier in _EXEMPLARS}
+
+
 def classify(directive: str) -> tuple[str | None, float, float]:
     """Return (best_tier, best_score, margin_over_runner_up). best_tier is None if
     the directive has no usable tokens."""
@@ -174,7 +218,7 @@ def classify(directive: str) -> tuple[str | None, float, float]:
         return None, 0.0, 0.0
     scores = {
         tier: max((_cosine(q, v) for v in vs), default=0.0)
-        for tier, vs in _exemplar_embeddings().items()
+        for tier, vs in _all_embeddings().items()
     }
     ranked = sorted(scores.items(), key=lambda kv: -kv[1])
     top_tier, top = ranked[0]

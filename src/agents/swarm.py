@@ -144,6 +144,8 @@ class SwarmResult:
     cancelled: bool = False
     canvas: Optional[dict] = None  # generative UI spec extracted from the answer
     synthesized: list = field(default_factory=list)
+    tier: str = "full"   # which tier actually ran (fast / medium / full)
+    n_roles: int = 0     # distinct specialists that worked the task
 
 
 class Swarm:
@@ -380,6 +382,8 @@ class Swarm:
             cancelled=cancelled,
             canvas=canvas,
             synthesized=synthesized,
+            tier=("fast" if fast else "medium" if medium else "full"),
+            n_roles=len({s.role for s in plan.steps}),
         )
 
     def _final_answer(self, directive: str, order, results: dict, tracker: BudgetTracker, on_token=None):
