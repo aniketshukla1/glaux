@@ -13,8 +13,15 @@ Drive the agent:
   athena remember  store a fact   ·   athena memory <layer> [query]   browse it
 
 Inspect:
-  athena sessions · agents · skills · recipes · metrics · verify · eval
+  athena sessions · agents · skills · recipes · personas · metrics · verify · eval
   athena models [--set ollama:qwen2.5:7b-instruct]   show / switch the LLM
+
+Configure (parity with the app's Settings):
+  athena safety [live|dry-run|halted]   ·   athena approval [auto|gated]
+  athena workspace [on|off]             jailed file tools (edit_file, glob, grep…)
+  athena playbooks [list|add|rm|on|off] ·   athena subagents [list|add|rm]
+  athena skills [synth "…"|approve <id>|reject <id>]   synthesize / gate skills
+  athena evolution [status|evolve|revert|auto on|unpin <id>|unretire <role>]
 
 Account / admin:
   athena login · logout · whoami   ·   athena messaging   (gateways, admin)
@@ -133,6 +140,18 @@ def _post_json(url: str, payload: dict, timeout: float = 600.0) -> dict:
         return json.loads(r.read().decode())
 
 
+def _req_json(method: str, url: str, payload: dict | None = None, timeout: float = 600.0) -> dict:
+    """A JSON request for any method (POST/PATCH/DELETE). DELETE sends no body."""
+    data = json.dumps(payload).encode() if (payload is not None and method in ("POST", "PATCH", "PUT")) else None
+    headers = dict(_auth_headers())
+    if data is not None:
+        headers["Content-Type"] = "application/json"
+    req = urllib.request.Request(url, data=data, headers=headers, method=method)
+    with urllib.request.urlopen(req, timeout=timeout) as r:
+        body = r.read().decode()
+        return json.loads(body) if body else {}
+
+
 # --- terminal output (stdlib ANSI; respects NO_COLOR and non-TTY) ---------
 
 _STYLES = {
@@ -161,7 +180,9 @@ def _api(base_url: str, method: str, path: str, payload: dict | None = None):
     """Call a JSON endpoint; on failure print a friendly message and return None."""
     url = f"{base_url}{path}"
     try:
-        return _post_json(url, payload or {}) if method == "POST" else _get_json(url)
+        if method == "GET":
+            return _get_json(url)
+        return _req_json(method, url, payload)
     except urllib.error.HTTPError as e:
         if e.code == 401:
             _err("Not signed in. Run:  athena login")
@@ -482,10 +503,14 @@ def cmd_status(args) -> int:
     except Exception as e:  # noqa: BLE001
         print(f"Running (pid {pid}) but the API didn't respond at {base_url}: {e}", file=sys.stderr)
         return 1
+    ws, pb, sa, ev = h.get("workspace", {}), h.get("playbooks", {}), h.get("subagents", {}), h.get("evolution", {})
     print(f"Athena is up at {base_url}  (pid {pid})")
     print(f"  model:    {h.get('llm')}  ({h.get('backend')})")
     print(f"  safety:   {h.get('safety')}   approval: {h.get('approval')}")
     print(f"  ledger:   {h.get('blocks')} signed blocks")
+    print(f"  workspace: {'on' if ws.get('enabled') else 'off'}   playbooks: {pb.get('count', 0)} ({'on' if pb.get('enabled') else 'off'})")
+    print(f"  agents:   {sa.get('builtin', 0)} built-in + {sa.get('custom', 0)} custom   evolution: {ev.get('learned', 0)} learned"
+          + ("  (auto)" if ev.get("auto") else ""))
     return 0
 
 
@@ -704,7 +729,33 @@ def cmd_agents(args) -> int:
 
 def cmd_skills(args) -> int:
     base_url = f"http://{args.host}:{args.port}"
-    data = _api(base_url, "GET", "/api/skills")
+    action = getattr(args, "action", "list") or "list"
+    rest = getattr(args, "rest", []) or []
+
+    if action == "synth":
+        task = " ".join(rest).strip()
+        if not task:
+            return _err('Usage:  athena skills synth "reverse a string"')
+        print(style("Synthesizing…", "dim"))
+        out = _api(base_url, "POST", "/api/skills/synthesize", {"task": task})
+        if out is None:
+            return 1
+        if out.get("ok"):
+            c = out.get("stored") or out.get("candidate") or {}
+            print(style("✓ synthesized ", "green") + style(c.get("name", "?"), "bold") + style(f"   {c.get('status', '')}", "dim"))
+            return 0
+        return _err("✗ " + (out.get("reason") or "synthesis failed"))
+    if action in ("approve", "reject"):
+        if not rest:
+            return _err(f"Usage:  athena skills {action} <skill_id>")
+        out = _api(base_url, "POST", f"/api/skills/{rest[0]}/{action}")
+        if out is None:
+            return 1
+        print(style(f"✓ {action}d ", "green") + style(out.get("name", ""), "bold") + style(f"   {out.get('status', '')}", "dim"))
+        return 0
+
+    path = "/api/skills" + (f"?status={urllib.parse.quote(args.status)}" if getattr(args, "status", None) else "")
+    data = _api(base_url, "GET", path)
     if data is None:
         return 1
     skills = data.get("skills", [])
@@ -712,9 +763,207 @@ def cmd_skills(args) -> int:
         print(style("No skills learned yet.", "dim"))
         return 0
     for s in skills:
-        print("  " + style(s.get("name", "?"), "bold") + style(f"   {s.get('status', '')}", "dim"))
+        pin = style(" 📌", "yellow") if s.get("pinned") else ""
+        print("  " + style(s.get("name", "?"), "bold") + style(f"   {s.get('status', '')}", "dim") + pin)
         if s.get("description"):
             print(style(f"     {s['description']}", "dim"))
+    return 0
+
+
+# --- controls + the features I've been building --------------------------
+
+def cmd_safety(args) -> int:
+    base_url = f"http://{args.host}:{args.port}"
+    if args.mode:
+        out = _api(base_url, "POST", "/api/safety", {"mode": args.mode.replace("-", "_")})
+        if out is None:
+            return 1
+        print(style("✓ safety: ", "green") + style(out.get("mode", "?"), "bold"))
+        return 0
+    data = _api(base_url, "GET", "/api/safety")
+    if data is None:
+        return 1
+    print("  safety: " + style(data.get("mode", "?"), "bold") + style("   (" + ", ".join(data.get("modes", [])) + ")", "dim"))
+    return 0
+
+
+def cmd_approval(args) -> int:
+    base_url = f"http://{args.host}:{args.port}"
+    if args.mode:
+        out = _api(base_url, "POST", "/api/approval", {"mode": args.mode})
+        if out is None:
+            return 1
+        print(style("✓ approval: ", "green") + style(out.get("mode", "?"), "bold"))
+        return 0
+    data = _api(base_url, "GET", "/api/approval")
+    if data is None:
+        return 1
+    print("  approval: " + style(data.get("mode", "?"), "bold") + style("   (auto | gated)", "dim"))
+    return 0
+
+
+def cmd_workspace(args) -> int:
+    base_url = f"http://{args.host}:{args.port}"
+    if args.action in ("on", "off"):
+        out = _api(base_url, "POST", "/api/fs", {"enabled": args.action == "on"})
+        if out is None:
+            return 1
+        print(style(f"✓ workspace {'enabled' if out.get('enabled') else 'disabled'}", "green") + style(f"   {out.get('root', '')}", "dim"))
+        return 0
+    data = _api(base_url, "GET", "/api/fs")
+    if data is None:
+        return 1
+    on = data.get("enabled")
+    print("  workspace: " + (style("on", "green") if on else style("off", "dim")) + style(f"   {data.get('root', '')}", "dim"))
+    if data.get("tools"):
+        print(style("  tools: " + ", ".join(data["tools"]), "dim"))
+    files = data.get("files", [])
+    for f in files[:50]:
+        print("  " + style("•", "gray") + " " + f)
+    if on and not files:
+        print(style("  (no files yet)", "dim"))
+    return 0
+
+
+def cmd_playbooks(args) -> int:
+    base_url = f"http://{args.host}:{args.port}"
+    act = args.action
+    if act in ("on", "off"):
+        out = _api(base_url, "POST", "/api/playbooks/enabled", {"enabled": act == "on"})
+        if out is None:
+            return 1
+        print(style(f"✓ playbooks {'exposed to the swarm' if out.get('enabled') else 'hidden'}", "green"))
+        return 0
+    if act == "add":
+        if not args.name:
+            return _err('Usage:  athena playbooks add <name> --body "..."  [--desc "..."]')
+        body = args.body
+        if body is None and not sys.stdin.isatty():
+            body = sys.stdin.read()
+        out = _api(base_url, "POST", "/api/playbooks", {"name": args.name, "description": args.desc or "", "body": body or ""})
+        if out is None:
+            return 1
+        print(style("✓ saved playbook ", "green") + style(out.get("slug", ""), "bold"))
+        return 0
+    if act == "rm":
+        if not args.name:
+            return _err("Usage:  athena playbooks rm <slug>")
+        if _api(base_url, "DELETE", f"/api/playbooks/{urllib.parse.quote(args.name)}") is None:
+            return 1
+        print(style("✓ removed ", "green") + args.name)
+        return 0
+    data = _api(base_url, "GET", "/api/playbooks")
+    if data is None:
+        return 1
+    print("  playbooks " + (style("(exposed to the swarm)", "green") if data.get("enabled") else style("(not exposed)", "dim")))
+    for p in data.get("playbooks", []):
+        print("  " + style(p.get("name", "?"), "bold") + style(f"   {p.get('slug', '')}", "gray") + (style(f"   {p['description']}", "dim") if p.get("description") else ""))
+    if not data.get("playbooks"):
+        print(style('  none yet — add with:  athena playbooks add <name> --body "..."', "dim"))
+    return 0
+
+
+def cmd_subagents(args) -> int:
+    base_url = f"http://{args.host}:{args.port}"
+    act = args.action
+    if act == "add":
+        if not args.name or not args.prompt:
+            return _err('Usage:  athena subagents add <name> --prompt "..."  [--desc "..."] [--iters N]')
+        out = _api(base_url, "POST", "/api/subagents",
+                   {"name": args.name, "description": args.desc or "", "prompt": args.prompt, "iterations": args.iters})
+        if out is None:
+            return 1
+        print(style("✓ saved sub-agent ", "green") + style(out.get("slug", ""), "bold"))
+        return 0
+    if act == "rm":
+        if not args.name:
+            return _err("Usage:  athena subagents rm <slug>")
+        if _api(base_url, "DELETE", f"/api/subagents/{urllib.parse.quote(args.name)}") is None:
+            return 1
+        print(style("✓ removed ", "green") + args.name)
+        return 0
+    data = _api(base_url, "GET", "/api/subagents")
+    if data is None:
+        return 1
+    print(style("  built-in specialists", "dim"))
+    for b in data.get("builtin", []):
+        print("  " + style(f"{b['role']:<12}", "cyan") + style(b.get("description", ""), "dim"))
+    custom = data.get("custom", [])
+    if custom:
+        print(style("  your sub-agents", "dim"))
+        for c in custom:
+            print("  " + style(c.get("name", "?"), "bold") + style(f"   {c.get('slug', '')} · {c.get('iterations')} iters", "gray")
+                  + (style(f"   {c['description']}", "dim") if c.get("description") else ""))
+    return 0
+
+
+def cmd_evolution(args) -> int:
+    base_url = f"http://{args.host}:{args.port}"
+    act = args.action
+    if act == "evolve":
+        out = _api(base_url, "POST", "/api/evolution/evolve")
+        if out is None:
+            return 1
+        applied = [k for k in ("routing", "budgets", "lessons", "playbooks", "skills", "retire")
+                   if isinstance(out.get(k), dict) and out[k].get("applied")]
+        print(style("✓ evolved: ", "green") + ", ".join(applied) if applied else style("no changes warranted yet — run more tasks.", "dim"))
+        return 0
+    if act == "revert":
+        out = _api(base_url, "POST", "/api/evolution/revert")
+        if out is None:
+            return 1
+        print(style("✓ reverted " + (out.get("store", "") or ""), "green") if out.get("reverted") else style(out.get("reason", "nothing to revert"), "dim"))
+        return 0
+    if act == "auto":
+        enabled = (args.value or "").lower() in ("on", "true", "1", "yes")
+        out = _api(base_url, "POST", "/api/evolution/auto", {"enabled": enabled, "every": args.every})
+        if out is None:
+            return 1
+        print(style(f"✓ auto-evolve {'on' if out.get('enabled') else 'off'}  (every {out.get('every')} episodes)", "green"))
+        return 0
+    if act in ("unpin", "unretire"):
+        if not args.value:
+            return _err(f"Usage:  athena evolution {act} <{'skill_id' if act == 'unpin' else 'role'}>")
+        out = _api(base_url, "POST", f"/api/evolution/{act}/{urllib.parse.quote(args.value)}")
+        if out is None:
+            return 1
+        print(style("✓ done", "green"))
+        return 0
+
+    data = _api(base_url, "GET", "/api/evolution")
+    if data is None:
+        return 1
+    acc = data.get("accuracy")
+    print("  routing accuracy: " + style(f"{round(acc * 100)}%" if acc is not None else "—", "bold")
+          + style(f"   {data.get('episodes', 0)} episodes", "dim"))
+    lr = data.get("learned", {})
+    print(style(f"  learned exemplars: fast {lr.get('fast', 0)} · medium {lr.get('medium', 0)} · full {lr.get('full', 0)}", "dim"))
+    if data.get("budgets"):
+        print(style("  budgets: " + json.dumps(data["budgets"]), "dim"))
+    if data.get("lessons"):
+        print(style("  lessons: " + json.dumps(data["lessons"]), "dim"))
+    if data.get("pinned_skills"):
+        print(style("  pinned tools: " + ", ".join(s.get("name", "?") for s in data["pinned_skills"]), "dim"))
+    if data.get("retired"):
+        print(style("  retired: " + ", ".join(data["retired"]), "dim"))
+    auto = data.get("auto", {})
+    print(style(f"  auto-evolve: {'on' if auto.get('enabled') else 'off'} (every {auto.get('every')} episodes)", "dim"))
+    return 0
+
+
+def cmd_personas(args) -> int:
+    base_url = f"http://{args.host}:{args.port}"
+    ws = _api(base_url, "GET", "/api/workspace")
+    if ws is None:
+        return 1
+    personas = ws.get("personas", [])
+    if not personas:
+        print(style("No personas yet. Create them in Settings › Personas.", "dim"))
+        return 0
+    for p in personas:
+        print("  " + style(p.get("name", "?"), "bold") + (style(f"   {p['description']}", "dim") if p.get("description") else ""))
+        if p.get("prompt"):
+            print(style(f"     {p['prompt'][:120]}", "gray"))
     return 0
 
 
@@ -917,7 +1166,11 @@ def build_parser() -> argparse.ArgumentParser:
     # inspecting / driving the agent
     sub.add_parser("sessions", help="list your conversations").set_defaults(func=cmd_sessions)
     sub.add_parser("agents", help="list the swarm's signed agents").set_defaults(func=cmd_agents)
-    sub.add_parser("skills", help="list learned skills").set_defaults(func=cmd_skills)
+    sk = sub.add_parser("skills", help="list learned skills, or synth/approve/reject")
+    sk.add_argument("action", nargs="?", default="list", choices=["list", "synth", "approve", "reject"])
+    sk.add_argument("rest", nargs="*", help="task text (synth) or skill_id (approve/reject)")
+    sk.add_argument("--status", help="filter the list by status")
+    sk.set_defaults(func=cmd_skills)
     sub.add_parser("recipes", help="list saved task templates").set_defaults(func=cmd_recipes)
     sub.add_parser("verify", help="verify the signed ledger chain").set_defaults(func=cmd_verify)
     sub.add_parser("metrics", help="show usage metrics").set_defaults(func=cmd_metrics)
@@ -941,6 +1194,46 @@ def build_parser() -> argparse.ArgumentParser:
     models = sub.add_parser("models", help="show or switch the LLM (e.g. --set ollama:qwen2.5:7b-instruct)")
     models.add_argument("--set", metavar="BACKEND[:MODEL]", help="switch backend/model")
     models.set_defaults(func=cmd_models)
+
+    # controls + the newer capabilities (workspace, playbooks, sub-agents, evolution)
+    safety_p = sub.add_parser("safety", help="show or set the kill switch (live | dry-run | halted)")
+    safety_p.add_argument("mode", nargs="?", choices=["live", "dry-run", "halted"], help="set it (omit to show)")
+    safety_p.set_defaults(func=cmd_safety)
+
+    appr = sub.add_parser("approval", help="show or set skill-approval mode (auto | gated)")
+    appr.add_argument("mode", nargs="?", choices=["auto", "gated"])
+    appr.set_defaults(func=cmd_approval)
+
+    wsp = sub.add_parser("workspace", help="the jailed file workspace: show, on, off")
+    wsp.add_argument("action", nargs="?", choices=["on", "off"], help="toggle (omit to show files + tools)")
+    wsp.set_defaults(func=cmd_workspace)
+
+    pbp = sub.add_parser("playbooks", help="authored playbooks: list, add, rm, on, off")
+    pbp.add_argument("action", nargs="?", default="list", choices=["list", "add", "rm", "on", "off"])
+    pbp.add_argument("name", nargs="?", help="name (add) or slug (rm)")
+    pbp.add_argument("--desc", help="one-line description (add)")
+    pbp.add_argument("--body", help="markdown instructions (add; or pipe via stdin)")
+    pbp.set_defaults(func=cmd_playbooks)
+
+    sap = sub.add_parser("subagents", help="custom sub-agents: list, add, rm")
+    sap.add_argument("action", nargs="?", default="list", choices=["list", "add", "rm"])
+    sap.add_argument("name", nargs="?", help="name (add) or slug (rm)")
+    sap.add_argument("--prompt", help="system prompt (add)")
+    sap.add_argument("--desc", help="one-line description the router reads (add)")
+    sap.add_argument("--iters", type=int, default=8, help="ReAct iteration budget (add)")
+    sap.set_defaults(func=cmd_subagents)
+
+    evo = sub.add_parser("evolution", help="self-evolving harness: status, evolve, revert, auto, unpin, unretire")
+    evo.add_argument("action", nargs="?", default="status",
+                     choices=["status", "evolve", "revert", "auto", "unpin", "unretire"])
+    evo.add_argument("value", nargs="?", help="on/off (auto), skill_id (unpin), or role (unretire)")
+    evo.add_argument("--every", type=int, default=10, help="auto-evolve cadence in episodes")
+    evo.set_defaults(func=cmd_evolution)
+    sub.add_parser("evolve", help="run one evolution pass (alias for `evolution evolve`)").set_defaults(
+        func=lambda a: cmd_evolution(argparse.Namespace(**{**vars(a), "action": "evolve", "value": None, "every": 10}))
+    )
+
+    sub.add_parser("personas", help="list saved personas").set_defaults(func=cmd_personas)
 
     return p
 

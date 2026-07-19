@@ -79,6 +79,96 @@ def test_parser_new_commands():
     assert p.parse_args(["run", "--json", "do", "it"]).json is True
 
 
+def test_parser_config_commands():
+    p = cli.build_parser()
+    assert p.parse_args(["safety", "halted"]).func is cli.cmd_safety
+    assert p.parse_args(["approval", "gated"]).mode == "gated"
+    assert p.parse_args(["workspace", "on"]).action == "on"
+    assert p.parse_args(["playbooks"]).action == "list"
+    assert p.parse_args(["playbooks", "add", "X", "--body", "b"]).body == "b"
+    sa = p.parse_args(["subagents", "add", "Legal", "--prompt", "p", "--iters", "6"])
+    assert sa.action == "add" and sa.prompt == "p" and sa.iters == 6
+    assert p.parse_args(["evolution", "revert"]).action == "revert"
+    assert p.parse_args(["evolve"]).func is not None
+    assert p.parse_args(["skills", "synth", "x"]).action == "synth"
+    assert p.parse_args(["personas"]).func is cli.cmd_personas
+
+
+def _record_api(monkeypatch, response=None):
+    calls = []
+
+    def fake(base, method, path, payload=None):
+        calls.append((method, path, payload))
+        return {} if response is None else response
+
+    monkeypatch.setattr(cli, "_api", fake)
+    return calls
+
+
+def test_safety_set_maps_dashes(monkeypatch):
+    calls = _record_api(monkeypatch, {"mode": "dry_run"})
+    assert cli.cmd_safety(cli.build_parser().parse_args(["safety", "dry-run"])) == 0
+    assert calls == [("POST", "/api/safety", {"mode": "dry_run"})]
+
+
+def test_workspace_toggle(monkeypatch):
+    calls = _record_api(monkeypatch, {"enabled": True, "root": "/w"})
+    cli.cmd_workspace(cli.build_parser().parse_args(["workspace", "on"]))
+    assert calls == [("POST", "/api/fs", {"enabled": True})]
+
+
+def test_playbook_add_and_rm(monkeypatch):
+    calls = _record_api(monkeypatch, {"slug": "deploy"})
+    cli.cmd_playbooks(cli.build_parser().parse_args(["playbooks", "add", "Deploy", "--desc", "d", "--body", "steps"]))
+    assert calls[0] == ("POST", "/api/playbooks", {"name": "Deploy", "description": "d", "body": "steps"})
+    calls2 = _record_api(monkeypatch, {"deleted": True})
+    cli.cmd_playbooks(cli.build_parser().parse_args(["playbooks", "rm", "deploy"]))
+    assert calls2 == [("DELETE", "/api/playbooks/deploy", None)]
+
+
+def test_subagent_add(monkeypatch):
+    calls = _record_api(monkeypatch, {"slug": "legal"})
+    cli.cmd_subagents(cli.build_parser().parse_args(
+        ["subagents", "add", "Legal", "--prompt", "you are legal", "--iters", "6"]))
+    assert calls == [("POST", "/api/subagents",
+                      {"name": "Legal", "description": "", "prompt": "you are legal", "iterations": 6})]
+
+
+def test_evolution_evolve_summarizes(monkeypatch, capsys):
+    _record_api(monkeypatch, {"routing": {"applied": True}, "skills": {"applied": True}, "budgets": {"applied": False}})
+    cli.cmd_evolution(cli.build_parser().parse_args(["evolution", "evolve"]))
+    out = capsys.readouterr().out
+    assert "routing" in out and "skills" in out and "budgets" not in out
+
+
+def test_evolution_auto_and_alias(monkeypatch):
+    calls = _record_api(monkeypatch, {"enabled": True, "every": 20})
+    cli.cmd_evolution(cli.build_parser().parse_args(["evolution", "auto", "on", "--every", "20"]))
+    assert calls == [("POST", "/api/evolution/auto", {"enabled": True, "every": 20})]
+    calls2 = _record_api(monkeypatch, {"routing": {"applied": False}})
+    args = cli.build_parser().parse_args(["evolve"])
+    args.func(args)
+    assert calls2[0][:2] == ("POST", "/api/evolution/evolve")
+
+
+def test_skills_synth_and_approve(monkeypatch):
+    calls = _record_api(monkeypatch, {"ok": True, "stored": {"name": "reverse_string", "status": "quarantined"}})
+    cli.cmd_skills(cli.build_parser().parse_args(["skills", "synth", "reverse", "a", "string"]))
+    assert calls == [("POST", "/api/skills/synthesize", {"task": "reverse a string"})]
+    calls2 = _record_api(monkeypatch, {"name": "x", "status": "quarantined"})
+    cli.cmd_skills(cli.build_parser().parse_args(["skills", "approve", "abc"]))
+    assert calls2 == [("POST", "/api/skills/abc/approve", None)]
+
+
+def test_api_delete_routes_through_req_json(monkeypatch):
+    seen = {}
+    monkeypatch.setattr(cli, "_req_json", lambda m, u, p=None, **k: seen.update(method=m, url=u, payload=p) or {"ok": True})
+    monkeypatch.setattr(cli, "_get_json", lambda u, **k: {"should_not": "be_called"})
+    out = cli._api("http://x", "DELETE", "/api/playbooks/foo")
+    assert out == {"ok": True}
+    assert seen["method"] == "DELETE" and seen["url"].endswith("/api/playbooks/foo") and seen["payload"] is None
+
+
 def test_token_roundtrip_and_auth_header(tmp_path, monkeypatch):
     monkeypatch.setenv("ATHENA_HOME", str(tmp_path))
     assert cli.read_token() is None and cli._auth_headers() == {}
