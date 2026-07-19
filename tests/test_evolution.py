@@ -174,8 +174,88 @@ def test_evolve_all_runs_every_operator(tmp_path):
     t0 = tier_router.route_tier(d)
     ev.record(d, t0, success=False)
     rep = ev.evolve_all(pb, current_budgets={})
-    assert set(rep) == {"routing", "budgets", "lessons", "playbooks"}
+    assert set(rep) == {"routing", "budgets", "lessons", "playbooks", "skills"}
     assert rep["routing"]["applied"] is True   # the mis-tier got learned
+
+
+class _Rec:
+    def __init__(self, id, name, status, usage_count, success_rate, pinned=False):
+        self.id, self.name, self.status = id, name, status
+        self.usage_count, self.success_rate, self.pinned = usage_count, success_rate, pinned
+
+
+class _FakeLib:
+    def __init__(self, recs):
+        self._recs, self.pinned_ids = recs, []
+
+    def list(self):
+        return self._recs
+
+    def pin(self, sid):
+        for r in self._recs:
+            if r.id == sid:
+                r.pinned = True
+        self.pinned_ids.append(sid)
+
+
+def test_promote_skills_pins_only_proven_ones(tmp_path):
+    ev = Evolver(root=tmp_path)
+    lib = _FakeLib([
+        _Rec("s1", "slugify", "promoted", 6, 0.9),          # qualifies
+        _Rec("s2", "weak", "promoted", 6, 0.5),             # success rate too low
+        _Rec("s3", "new", "quarantined", 9, 1.0),           # not promoted
+        _Rec("s4", "fewuses", "promoted", 2, 1.0),          # too few uses
+        _Rec("s5", "already", "promoted", 9, 1.0, pinned=True),  # already pinned
+    ])
+    rep = ev.promote_skills(lib)
+    assert rep["applied"] is True and rep["skills"] == ["slugify"]
+    assert lib.pinned_ids == ["s1"]
+
+
+def test_promote_skills_none_ready(tmp_path):
+    ev = Evolver(root=tmp_path)
+    assert ev.promote_skills(_FakeLib([_Rec("s1", "x", "quarantined", 1, 0.0)]))["applied"] is False
+
+
+def test_evolve_all_includes_skill_promotion(tmp_path):
+    ev = Evolver(root=tmp_path)
+    lib = _FakeLib([_Rec("s1", "slugify", "promoted", 6, 0.9)])
+    rep = ev.evolve_all(None, lib, current_budgets={})
+    assert set(rep) == {"routing", "budgets", "lessons", "playbooks", "skills"}
+    assert rep["skills"]["applied"] is True
+
+
+class _Hit:
+    def __init__(self, id, meta):
+        self.id, self.metadata = id, meta
+
+
+class _FakeMem:
+    class _P:
+        def __init__(self, items):
+            self.items = items
+
+        def search(self, goal, k=5):
+            return []                     # nothing matches by similarity
+
+        def list_all(self):
+            return self.items
+
+    def __init__(self, items):
+        self.procedural = self._P(items)
+
+
+def test_retrieve_skills_always_includes_pinned(tmp_path):
+    pytest.importorskip("athena_ledger")
+    from agents import BaseAgent
+    from identity import AgentIdentity
+    from llm import ScriptedLLM
+
+    pinned = _Hit("s1", {"name": "slugify", "code": "def run(): pass", "caps": {}, "pinned": True})
+    other = _Hit("s2", {"name": "other", "code": "x", "caps": {}, "pinned": False})
+    agent = BaseAgent(identity=AgentIdentity.generate(), llm=ScriptedLLM([]), memory=_FakeMem([pinned, other]))
+    out = agent._retrieve_skills("an unrelated goal")
+    assert "s1" in out and "s2" not in out   # only the pinned one survives (search returned nothing)
 
 
 def test_evolution_is_signed_to_the_ledger(tmp_path):

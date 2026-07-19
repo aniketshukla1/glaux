@@ -45,6 +45,7 @@ class SkillRecord:
     success_count: int
     success_rate: float
     sensitive: bool = False
+    pinned: bool = False
 
     @classmethod
     def from_metadata(cls, rec_id: str, meta: dict) -> "SkillRecord":
@@ -62,6 +63,7 @@ class SkillRecord:
             success_count=int(meta.get("success_count", 0)),
             success_rate=float(meta.get("success_rate", 0.0)),
             sensitive=bool(meta.get("sensitive", is_sensitive(meta.get("caps", {})))),
+            pinned=bool(meta.get("pinned", False)),
         )
 
 
@@ -116,6 +118,7 @@ class SkillLibrary:
             "usage_count": 0,
             "success_count": 0,
             "success_rate": 0.0,
+            "pinned": False,
             "created_at": time.time(),
         }
         skill_id = self._store(None, meta)
@@ -139,9 +142,44 @@ class SkillLibrary:
             "usage_count": current.usage_count,
             "success_count": current.success_count,
             "success_rate": current.success_rate,
+            "pinned": current.pinned,
         }
         self._store(skill_id, meta)
         return SkillRecord.from_metadata(skill_id, meta)
+
+    def _set_pinned(self, skill_id: str, pinned: bool) -> Optional[SkillRecord]:
+        current = self.get(skill_id)
+        if current is None:
+            return None
+        meta = {
+            "kind": "skill",
+            "name": current.name,
+            "description": current.description,
+            "code": current.code,
+            "entrypoint": current.entrypoint,
+            "caps": current.caps,
+            "status": current.status,
+            "sensitive": is_sensitive(current.caps),
+            "version": current.version,
+            "parent_skill_id": current.parent_skill_id,
+            "usage_count": current.usage_count,
+            "success_count": current.success_count,
+            "success_rate": current.success_rate,
+            "pinned": bool(pinned),
+        }
+        self._store(skill_id, meta)
+        return SkillRecord.from_metadata(skill_id, meta)
+
+    def pin(self, skill_id: str) -> Optional[SkillRecord]:
+        """Pin a proven skill so it is always offered to agents (not just when a
+        similarity search happens to surface it) — a permanent, trusted tool."""
+        return self._set_pinned(skill_id, True)
+
+    def unpin(self, skill_id: str) -> Optional[SkillRecord]:
+        return self._set_pinned(skill_id, False)
+
+    def pinned_skills(self) -> list["SkillRecord"]:
+        return [r for r in self.list() if r.pinned]
 
     def approve(self, skill_id: str) -> Optional[SkillRecord]:
         """Human approves a pending skill -> it enters the normal quarantine."""
@@ -192,6 +230,7 @@ class SkillLibrary:
             "usage_count": usage,
             "success_count": successes,
             "success_rate": rate,
+            "pinned": current.pinned,
         }
         self._store(skill_id, meta)
         return SkillRecord.from_metadata(skill_id, meta)

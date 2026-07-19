@@ -460,20 +460,28 @@ class BaseAgent:
             return {"ok": True, "result": "[dry-run] MCP call skipped"}
         return self.mcp_client.call_tool(action.get("tool"), action.get("args") or {})
 
+    @staticmethod
+    def _skill_from_meta(meta: dict, rec_id: str) -> dict:
+        return {
+            "code": meta.get("code", ""),
+            "caps": meta.get("caps", {}),
+            "name": meta.get("name", rec_id),
+            "description": meta.get("description"),
+            "entrypoint": meta.get("entrypoint", "run"),
+        }
+
     def _retrieve_skills(self, goal: str) -> dict:
         if self.memory is None:
             return {}
-        hits = self.memory.procedural.search(goal, k=5)
         skills = {}
-        for h in hits:
-            meta = h.metadata
-            skills[h.id] = {
-                "code": meta.get("code", ""),
-                "caps": meta.get("caps", {}),
-                "name": meta.get("name", h.id),
-                "description": meta.get("description"),
-                "entrypoint": meta.get("entrypoint", "run"),
-            }
+        for h in self.memory.procedural.search(goal, k=5):
+            skills[h.id] = self._skill_from_meta(h.metadata, h.id)
+        # Always offer pinned, proven tools — the self-evolving harness pins a skill
+        # once it has repeatedly succeeded, so the swarm reliably reuses it instead of
+        # re-synthesizing (saving latency + cost).
+        for h in self.memory.procedural.list_all():
+            if h.metadata.get("pinned") and h.id not in skills:
+                skills[h.id] = self._skill_from_meta(h.metadata, h.id)
         return skills
 
     def _build_messages(

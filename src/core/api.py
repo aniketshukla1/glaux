@@ -540,7 +540,7 @@ class _State:
             self.evolver.record_roles(items)
             if self.evolver.should_autoevolve():
                 self.evolver.evolve_all(
-                    self.playbooks, current_budgets=self._current_budgets(),
+                    self.playbooks, self.skills, current_budgets=self._current_budgets(),
                     ledger=self.ledger, identity=self.identities["router"],
                 )
         except Exception:  # noqa: BLE001
@@ -1445,9 +1445,12 @@ def delete_subagent(slug: str) -> dict:
 
 @app.get("/api/evolution")
 def evolution_status() -> dict:
-    """The self-evolving harness: episode count, current routing accuracy on the
-    recorded episodes, learned exemplars, and the mutation log."""
-    return STATE.evolver.status()
+    """The self-evolving harness: episodes, routing accuracy, learned config, the
+    skills promoted to permanent tools, and the mutation log."""
+    return {
+        **STATE.evolver.status(),
+        "pinned_skills": [{"id": r.id, "name": r.name} for r in STATE.skills.pinned_skills()],
+    }
 
 
 @app.post("/api/evolution/evolve")
@@ -1456,7 +1459,7 @@ def evolution_evolve() -> dict:
     independently gated — applied only when the evidence supports it — and signed.
     Human-in-the-loop over self-modification."""
     return STATE.evolver.evolve_all(
-        STATE.playbooks, current_budgets=STATE._current_budgets(),
+        STATE.playbooks, STATE.skills, current_budgets=STATE._current_budgets(),
         ledger=STATE.ledger, identity=STATE.identities["router"],
     )
 
@@ -1475,6 +1478,15 @@ def evolution_auto(cfg: AutoEvolveConfig) -> dict:
 @app.post("/api/evolution/revert")
 def evolution_revert() -> dict:
     return STATE.evolver.revert(ledger=STATE.ledger, identity=STATE.identities["router"])
+
+
+@app.post("/api/evolution/unpin/{skill_id}")
+def evolution_unpin_skill(skill_id: str) -> dict:
+    """Reverse a skill promotion — the skill is no longer pinned as a permanent tool."""
+    rec = STATE.skills.unpin(skill_id)
+    if rec is None:
+        raise HTTPException(status_code=404, detail="unknown skill")
+    return {"unpinned": True, "id": skill_id, "name": rec.name}
 
 
 @app.get("/api/agents")

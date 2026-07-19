@@ -7,7 +7,7 @@ import {
   getFsWorkspace, setFsWorkspace,
   getPlaybooks, setPlaybooksEnabled, savePlaybook, deletePlaybook,
   getSubagents, saveSubagent, deleteSubagent,
-  getEvolution, evolveHarness, setAutoEvolve, revertEvolution,
+  getEvolution, evolveHarness, setAutoEvolve, revertEvolution, unpinSkill,
 } from '../api.js'
 import Modal from './Modal.jsx'
 import LlmControl from './LlmControl.jsx'
@@ -495,6 +495,7 @@ function EvolutionTab({ onRefresh }) {
     if (r.budgets?.applied) parts.push(`budgets: ${Object.keys(r.budgets.changes || {}).length} role(s)`)
     if (r.lessons?.applied) parts.push(`lessons: ${Object.keys(r.lessons.roles || {}).length} role(s)`)
     if (r.playbooks?.applied) parts.push(`playbooks: +${(r.playbooks.playbooks || []).length}`)
+    if (r.skills?.applied) parts.push(`tools: +${(r.skills.skills || []).length} pinned`)
     return parts.length ? `Evolved — ${parts.join(', ')}.` : 'No changes warranted yet — run more tasks.'
   }
 
@@ -522,6 +523,13 @@ function EvolutionTab({ onRefresh }) {
     catch (e) { setMsg({ kind: 'err', text: e.message }) }
   }
 
+  const unpin = async (id) => {
+    setMsg(null)
+    try { await unpinSkill(id); await load(); onRefresh && onRefresh() }
+    catch (e) { setMsg({ kind: 'err', text: e.message }) }
+  }
+
+  const pinnedTools = data?.pinned_skills || []
   const learned = data?.learned || {}
   const budgets = data?.budgets || {}
   const lessons = data?.lessons || {}
@@ -532,6 +540,7 @@ function EvolutionTab({ onRefresh }) {
     if (m.kind === 'role_budgets') return `budgets ${JSON.stringify(m.changes || {})}`
     if (m.kind === 'prompt_lesson') return `lessons added ${JSON.stringify(m.roles || {})}`
     if (m.kind === 'playbook_distilled') return `distilled ${(m.playbooks || []).join(', ')}`
+    if (m.kind === 'skill_pinned') return `pinned ${(m.skills || []).join(', ')}`
     if (m.kind === 'revert') return `reverted ${m.store || ''}`
     return ''
   }
@@ -572,6 +581,21 @@ function EvolutionTab({ onRefresh }) {
           <Notice msg={msg} />
         </div>
       </Section>
+
+      {pinnedTools.length > 0 && (
+        <Section title="Promoted tools" hint="Synthesized skills the harness pinned as permanent, always-offered tools once they proved themselves. Unpin to reverse.">
+          <div className="space-y-1.5">
+            {pinnedTools.map((s) => (
+              <div key={s.id} className="glass rounded-lg px-3.5 py-2.5 flex items-center justify-between gap-3">
+                <div className="text-fg text-sm font-mono truncate">{s.name}</div>
+                <button onClick={() => unpin(s.id)} className="btn p-1.5 text-muted hover:text-rose-300 shrink-0" aria-label="Unpin tool">
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            ))}
+          </div>
+        </Section>
+      )}
 
       <Section title="Auto-evolve" hint="Run every operator automatically after a set number of recorded episodes. Each change is still gated + signed.">
         <div className="glass rounded-lg px-4 py-3 flex items-center justify-between gap-4">

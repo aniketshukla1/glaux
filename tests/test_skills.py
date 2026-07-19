@@ -119,6 +119,21 @@ def test_promote_after_successes(tmp_path):
     assert r.success_rate == 1.0
 
 
+def test_pin_unpin_and_survives_use(tmp_path):
+    mm = MemoryManager(tmp_path / "db")
+    lib = SkillLibrary(mm.procedural)
+    rec = lib.add_candidate(SkillSynthesizer(ScriptedLLM([_skill_json()])).synthesize("x").candidate)
+    assert lib.get(rec.id).pinned is False
+    lib.pin(rec.id)
+    assert lib.get(rec.id).pinned is True
+    assert rec.id in {r.id for r in lib.pinned_skills()}
+    lib.record_use(rec.id, success=True)             # a use must not drop the pin
+    assert lib.get(rec.id).pinned is True
+    lib.unpin(rec.id)
+    assert lib.get(rec.id).pinned is False
+    assert lib.pinned_skills() == []
+
+
 def test_deprecate_on_low_success(tmp_path):
     mm = MemoryManager(tmp_path / "db")
     lib = SkillLibrary(mm.procedural, min_uses_for_deprecation=3, deprecate_below=0.5)

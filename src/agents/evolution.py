@@ -327,14 +327,43 @@ class Evolver:
         self._log_mutation(mutation, ledger, identity)
         return {"applied": True, **mutation}
 
+    # --- operator 5: skill promotion (evidence gated) --------------------
+
+    def promote_skills(self, skill_library, *, ledger=None, identity=None,
+                       min_uses: int = 5, min_rate: float = 0.8) -> dict:
+        """Operator: pin a synthesized skill that has proven itself (promoted status,
+        enough uses, high success rate) so it becomes a permanent, always-offered
+        tool — the swarm reuses it instead of re-synthesizing."""
+        if skill_library is None:
+            return {"applied": False, "reason": "skill library unavailable", "kind": "skill_pinned"}
+        try:
+            records = skill_library.list()
+        except Exception:  # noqa: BLE001
+            return {"applied": False, "reason": "skill library unavailable", "kind": "skill_pinned"}
+        pinned = []
+        for r in records:
+            if getattr(r, "pinned", False):
+                continue
+            if r.status == "promoted" and r.usage_count >= min_uses and r.success_rate >= min_rate:
+                skill_library.pin(r.id)
+                pinned.append(r.name)
+        if not pinned:
+            return {"applied": False, "reason": "no proven skills ready to promote", "kind": "skill_pinned"}
+        # Pins are reversible by unpinning (Evolution tab / skill library).
+        mutation = {"kind": "skill_pinned", "skills": pinned}
+        self._log_mutation(mutation, ledger, identity)
+        return {"applied": True, **mutation}
+
     # --- run everything --------------------------------------------------
 
-    def evolve_all(self, playbooks=None, *, current_budgets=None, ledger=None, identity=None) -> dict:
+    def evolve_all(self, playbooks=None, skill_library=None, *, current_budgets=None,
+                   ledger=None, identity=None) -> dict:
         return {
             "routing": self.evolve(ledger=ledger, identity=identity),
             "budgets": self.tune_budgets(current_budgets, ledger=ledger, identity=identity),
             "lessons": self.learn_lessons(ledger=ledger, identity=identity),
             "playbooks": self.distill_playbooks(playbooks, ledger=ledger, identity=identity),
+            "skills": self.promote_skills(skill_library, ledger=ledger, identity=identity),
         }
 
     # --- auto-evolve cadence ---------------------------------------------
