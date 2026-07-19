@@ -22,6 +22,7 @@ Configure (parity with the app's Settings):
   athena playbooks [list|add|rm|on|off] ·   athena subagents [list|add|rm]
   athena skills [synth "…"|approve <id>|reject <id>]   synthesize / gate skills
   athena evolution [status|evolve|revert|auto on|unpin <id>|unretire <role>]
+  athena personas [list|add|rm]         ·   athena recipes [list|add|rm]
 
 Account / admin:
   athena login · logout · whoami   ·   athena messaging   (gateways, admin)
@@ -953,17 +954,37 @@ def cmd_evolution(args) -> int:
 
 def cmd_personas(args) -> int:
     base_url = f"http://{args.host}:{args.port}"
+    act = getattr(args, "action", "list") or "list"
+    if act == "add":
+        if not args.name or not args.prompt:
+            return _err('Usage:  athena personas add <name> --prompt "..."  [--emoji 🧠]')
+        out = _api(base_url, "POST", "/api/personas",
+                   {"name": args.name, "instructions": args.prompt, "emoji": args.emoji})
+        if out is None:
+            return 1
+        p = out.get("persona", {})
+        print(style("✓ saved persona ", "green") + style(p.get("name", ""), "bold") + style(f"   {p.get('id', '')}", "gray"))
+        return 0
+    if act == "rm":
+        if not args.name:
+            return _err("Usage:  athena personas rm <id>")
+        if _api(base_url, "DELETE", f"/api/personas/{urllib.parse.quote(args.name)}") is None:
+            return 1
+        print(style("✓ removed ", "green") + args.name)
+        return 0
     ws = _api(base_url, "GET", "/api/workspace")
     if ws is None:
         return 1
     personas = ws.get("personas", [])
     if not personas:
-        print(style("No personas yet. Create them in Settings › Personas.", "dim"))
+        print(style('No personas yet. Add one:  athena personas add <name> --prompt "..."', "dim"))
         return 0
     for p in personas:
-        print("  " + style(p.get("name", "?"), "bold") + (style(f"   {p['description']}", "dim") if p.get("description") else ""))
-        if p.get("prompt"):
-            print(style(f"     {p['prompt'][:120]}", "gray"))
+        emoji = (p.get("emoji", "") + " ") if p.get("emoji") else ""
+        print("  " + emoji + style(p.get("name", "?"), "bold") + style(f"   {p.get('id', '')}", "gray"))
+        instructions = p.get("instructions") or p.get("prompt")
+        if instructions:
+            print(style(f"     {instructions[:120]}", "dim"))
     return 0
 
 
@@ -1084,16 +1105,34 @@ def cmd_eval(args) -> int:
 
 def cmd_recipes(args) -> int:
     base_url = f"http://{args.host}:{args.port}"
+    act = getattr(args, "action", "list") or "list"
+    if act == "add":
+        if not args.name or not args.prompt:
+            return _err('Usage:  athena recipes add <name> --prompt "..."  [--desc "..."] [--emoji 📋]')
+        out = _api(base_url, "POST", "/api/recipes",
+                   {"name": args.name, "prompt": args.prompt, "description": args.desc or "", "emoji": args.emoji})
+        if out is None:
+            return 1
+        r = out.get("recipe", {})
+        print(style("✓ saved recipe ", "green") + style(r.get("name", ""), "bold") + style(f"   {r.get('id', '')}", "gray"))
+        return 0
+    if act == "rm":
+        if not args.name:
+            return _err("Usage:  athena recipes rm <id>")
+        if _api(base_url, "DELETE", f"/api/recipes/{urllib.parse.quote(args.name)}") is None:
+            return 1
+        print(style("✓ removed ", "green") + args.name)
+        return 0
     ws = _api(base_url, "GET", "/api/workspace")
     if ws is None:
         return 1
     recipes = ws.get("recipes", [])
     if not recipes:
-        print(style("No recipes yet. Create them in Settings › Recipes.", "dim"))
+        print(style('No recipes yet. Add one:  athena recipes add <name> --prompt "..."', "dim"))
         return 0
     for r in recipes:
         head = ((r.get("emoji", "") + " ") if r.get("emoji") else "") + style(r.get("name", "?"), "bold")
-        print("  " + head + (style(f"   {r['description']}", "dim") if r.get("description") else ""))
+        print("  " + head + style(f"   {r.get('id', '')}", "gray") + (style(f"   {r['description']}", "dim") if r.get("description") else ""))
         if r.get("prompt"):
             print(style(f"     {r['prompt'][:120]}", "gray"))
     return 0
@@ -1171,7 +1210,13 @@ def build_parser() -> argparse.ArgumentParser:
     sk.add_argument("rest", nargs="*", help="task text (synth) or skill_id (approve/reject)")
     sk.add_argument("--status", help="filter the list by status")
     sk.set_defaults(func=cmd_skills)
-    sub.add_parser("recipes", help="list saved task templates").set_defaults(func=cmd_recipes)
+    rec = sub.add_parser("recipes", help="saved task templates: list, add, rm")
+    rec.add_argument("action", nargs="?", default="list", choices=["list", "add", "rm"])
+    rec.add_argument("name", nargs="?", help="name (add) or id (rm)")
+    rec.add_argument("--prompt", help="the task-template text (add)")
+    rec.add_argument("--desc", help="one-line description (add)")
+    rec.add_argument("--emoji", help="an emoji (add)")
+    rec.set_defaults(func=cmd_recipes)
     sub.add_parser("verify", help="verify the signed ledger chain").set_defaults(func=cmd_verify)
     sub.add_parser("metrics", help="show usage metrics").set_defaults(func=cmd_metrics)
     sub.add_parser("eval", help="run the benchmark suite").set_defaults(func=cmd_eval)
@@ -1233,7 +1278,12 @@ def build_parser() -> argparse.ArgumentParser:
         func=lambda a: cmd_evolution(argparse.Namespace(**{**vars(a), "action": "evolve", "value": None, "every": 10}))
     )
 
-    sub.add_parser("personas", help="list saved personas").set_defaults(func=cmd_personas)
+    per = sub.add_parser("personas", help="saved personas: list, add, rm")
+    per.add_argument("action", nargs="?", default="list", choices=["list", "add", "rm"])
+    per.add_argument("name", nargs="?", help="name (add) or id (rm)")
+    per.add_argument("--prompt", help="the persona's system instructions (add)")
+    per.add_argument("--emoji", help="an emoji (add)")
+    per.set_defaults(func=cmd_personas)
 
     return p
 

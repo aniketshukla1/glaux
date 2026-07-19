@@ -160,6 +160,35 @@ def test_skills_synth_and_approve(monkeypatch):
     assert calls2 == [("POST", "/api/skills/abc/approve", None)]
 
 
+def test_parser_authoring_commands():
+    p = cli.build_parser()
+    pa = p.parse_args(["personas", "add", "Coach", "--prompt", "x", "--emoji", "🏅"])
+    assert pa.action == "add" and pa.name == "Coach" and pa.prompt == "x" and pa.emoji == "🏅"
+    rc = p.parse_args(["recipes", "add", "Standup", "--prompt", "x", "--desc", "d"])
+    assert rc.action == "add" and rc.desc == "d"
+    assert p.parse_args(["personas"]).action == "list"
+    assert p.parse_args(["recipes", "rm", "id1"]).name == "id1"
+
+
+def test_persona_add_and_rm(monkeypatch):
+    calls = _record_api(monkeypatch, {"persona": {"id": "p1", "name": "Coach"}})
+    cli.cmd_personas(cli.build_parser().parse_args(["personas", "add", "Coach", "--prompt", "be encouraging", "--emoji", "🏅"]))
+    assert calls == [("POST", "/api/personas", {"name": "Coach", "instructions": "be encouraging", "emoji": "🏅"})]
+    calls2 = _record_api(monkeypatch, {"ok": True})
+    cli.cmd_personas(cli.build_parser().parse_args(["personas", "rm", "p1"]))
+    assert calls2 == [("DELETE", "/api/personas/p1", None)]
+
+
+def test_recipe_add_and_rm(monkeypatch):
+    calls = _record_api(monkeypatch, {"recipe": {"id": "r1", "name": "Standup"}})
+    cli.cmd_recipes(cli.build_parser().parse_args(["recipes", "add", "Standup", "--prompt", "summarize my day", "--desc", "daily"]))
+    assert calls == [("POST", "/api/recipes",
+                      {"name": "Standup", "prompt": "summarize my day", "description": "daily", "emoji": None})]
+    calls2 = _record_api(monkeypatch, {"ok": True})
+    cli.cmd_recipes(cli.build_parser().parse_args(["recipes", "rm", "r1"]))
+    assert calls2 == [("DELETE", "/api/recipes/r1", None)]
+
+
 def test_api_delete_routes_through_req_json(monkeypatch):
     seen = {}
     monkeypatch.setattr(cli, "_req_json", lambda m, u, p=None, **k: seen.update(method=m, url=u, payload=p) or {"ok": True})
