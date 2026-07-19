@@ -516,6 +516,9 @@ class _State:
             m[spec["slug"]] = int(spec.get("iterations", 8))
         return m
 
+    def _roster_roles(self) -> list:
+        return list(SPECIALISTS) + [spec["slug"] for spec in self.custom_agents.list()]
+
     def record_episode(self, directive: str, result) -> None:
         """Log a finished task (episode + per-role outcomes) so the self-evolving
         harness can learn from it. Best effort — telemetry must never break a task."""
@@ -540,7 +543,8 @@ class _State:
             self.evolver.record_roles(items)
             if self.evolver.should_autoevolve():
                 self.evolver.evolve_all(
-                    self.playbooks, self.skills, current_budgets=self._current_budgets(),
+                    self.playbooks, self.skills, roster_roles=self._roster_roles(),
+                    current_budgets=self._current_budgets(),
                     ledger=self.ledger, identity=self.identities["router"],
                 )
         except Exception:  # noqa: BLE001
@@ -696,6 +700,11 @@ class _State:
             skill_library=self.skills,
             context_manager=self.context,  # bounded HISTORY on long runs
         )
+        # Self-evolving harness: drop specialists the harness retired (chronic
+        # failures), but never leave the router with an empty roster.
+        retired = self.evolver.retired_roles()
+        active = {r: a for r, a in specialists.items() if r not in retired}
+        specialists = active or specialists
         return Swarm(
             router=router,
             specialists=specialists,
@@ -1459,7 +1468,8 @@ def evolution_evolve() -> dict:
     independently gated — applied only when the evidence supports it — and signed.
     Human-in-the-loop over self-modification."""
     return STATE.evolver.evolve_all(
-        STATE.playbooks, STATE.skills, current_budgets=STATE._current_budgets(),
+        STATE.playbooks, STATE.skills, roster_roles=STATE._roster_roles(),
+        current_budgets=STATE._current_budgets(),
         ledger=STATE.ledger, identity=STATE.identities["router"],
     )
 
@@ -1487,6 +1497,12 @@ def evolution_unpin_skill(skill_id: str) -> dict:
     if rec is None:
         raise HTTPException(status_code=404, detail="unknown skill")
     return {"unpinned": True, "id": skill_id, "name": rec.name}
+
+
+@app.post("/api/evolution/unretire/{role}")
+def evolution_unretire(role: str) -> dict:
+    """Bring a retired specialist back into the router's roster."""
+    return STATE.evolver.unretire(role)
 
 
 @app.get("/api/agents")

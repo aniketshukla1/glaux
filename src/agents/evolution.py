@@ -76,6 +76,7 @@ class Evolver:
         self.exemplars_path = self.root / "exemplars.json"
         self.budgets_path = self.root / "budgets.json"
         self.lessons_path = self.root / "lessons.json"
+        self.retired_path = self.root / "retired.json"
         self.auto_path = self.root / "auto.json"
         self.mutations_path = self.root / "mutations.jsonl"
         self.undo_path = self.root / "undo.jsonl"
@@ -85,6 +86,7 @@ class Evolver:
         self.learned = {t: list(self._load_json(self.exemplars_path, {}).get(t, [])) for t in _ORDER}
         self.budgets = {k: int(v) for k, v in self._load_json(self.budgets_path, {}).items()}
         self.lessons = {k: list(v) for k, v in self._load_json(self.lessons_path, {}).items()}
+        self.retired = set(self._load_json(self.retired_path, []))
         self.auto = {"enabled": False, "every": 10, **self._load_json(self.auto_path, {})}
         tier_router.set_learned_exemplars(self.learned)  # apply at startup
 
@@ -224,9 +226,11 @@ class Evolver:
             role = r.get("role")
             if not role:
                 continue
-            a = agg.setdefault(role, {"n": 0, "capped": 0, "capped_fail": 0, "iters_sum": 0})
+            a = agg.setdefault(role, {"n": 0, "succ": 0, "capped": 0, "capped_fail": 0, "iters_sum": 0})
             a["n"] += 1
             a["iters_sum"] += int(r.get("iters") or 0)
+            if r.get("success"):
+                a["succ"] += 1
             if r.get("capped"):
                 a["capped"] += 1
                 if not r.get("success"):
@@ -354,16 +358,60 @@ class Evolver:
         self._log_mutation(mutation, ledger, identity)
         return {"applied": True, **mutation}
 
+    # --- operator 6: retire specialists (evidence gated) -----------------
+
+    def retired_roles(self) -> set:
+        return set(self.retired)
+
+    def retire_specialists(self, roster_roles=None, *, ledger=None, identity=None,
+                           min_dispatch: int = 4, max_rate: float = 0.1, keep_min: int = 4) -> dict:
+        """Operator: retire a specialist the router keeps dispatching to but that almost
+        always fails — pruning dead weight from the roster. Never retires an unused or
+        new specialist (needs ``min_dispatch`` dispatches), and never drops the roster
+        below ``keep_min``. Reversible (unretire)."""
+        roster = list(roster_roles or [])
+        agg = self._role_agg()
+        candidates = []
+        for role in roster:
+            if role in self.retired:
+                continue
+            s = agg.get(role)
+            if not s or s["n"] < min_dispatch:
+                continue
+            if s["succ"] / s["n"] <= max_rate:
+                candidates.append(role)
+        if not candidates:
+            return {"applied": False, "reason": "no chronically-failing specialists", "kind": "specialist_retired"}
+        active = [r for r in roster if r not in self.retired]
+        room = max(0, len(active) - keep_min)
+        to_retire = candidates[:room]
+        if not to_retire:
+            return {"applied": False, "reason": f"would drop the roster below {keep_min}", "kind": "specialist_retired"}
+        self._push_undo({"store": "retired", "prev": sorted(self.retired)})
+        self.retired.update(to_retire)
+        self._save_json(self.retired_path, sorted(self.retired))
+        mutation = {"kind": "specialist_retired", "roles": to_retire}
+        self._log_mutation(mutation, ledger, identity)
+        return {"applied": True, **mutation}
+
+    def unretire(self, role: str) -> dict:
+        if role in self.retired:
+            self.retired.discard(role)
+            self._save_json(self.retired_path, sorted(self.retired))
+            return {"unretired": True, "role": role}
+        return {"unretired": False, "role": role}
+
     # --- run everything --------------------------------------------------
 
-    def evolve_all(self, playbooks=None, skill_library=None, *, current_budgets=None,
-                   ledger=None, identity=None) -> dict:
+    def evolve_all(self, playbooks=None, skill_library=None, *, roster_roles=None,
+                   current_budgets=None, ledger=None, identity=None) -> dict:
         return {
             "routing": self.evolve(ledger=ledger, identity=identity),
             "budgets": self.tune_budgets(current_budgets, ledger=ledger, identity=identity),
             "lessons": self.learn_lessons(ledger=ledger, identity=identity),
             "playbooks": self.distill_playbooks(playbooks, ledger=ledger, identity=identity),
             "skills": self.promote_skills(skill_library, ledger=ledger, identity=identity),
+            "retire": self.retire_specialists(roster_roles, ledger=ledger, identity=identity),
         }
 
     # --- auto-evolve cadence ---------------------------------------------
@@ -418,6 +466,9 @@ class Evolver:
         elif store == "lessons":
             self.lessons = {k: list(v) for k, v in prev.items()}
             self._save_json(self.lessons_path, self.lessons)
+        elif store == "retired":
+            self.retired = set(prev)
+            self._save_json(self.retired_path, sorted(self.retired))
         else:
             return {"reverted": False, "reason": f"cannot revert {store!r}"}
         self._write_undo(entries[:-1])
@@ -456,6 +507,7 @@ class Evolver:
             "learned": {t: len(self.learned.get(t, [])) for t in _ORDER},
             "budgets": dict(self.budgets),
             "lessons": {r: len(v) for r, v in self.lessons.items()},
+            "retired": sorted(self.retired),
             "auto": self.auto,
             "can_revert": self.can_revert(),
             "mutations": self._mutation_log(),

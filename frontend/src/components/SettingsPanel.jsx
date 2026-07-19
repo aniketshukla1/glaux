@@ -7,7 +7,7 @@ import {
   getFsWorkspace, setFsWorkspace,
   getPlaybooks, setPlaybooksEnabled, savePlaybook, deletePlaybook,
   getSubagents, saveSubagent, deleteSubagent,
-  getEvolution, evolveHarness, setAutoEvolve, revertEvolution, unpinSkill,
+  getEvolution, evolveHarness, setAutoEvolve, revertEvolution, unpinSkill, unretireSpecialist,
 } from '../api.js'
 import Modal from './Modal.jsx'
 import LlmControl from './LlmControl.jsx'
@@ -496,6 +496,7 @@ function EvolutionTab({ onRefresh }) {
     if (r.lessons?.applied) parts.push(`lessons: ${Object.keys(r.lessons.roles || {}).length} role(s)`)
     if (r.playbooks?.applied) parts.push(`playbooks: +${(r.playbooks.playbooks || []).length}`)
     if (r.skills?.applied) parts.push(`tools: +${(r.skills.skills || []).length} pinned`)
+    if (r.retire?.applied) parts.push(`retired: ${(r.retire.roles || []).length}`)
     return parts.length ? `Evolved — ${parts.join(', ')}.` : 'No changes warranted yet — run more tasks.'
   }
 
@@ -529,7 +530,14 @@ function EvolutionTab({ onRefresh }) {
     catch (e) { setMsg({ kind: 'err', text: e.message }) }
   }
 
+  const unretire = async (role) => {
+    setMsg(null)
+    try { await unretireSpecialist(role); await load(); onRefresh && onRefresh() }
+    catch (e) { setMsg({ kind: 'err', text: e.message }) }
+  }
+
   const pinnedTools = data?.pinned_skills || []
+  const retired = data?.retired || []
   const learned = data?.learned || {}
   const budgets = data?.budgets || {}
   const lessons = data?.lessons || {}
@@ -541,6 +549,7 @@ function EvolutionTab({ onRefresh }) {
     if (m.kind === 'prompt_lesson') return `lessons added ${JSON.stringify(m.roles || {})}`
     if (m.kind === 'playbook_distilled') return `distilled ${(m.playbooks || []).join(', ')}`
     if (m.kind === 'skill_pinned') return `pinned ${(m.skills || []).join(', ')}`
+    if (m.kind === 'specialist_retired') return `retired ${(m.roles || []).join(', ')}`
     if (m.kind === 'revert') return `reverted ${m.store || ''}`
     return ''
   }
@@ -592,6 +601,21 @@ function EvolutionTab({ onRefresh }) {
                   <X className="w-3.5 h-3.5" />
                 </button>
               </div>
+            ))}
+          </div>
+        </Section>
+      )}
+
+      {retired.length > 0 && (
+        <Section title="Retired specialists" hint="Specialists the harness pruned after they kept getting dispatched and failing. Restore one to bring it back into the roster.">
+          <div className="flex flex-wrap gap-1.5">
+            {retired.map((role) => (
+              <span key={role} className="glass rounded-md pl-2.5 pr-1 py-1 flex items-center gap-1.5 text-xs">
+                <span className="font-mono text-muted">{role}</span>
+                <button onClick={() => unretire(role)} className="btn p-0.5 text-muted hover:text-fg" aria-label="Restore specialist">
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
             ))}
           </div>
         </Section>

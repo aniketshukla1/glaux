@@ -174,8 +174,49 @@ def test_evolve_all_runs_every_operator(tmp_path):
     t0 = tier_router.route_tier(d)
     ev.record(d, t0, success=False)
     rep = ev.evolve_all(pb, current_budgets={})
-    assert set(rep) == {"routing", "budgets", "lessons", "playbooks", "skills"}
+    assert set(rep) == {"routing", "budgets", "lessons", "playbooks", "skills", "retire"}
     assert rep["routing"]["applied"] is True   # the mis-tier got learned
+
+
+def test_retire_specialists_retires_a_chronic_failure(tmp_path):
+    ev = Evolver(root=tmp_path)
+    for _ in range(5):  # dispatched enough, always fails
+        ev.record_roles([{"role": "coder", "success": False, "capped": False, "iters": 3, "sig": "boom"}])
+    roster = ["coder", "researcher", "web", "analyst", "writer", "tester"]
+    rep = ev.retire_specialists(roster)
+    assert rep["applied"] is True and rep["roles"] == ["coder"]
+    assert "coder" in ev.retired_roles()
+
+
+def test_retire_needs_enough_dispatches(tmp_path):
+    ev = Evolver(root=tmp_path)
+    for _ in range(3):  # below min_dispatch → never retire an unused/new specialist
+        ev.record_roles([{"role": "coder", "success": False, "capped": False, "iters": 3, "sig": "x"}])
+    assert ev.retire_specialists(["coder", "a", "b", "c", "d"])["applied"] is False
+
+
+def test_retire_respects_the_roster_floor(tmp_path):
+    ev = Evolver(root=tmp_path)
+    for role in ["r1", "r2", "r3", "r4", "r5"]:
+        for _ in range(5):
+            ev.record_roles([{"role": role, "success": False, "capped": False, "iters": 1, "sig": "x"}])
+    rep = ev.retire_specialists(["r1", "r2", "r3", "r4", "r5"], keep_min=4)
+    assert rep["applied"] is True and len(rep["roles"]) == 1   # floor of 4 → at most 1 retired
+    assert len(ev.retired_roles()) == 1
+
+
+def test_unretire_and_revert_bring_a_specialist_back(tmp_path):
+    ev = Evolver(root=tmp_path)
+    for _ in range(5):
+        ev.record_roles([{"role": "coder", "success": False, "capped": False, "iters": 1, "sig": "x"}])
+    ev.retire_specialists(["coder", "a", "b", "c", "d"])
+    assert "coder" in ev.retired_roles()
+    assert ev.unretire("coder")["unretired"] is True
+    assert "coder" not in ev.retired_roles()
+    # and the generic revert also undoes a retirement
+    ev.retire_specialists(["coder", "a", "b", "c", "d"])
+    ev.revert()
+    assert ev.retired_roles() == set()
 
 
 class _Rec:
@@ -221,7 +262,7 @@ def test_evolve_all_includes_skill_promotion(tmp_path):
     ev = Evolver(root=tmp_path)
     lib = _FakeLib([_Rec("s1", "slugify", "promoted", 6, 0.9)])
     rep = ev.evolve_all(None, lib, current_budgets={})
-    assert set(rep) == {"routing", "budgets", "lessons", "playbooks", "skills"}
+    assert set(rep) == {"routing", "budgets", "lessons", "playbooks", "skills", "retire"}
     assert rep["skills"]["applied"] is True
 
 

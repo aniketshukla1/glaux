@@ -100,6 +100,7 @@ export const evolveHarness = () => request('POST', '/api/evolution/evolve')
 export const setAutoEvolve = (enabled, every) => request('POST', '/api/evolution/auto', { enabled, every })
 export const revertEvolution = () => request('POST', '/api/evolution/revert')
 export const unpinSkill = (id) => request('POST', `/api/evolution/unpin/${id}`)
+export const unretireSpecialist = (role) => request('POST', `/api/evolution/unretire/${role}`)
 
 // accounts (signup / login / profile)
 export const getAuthState = () => request('GET', '/api/auth/state')
