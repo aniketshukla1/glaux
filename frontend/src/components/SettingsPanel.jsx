@@ -7,7 +7,7 @@ import {
   getFsWorkspace, setFsWorkspace,
   getPlaybooks, setPlaybooksEnabled, savePlaybook, deletePlaybook,
   getSubagents, saveSubagent, deleteSubagent,
-  getEvolution, evolveHarness, revertEvolution,
+  getEvolution, evolveHarness, setAutoEvolve, revertEvolution,
 } from '../api.js'
 import Modal from './Modal.jsx'
 import LlmControl from './LlmControl.jsx'
@@ -476,23 +476,34 @@ function SubagentsTab() {
   )
 }
 
-// Self-evolving harness: watch routing accuracy, trigger a gated evolution, revert.
+// Self-evolving harness: routing / budgets / lessons / playbooks that learn from outcomes.
 function EvolutionTab({ onRefresh }) {
   const [data, setData] = useState(null)
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState(null)
+  const [every, setEvery] = useState(10)
 
   const load = () => getEvolution().then(setData).catch(() => {})
   useEffect(() => { load() }, [])
+  useEffect(() => { if (data?.auto?.every) setEvery(data.auto.every) }, [data?.auto?.every])
 
   const pct = (v) => (v == null ? '—' : `${Math.round(v * 100)}%`)
+
+  const summarize = (r) => {
+    const parts = []
+    if (r.routing?.applied) parts.push(`routing ${pct(r.routing.baseline_accuracy)}→${pct(r.routing.accuracy)}`)
+    if (r.budgets?.applied) parts.push(`budgets: ${Object.keys(r.budgets.changes || {}).length} role(s)`)
+    if (r.lessons?.applied) parts.push(`lessons: ${Object.keys(r.lessons.roles || {}).length} role(s)`)
+    if (r.playbooks?.applied) parts.push(`playbooks: +${(r.playbooks.playbooks || []).length}`)
+    return parts.length ? `Evolved — ${parts.join(', ')}.` : 'No changes warranted yet — run more tasks.'
+  }
 
   const evolve = async () => {
     setBusy(true); setMsg(null)
     try {
       const r = await evolveHarness()
-      if (r.applied) setMsg({ kind: 'ok', text: `Evolved — routing accuracy ${pct(r.baseline_accuracy)} → ${pct(r.accuracy)}.` })
-      else setMsg({ kind: 'err', text: r.reason || 'No change.' })
+      const applied = ['routing', 'budgets', 'lessons', 'playbooks'].some((k) => r[k]?.applied)
+      setMsg({ kind: applied ? 'ok' : 'err', text: summarize(r) })
       await load(); onRefresh && onRefresh()
     } catch (e) { setMsg({ kind: 'err', text: e.message }) }
     finally { setBusy(false) }
@@ -500,19 +511,38 @@ function EvolutionTab({ onRefresh }) {
 
   const revert = async () => {
     setBusy(true); setMsg(null)
-    try { await revertEvolution(); setMsg({ kind: 'ok', text: 'Reverted the last evolution.' }); await load(); onRefresh && onRefresh() }
+    try { await revertEvolution(); setMsg({ kind: 'ok', text: 'Reverted the last change.' }); await load(); onRefresh && onRefresh() }
     catch (e) { setMsg({ kind: 'err', text: e.message }) }
     finally { setBusy(false) }
   }
 
+  const toggleAuto = async (enabled) => {
+    setMsg(null)
+    try { await setAutoEvolve(enabled, Number(every) || 10); await load(); onRefresh && onRefresh() }
+    catch (e) { setMsg({ kind: 'err', text: e.message }) }
+  }
+
   const learned = data?.learned || {}
+  const budgets = data?.budgets || {}
+  const lessons = data?.lessons || {}
   const muts = (data?.mutations || []).slice().reverse()
+
+  const logLine = (m) => {
+    if (m.kind === 'router_exemplars') return `routing accuracy ${pct(m.baseline_accuracy)} → ${pct(m.accuracy)}`
+    if (m.kind === 'role_budgets') return `budgets ${JSON.stringify(m.changes || {})}`
+    if (m.kind === 'prompt_lesson') return `lessons added ${JSON.stringify(m.roles || {})}`
+    if (m.kind === 'playbook_distilled') return `distilled ${(m.playbooks || []).join(', ')}`
+    if (m.kind === 'revert') return `reverted ${m.store || ''}`
+    return ''
+  }
+
+  const chip = 'px-2 py-0.5 rounded-md text-[11px] font-mono bg-line/10 text-muted'
 
   return (
     <div>
       <Section
-        title="Self-evolving router"
-        hint="The harness learns better fast / medium / full routing from task outcomes. A proposed change is applied only if it improves routing accuracy on the recorded episodes — and every change is signed to the ledger and reversible."
+        title="Self-evolving harness"
+        hint="The harness learns from task outcomes: better fast/medium/full routing, per-specialist iteration budgets, prompt lessons from repeated failures, and playbooks distilled from successful runs. A change is applied only when the evidence supports it — and every one is signed to the ledger and reversible."
         first
       >
         <div className="grid grid-cols-2 gap-3">
@@ -527,9 +557,13 @@ function EvolutionTab({ onRefresh }) {
         </div>
         <div className="flex flex-wrap gap-1.5 mt-3">
           {['fast', 'medium', 'full'].map((t) => (
-            <span key={t} className="px-2 py-0.5 rounded-md text-[11px] font-mono bg-line/10 text-muted">
-              {t}: {learned[t] || 0} learned
-            </span>
+            <span key={t} className={chip}>{t}: {learned[t] || 0} learned</span>
+          ))}
+          {Object.entries(budgets).map(([r, it]) => (
+            <span key={`b-${r}`} className={chip}>{r}: {it} iters</span>
+          ))}
+          {Object.entries(lessons).map(([r, n]) => (
+            <span key={`l-${r}`} className={chip}>{r}: {n} lesson{n === 1 ? '' : 's'}</span>
           ))}
         </div>
         <div className="mt-4 flex items-center gap-3">
@@ -539,7 +573,21 @@ function EvolutionTab({ onRefresh }) {
         </div>
       </Section>
 
-      <Section title="Evolution log" hint="Every accepted mutation — each also signed to the ledger.">
+      <Section title="Auto-evolve" hint="Run every operator automatically after a set number of recorded episodes. Each change is still gated + signed.">
+        <div className="glass rounded-lg px-4 py-3 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-2 text-sm text-muted">
+            every
+            <input
+              type="number" min={1} max={200} value={every} onChange={(e) => setEvery(e.target.value)}
+              className="w-16 glass px-2 py-1.5 rounded-lg bg-transparent outline-none text-sm text-fg text-center focus:border-line/30"
+            />
+            episodes
+          </div>
+          <Toggle on={!!data?.auto?.enabled} busy={busy} onChange={toggleAuto} />
+        </div>
+      </Section>
+
+      <Section title="Evolution log" hint="Every accepted change — each also signed to the ledger.">
         {muts.length === 0 ? (
           <p className="text-faint text-xs">No evolutions yet. Run some tasks, then evolve.</p>
         ) : (
@@ -547,12 +595,7 @@ function EvolutionTab({ onRefresh }) {
             {muts.map((m, i) => (
               <div key={i} className="glass rounded-lg px-3.5 py-2.5 text-xs">
                 <div className="text-fg font-mono">{m.kind}</div>
-                {m.accuracy != null && (
-                  <div className="text-faint mt-0.5">
-                    accuracy {pct(m.baseline_accuracy)} → {pct(m.accuracy)}
-                    {m.learned_counts && ` · learned ${JSON.stringify(m.learned_counts)}`}
-                  </div>
-                )}
+                <div className="text-faint mt-0.5">{logLine(m)}</div>
               </div>
             ))}
           </div>

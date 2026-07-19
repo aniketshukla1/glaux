@@ -93,6 +93,91 @@ def test_learned_exemplars_persist_across_instances(tmp_path):
     assert tier_router.route_tier(d) == ideal
 
 
+def test_tune_budgets_raises_when_role_keeps_capping_and_failing(tmp_path):
+    ev = Evolver(root=tmp_path)
+    for _ in range(4):
+        ev.record_roles([{"role": "coder", "success": False, "capped": True, "iters": 8, "sig": "max iterations reached"}])
+    rep = ev.tune_budgets({"coder": 8})
+    assert rep["applied"] is True and rep["changes"]["coder"] == 10
+    assert ev.budget_overrides()["coder"] == 10
+
+
+def test_tune_budgets_lowers_when_role_finishes_early(tmp_path):
+    ev = Evolver(root=tmp_path)
+    for _ in range(4):
+        ev.record_roles([{"role": "writer", "success": True, "capped": False, "iters": 3, "sig": ""}])
+    rep = ev.tune_budgets({"writer": 8})
+    assert rep["applied"] is True and rep["changes"]["writer"] == 7
+
+
+def test_tune_budgets_needs_min_samples(tmp_path):
+    ev = Evolver(root=tmp_path)
+    for _ in range(3):  # below the evidence threshold
+        ev.record_roles([{"role": "coder", "success": False, "capped": True, "iters": 8, "sig": "x"}])
+    assert ev.tune_budgets({"coder": 8})["applied"] is False
+
+
+def test_learn_lessons_on_repeated_failures(tmp_path):
+    ev = Evolver(root=tmp_path)
+    for _ in range(3):
+        ev.record_roles([{"role": "coder", "success": False, "capped": False, "iters": 5, "sig": "tool X not found"}])
+    rep = ev.learn_lessons()
+    assert rep["applied"] is True and rep["roles"]["coder"] == 1
+    assert any("tool X not found" in le for le in ev.lessons_for()["coder"])
+
+
+def test_distill_playbook_from_a_successful_multistep_run(tmp_path):
+    from agents.playbook import Playbooks
+
+    ev = Evolver(root=tmp_path)
+    pb = Playbooks(root=tmp_path / "pb")
+    ev.record("build and test a todo api", "full", success=True, n_roles=2, roles=["coder", "tester"])
+    rep = ev.distill_playbooks(pb)
+    assert rep["applied"] is True and len(rep["playbooks"]) == 1
+    saved = pb.list()
+    assert len(saved) == 1
+    body = pb.read(saved[0]["slug"])["body"]
+    assert "coder" in body and "tester" in body
+    # a second distill of the same episode must not duplicate the playbook
+    assert ev.distill_playbooks(pb)["applied"] is False
+
+
+def test_auto_evolve_cadence(tmp_path):
+    ev = Evolver(root=tmp_path)
+    ev.set_auto(True, every=3)
+    assert ev.should_autoevolve() is False
+    ev.record("a", "fast", False)
+    ev.record("b", "fast", False)
+    assert ev.should_autoevolve() is False   # 2 < 3
+    ev.record("c", "fast", False)
+    assert ev.should_autoevolve() is True     # cadence hit → fires + resets
+    assert ev.should_autoevolve() is False    # reset
+
+
+def test_revert_undoes_the_last_mutation_across_stores(tmp_path):
+    ev = Evolver(root=tmp_path)
+    for _ in range(4):
+        ev.record_roles([{"role": "coder", "success": False, "capped": True, "iters": 8, "sig": "x"}])
+    ev.tune_budgets({"coder": 8})
+    assert ev.budget_overrides()["coder"] == 10
+    out = ev.revert()
+    assert out["reverted"] is True and out["store"] == "budgets"
+    assert ev.budget_overrides() == {}          # rolled back
+
+
+def test_evolve_all_runs_every_operator(tmp_path):
+    from agents.playbook import Playbooks
+
+    ev = Evolver(root=tmp_path)
+    pb = Playbooks(root=tmp_path / "pb")
+    d = "what is a florb?"
+    t0 = tier_router.route_tier(d)
+    ev.record(d, t0, success=False)
+    rep = ev.evolve_all(pb, current_budgets={})
+    assert set(rep) == {"routing", "budgets", "lessons", "playbooks"}
+    assert rep["routing"]["applied"] is True   # the mis-tier got learned
+
+
 def test_evolution_is_signed_to_the_ledger(tmp_path):
     pytest.importorskip("athena_ledger")
     from core.ledger import Ledger

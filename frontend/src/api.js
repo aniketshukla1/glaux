@@ -94,9 +94,10 @@ export const saveSubagent = (name, description, prompt, iterations) =>
   request('POST', '/api/subagents', { name, description, prompt, iterations })
 export const deleteSubagent = (slug) => request('DELETE', `/api/subagents/${slug}`)
 
-// self-evolving harness: routing that learns from outcomes (gated + ledger-signed)
+// self-evolving harness: config that learns from outcomes (gated + ledger-signed)
 export const getEvolution = () => request('GET', '/api/evolution')
 export const evolveHarness = () => request('POST', '/api/evolution/evolve')
+export const setAutoEvolve = (enabled, every) => request('POST', '/api/evolution/auto', { enabled, every })
 export const revertEvolution = () => request('POST', '/api/evolution/revert')
 
 // accounts (signup / login / profile)

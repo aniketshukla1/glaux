@@ -510,14 +510,39 @@ class _State:
             unregister_playbooks(self.mcp.builtin)
         self.playbooks_enabled = bool(enabled)
 
+    def _current_budgets(self) -> dict:
+        m = {role: spec.get("iterations", 8) for role, spec in SPECIALISTS.items()}
+        for spec in self.custom_agents.list():
+            m[spec["slug"]] = int(spec.get("iterations", 8))
+        return m
+
     def record_episode(self, directive: str, result) -> None:
-        """Log a finished task so the self-evolving harness can learn from it. Best
-        effort — telemetry must never break a task."""
+        """Log a finished task (episode + per-role outcomes) so the self-evolving
+        harness can learn from it. Best effort — telemetry must never break a task."""
         try:
+            roles = [s.role for s in result.plan.steps]
             self.evolver.record(
                 directive, getattr(result, "tier", "full"), bool(result.success),
-                n_roles=getattr(result, "n_roles", 0),
+                n_roles=getattr(result, "n_roles", 0), roles=roles,
             )
+            items = []
+            for sr in getattr(result, "steps", {}).values():
+                ar = getattr(sr, "result", None)
+                if ar is None:
+                    continue
+                text = ar.result if isinstance(ar.result, str) else ""
+                items.append({
+                    "role": getattr(sr.step, "role", None), "success": bool(ar.success),
+                    "capped": text == "max iterations reached",
+                    "iters": getattr(ar, "iterations", 0),
+                    "sig": "" if ar.success else text[:80],
+                })
+            self.evolver.record_roles(items)
+            if self.evolver.should_autoevolve():
+                self.evolver.evolve_all(
+                    self.playbooks, current_budgets=self._current_budgets(),
+                    ledger=self.ledger, identity=self.identities["router"],
+                )
         except Exception:  # noqa: BLE001
             pass
 
@@ -628,9 +653,13 @@ class _State:
         # actual work use the primary model.
         aux = self.aux_llm()
         router = Router(identity=self.identities["router"], llm=aux, ledger=self.ledger)
+        # Self-evolving harness: apply learned iteration budgets + prompt lessons.
+        budgets = self.evolver.budget_overrides()
+        lessons = self.evolver.lessons_for()
         # Register the full specialist roster; the router composes a team per directive.
         specialists = build_specialists(
-            identities=self.identities, llm=self.llm, ledger=self.ledger, mcp_client=self.mcp
+            identities=self.identities, llm=self.llm, ledger=self.ledger, mcp_client=self.mcp,
+            budget_overrides=budgets, lessons=lessons,
         )
         # User-defined sub-agents: mint + persist a stable identity for each (so they
         # sign the ledger like any specialist), then merge them into the roster. They
@@ -648,7 +677,7 @@ class _State:
             build_custom_specialists(
                 self.custom_agents, identities=self.identities, llm=self.llm,
                 reserved=reserved, ledger=self.ledger, mcp_client=self.mcp,
-                context_manager=self.context,
+                context_manager=self.context, budget_overrides=budgets, lessons=lessons,
             )
         )
         reflector = Reflector(identity=self.identities["reflector"], llm=aux, ledger=self.ledger)
@@ -1283,7 +1312,8 @@ def health() -> dict:
         "subagents": {"builtin": len(SPECIALISTS), "custom": len(STATE.custom_agents.list())},
         "evolution": {
             "learned": sum(len(v) for v in STATE.evolver.learned.values()),
-            "can_revert": STATE.evolver.prev_path.exists(),
+            "auto": STATE.evolver.auto.get("enabled", False),
+            "can_revert": STATE.evolver.can_revert(),
         },
     }
 
@@ -1422,9 +1452,24 @@ def evolution_status() -> dict:
 
 @app.post("/api/evolution/evolve")
 def evolution_evolve() -> dict:
-    """Propose + gate + (maybe) commit one evolution of the router. Human-in-the-loop
-    over self-modification: only applied if it improves routing accuracy, and signed."""
-    return STATE.evolver.evolve(ledger=STATE.ledger, identity=STATE.identities["router"])
+    """Run every evolution operator (routing, budgets, lessons, playbooks). Each is
+    independently gated — applied only when the evidence supports it — and signed.
+    Human-in-the-loop over self-modification."""
+    return STATE.evolver.evolve_all(
+        STATE.playbooks, current_budgets=STATE._current_budgets(),
+        ledger=STATE.ledger, identity=STATE.identities["router"],
+    )
+
+
+class AutoEvolveConfig(BaseModel):
+    enabled: bool
+    every: int = 10
+
+
+@app.post("/api/evolution/auto")
+def evolution_auto(cfg: AutoEvolveConfig) -> dict:
+    """Toggle the auto-evolve cadence (run the operators every N recorded episodes)."""
+    return STATE.evolver.set_auto(cfg.enabled, cfg.every)
 
 
 @app.post("/api/evolution/revert")

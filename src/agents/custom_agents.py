@@ -91,24 +91,35 @@ class CustomAgents:
         return {"slug": slug, "deleted": True}
 
 
-def build_custom_specialists(store: CustomAgents, *, identities: dict, llm, reserved, **kwargs) -> dict:
+def build_custom_specialists(
+    store: CustomAgents, *, identities: dict, llm, reserved,
+    budget_overrides=None, lessons=None, **kwargs,
+) -> dict:
     """Turn saved specs into BaseAgents, keyed by slug, ready to merge into the swarm
     roster. Skips any slug that would shadow a built-in role, or that has no minted
-    identity yet (the caller backfills identities first)."""
+    identity yet (the caller backfills identities first). The self-evolving harness
+    may override the iteration budget and inject learned lessons per slug."""
     from .base import ACTION_INSTRUCTIONS, BaseAgent
 
     reserved = set(reserved)
+    budget_overrides = budget_overrides or {}
+    lessons = lessons or {}
     out: dict = {}
     for spec in store.list():
         slug = spec["slug"]
         if slug in reserved or slug not in identities:
             continue
+        prompt = spec["prompt"] + "\n" + ACTION_INSTRUCTIONS
+        if lessons.get(slug):
+            prompt += "\n\nLEARNED LESSONS (from past runs — heed them):\n" + "\n".join(
+                f"- {le}" for le in lessons[slug]
+            )
         agent = BaseAgent(
             identity=identities[slug],
             llm=llm,
             name=slug,
-            system_prompt=spec["prompt"] + "\n" + ACTION_INSTRUCTIONS,
-            max_iterations=int(spec.get("iterations", 8)),
+            system_prompt=prompt,
+            max_iterations=int(budget_overrides.get(slug) or spec.get("iterations", 8)),
             **kwargs,
         )
         # The router reads this to decide when to dispatch to this sub-agent.

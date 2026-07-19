@@ -106,20 +106,27 @@ SPECIALISTS: dict[str, dict] = {
 }
 
 
-def _role_prompt(prompt: str, name: str) -> str:
-    return prompt.format(name=name) + "\n" + ACTION_INSTRUCTIONS
+def _role_prompt(prompt: str, name: str, lessons=None) -> str:
+    base = prompt.format(name=name) + "\n" + ACTION_INSTRUCTIONS
+    if lessons:
+        base += "\n\nLEARNED LESSONS (from past runs — heed them):\n" + "\n".join(f"- {le}" for le in lessons)
+    return base
 
 
-def make_specialist(role: str, *, identity, llm, name: str | None = None, **kwargs) -> BaseAgent:
-    """Build a single specialist by role name from the registry."""
+def make_specialist(
+    role: str, *, identity, llm, name: str | None = None,
+    iterations: int | None = None, lessons=None, **kwargs,
+) -> BaseAgent:
+    """Build a single specialist by role name from the registry. The self-evolving
+    harness may override the iteration budget and inject learned lessons."""
     spec = SPECIALISTS[role]
     name = name or role
     agent = BaseAgent(
         identity=identity,
         llm=llm,
         name=name,
-        system_prompt=_role_prompt(spec["prompt"], name),
-        max_iterations=spec.get("iterations", 8),
+        system_prompt=_role_prompt(spec["prompt"], name, lessons),
+        max_iterations=iterations if iterations is not None else spec.get("iterations", 8),
         **kwargs,
     )
     # Read by the router to compose a team for each directive.
@@ -127,14 +134,22 @@ def make_specialist(role: str, *, identity, llm, name: str | None = None, **kwar
     return agent
 
 
-def build_specialists(*, identities: dict, llm, **kwargs) -> dict[str, BaseAgent]:
+def build_specialists(
+    *, identities: dict, llm, budget_overrides=None, lessons=None, **kwargs,
+) -> dict[str, BaseAgent]:
     """Build the full specialist roster, one agent per role in ``SPECIALISTS``.
 
     `identities` must contain an :class:`AgentIdentity` for every specialist role.
-    Extra kwargs (ledger, mcp_client, …) are forwarded to each agent.
+    `budget_overrides` / `lessons` are the self-evolving harness's learned per-role
+    tweaks. Extra kwargs (ledger, mcp_client, …) are forwarded to each agent.
     """
+    budget_overrides = budget_overrides or {}
+    lessons = lessons or {}
     return {
-        role: make_specialist(role, identity=identities[role], llm=llm, **kwargs)
+        role: make_specialist(
+            role, identity=identities[role], llm=llm,
+            iterations=budget_overrides.get(role), lessons=lessons.get(role), **kwargs,
+        )
         for role in SPECIALISTS
     }
 
