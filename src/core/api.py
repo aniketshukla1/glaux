@@ -71,6 +71,7 @@ from agents import (
     default_local_client,
     search_status,
 )
+from agents.answer_cache import AnswerCache
 from agents.context import ContextManager
 from agents.custom_agents import CustomAgentError, CustomAgents, build_custom_specialists
 from agents.evolution import Evolver
@@ -457,6 +458,9 @@ class _State:
         # Self-evolving harness: learns better tier routing from task outcomes, gated
         # by a replay metric + signed to the ledger. Loads + applies learned exemplars.
         self.evolver = Evolver()
+        # Semantic answer cache: a near-duplicate directive returns the prior answer
+        # (zero LLM calls) — the biggest inference-cost lever on repeated work.
+        self.answer_cache = AnswerCache.from_env()
         METRICS.bind(_metrics_path())  # counters survive restarts → real cumulative data
         self.search_config = _load_search_config()
         configure_search(self.search_config.get("provider", ""), self.search_config.get("keys", {}))
@@ -1324,6 +1328,7 @@ def health() -> dict:
             "auto": STATE.evolver.auto.get("enabled", False),
             "can_revert": STATE.evolver.can_revert(),
         },
+        "cache": STATE.answer_cache.stats(),
     }
 
 
@@ -1505,6 +1510,28 @@ def evolution_unretire(role: str) -> dict:
     return STATE.evolver.unretire(role)
 
 
+class CacheToggle(BaseModel):
+    enabled: bool
+
+
+@app.get("/api/cache")
+def cache_status() -> dict:
+    """Semantic answer cache — entries, hit/miss counts, threshold."""
+    return STATE.answer_cache.stats()
+
+
+@app.post("/api/cache")
+def cache_toggle(req: CacheToggle) -> dict:
+    STATE.answer_cache.set_enabled(req.enabled)
+    return STATE.answer_cache.stats()
+
+
+@app.delete("/api/cache")
+def cache_clear() -> dict:
+    cleared = STATE.answer_cache.clear()
+    return {"cleared": cleared, **STATE.answer_cache.stats()}
+
+
 @app.get("/api/agents")
 def agents() -> dict:
     return {
@@ -1559,7 +1586,8 @@ def _prepare_run(req: TaskRequest):
     return swarm, budget, run_directive, STATE.llm.model_id
 
 
-def _finalize_run(req: TaskRequest, result, before: int, sources: list, elapsed: float, model_id: str) -> dict:
+def _finalize_run(req: TaskRequest, result, before: int, sources: list, elapsed: float,
+                  model_id: str, run_directive: Optional[str] = None) -> dict:
     """Record metrics, persist the run, and build the response payload — shared by
     the blocking and streaming task endpoints."""
     new_blocks = [STATE.ledger.block(i) for i in range(before, len(STATE.ledger))]
@@ -1580,6 +1608,13 @@ def _finalize_run(req: TaskRequest, result, before: int, sources: list, elapsed:
     # Self-evolving harness: record the episode so the router can learn from outcomes.
     if not result.cancelled:
         STATE.record_episode(req.directive, result)
+    # Semantic answer cache: remember a good answer so a near-identical ask can skip
+    # the whole run next time (never breaks a task — best effort).
+    if result.success and result.final and run_directive:
+        try:
+            STATE.answer_cache.store(run_directive, result.final, model_id)
+        except Exception:  # noqa: BLE001
+            pass
     log_json(
         "task", outcome=outcome, blocks=len(new_blocks), duration_s=round(elapsed, 3),
         cost=result.cost, synthesized=len(result.synthesized),
@@ -1619,6 +1654,38 @@ def _finalize_run(req: TaskRequest, result, before: int, sources: list, elapsed:
     }
 
 
+def _serve_from_cache(req: TaskRequest, cached: dict, before: int) -> dict:
+    """Return a cached answer as a full task response — signed to the ledger, recorded
+    as a run, zero LLM cost. Matches the shape _finalize_run returns."""
+    STATE.ledger.append(STATE.identities["router"], "CACHE_HIT", {
+        "directive": req.directive[:200], "matched": (cached.get("directive") or "")[:200],
+        "similarity": round(cached.get("similarity", 0.0), 3),
+    })
+    METRICS.inc("swarm_tasks_total", outcome="cached")
+    METRICS.inc("answer_cache_hits_total")
+    new_blocks = [STATE.ledger.block(i) for i in range(before, len(STATE.ledger))]
+    verification = _verification()
+    zero = {"llm_calls": 0, "total_tokens": 0, "usd": 0.0}
+    from core.sessions import Run
+
+    session = STATE.sessions.record_run(
+        Run(
+            id="", directive=req.directive, final=cached["answer"], success=True,
+            cost=zero, verification=verification, blocks=new_blocks, created_at="",
+            model=cached.get("model") or "cache", canvas=None, sources=[],
+        ),
+        session_id=req.session_id,
+    )
+    return {
+        "success": True, "final": cached["answer"], "cost": zero,
+        "model": cached.get("model") or "cache", "cancelled": False, "canvas": None,
+        "sources": [], "budget_halt": None, "synthesized": [], "plan": [], "steps": [],
+        "new_blocks": new_blocks, "verification": verification, "session_id": session.id,
+        "cached": True, "similarity": round(cached.get("similarity", 0.0), 3),
+        "matched_directive": cached.get("directive"),
+    }
+
+
 MAX_DIRECTIVE_CHARS = 16000  # a task instruction; long documents belong in attachments
 
 
@@ -1642,6 +1709,9 @@ async def run_task(req: TaskRequest) -> dict:
     _validate_directive(req.directive)
     before = len(STATE.ledger)
     swarm, budget, run_directive, model_id = _prepare_run(req)
+    cached = STATE.answer_cache.lookup(run_directive)
+    if cached is not None:  # near-identical ask — return the prior answer, zero LLM cost
+        return _serve_from_cache(req, cached, before)
     uid = _current_user_id.get()
     cancel_ev = STATE.cancel_for(uid)
     cancel_ev.clear()  # fresh start; a Stop press during this run sets it
@@ -1672,7 +1742,7 @@ async def run_task(req: TaskRequest) -> dict:
         WS.publish({"type": "token_end", "uid": uid})  # tell clients the stream is done
     elapsed = time.monotonic() - t0
     sources = collected_sources()  # web pages the swarm actually browsed this run
-    return _finalize_run(req, result, before, sources, elapsed, model_id)
+    return _finalize_run(req, result, before, sources, elapsed, model_id, run_directive)
 
 
 @app.post("/api/task/stream")
@@ -1684,6 +1754,7 @@ async def run_task_stream(req: TaskRequest):
     _validate_directive(req.directive)
     before = len(STATE.ledger)
     swarm, budget, run_directive, model_id = _prepare_run(req)
+    cached = STATE.answer_cache.lookup(run_directive)
     uid = _current_user_id.get()
     cancel_ev = STATE.cancel_for(uid)
     cancel_ev.clear()
@@ -1702,6 +1773,13 @@ async def run_task_stream(req: TaskRequest):
     async def gen():
         t0 = time.monotonic()
         yield _sse({"type": "start", "directive": req.directive, "model": model_id})
+        if cached is not None:  # near-identical ask — stream the prior answer, zero LLM cost
+            payload = _serve_from_cache(req, cached, before)
+            answer = cached["answer"] or ""
+            for i in range(0, len(answer), 48):
+                yield _sse({"type": "token", "text": answer[i:i + 48]})
+            yield _sse({"type": "done", "result": payload})
+            return
         fut = asyncio.create_task(
             run_in_threadpool(lambda: swarm.run(run_directive, budget=budget, cancel=cancel_ev.is_set, on_token=_on_token))
         )
@@ -1739,7 +1817,7 @@ async def run_task_stream(req: TaskRequest):
             return
         elapsed = time.monotonic() - t0
         sources = collected_sources()
-        payload = _finalize_run(req, result, before, sources, elapsed, model_id)
+        payload = _finalize_run(req, result, before, sources, elapsed, model_id, run_directive)
         yield _sse({"type": "done", "result": payload})
 
     return StreamingResponse(gen(), media_type="text/event-stream", headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})

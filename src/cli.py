@@ -23,6 +23,7 @@ Configure (parity with the app's Settings):
   athena skills [synth "…"|approve <id>|reject <id>]   synthesize / gate skills
   athena evolution [status|evolve|revert|auto on|unpin <id>|unretire <role>]
   athena personas [list|add|rm]         ·   athena recipes [list|add|rm]
+  athena cache [status|on|off|clear]    semantic answer cache (skip repeat runs)
 
 Account / admin:
   athena login · logout · whoami   ·   athena messaging   (gateways, admin)
@@ -512,6 +513,9 @@ def cmd_status(args) -> int:
     print(f"  workspace: {'on' if ws.get('enabled') else 'off'}   playbooks: {pb.get('count', 0)} ({'on' if pb.get('enabled') else 'off'})")
     print(f"  agents:   {sa.get('builtin', 0)} built-in + {sa.get('custom', 0)} custom   evolution: {ev.get('learned', 0)} learned"
           + ("  (auto)" if ev.get("auto") else ""))
+    cache = h.get("cache", {})
+    if cache:
+        print(f"  cache:    {'on' if cache.get('enabled') else 'off'}   {cache.get('entries', 0)} answers · {cache.get('hits', 0)} hits")
     return 0
 
 
@@ -952,6 +956,30 @@ def cmd_evolution(args) -> int:
     return 0
 
 
+def cmd_cache(args) -> int:
+    base_url = f"http://{args.host}:{args.port}"
+    if args.action == "clear":
+        out = _api(base_url, "DELETE", "/api/cache")
+        if out is None:
+            return 1
+        print(style(f"✓ cleared {out.get('cleared', 0)} cached answer(s)", "green"))
+        return 0
+    if args.action in ("on", "off"):
+        out = _api(base_url, "POST", "/api/cache", {"enabled": args.action == "on"})
+        if out is None:
+            return 1
+        print(style(f"✓ answer cache {'on' if out.get('enabled') else 'off'}", "green"))
+        return 0
+    data = _api(base_url, "GET", "/api/cache")
+    if data is None:
+        return 1
+    on = data.get("enabled")
+    print("  answer cache: " + (style("on", "green") if on else style("off", "dim"))
+          + style(f"   {data.get('entries', 0)} entries · {data.get('hits', 0)} hits / {data.get('misses', 0)} misses"
+                  f" · threshold {data.get('threshold')}", "dim"))
+    return 0
+
+
 def cmd_personas(args) -> int:
     base_url = f"http://{args.host}:{args.port}"
     act = getattr(args, "action", "list") or "list"
@@ -1277,6 +1305,10 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("evolve", help="run one evolution pass (alias for `evolution evolve`)").set_defaults(
         func=lambda a: cmd_evolution(argparse.Namespace(**{**vars(a), "action": "evolve", "value": None, "every": 10}))
     )
+
+    cache_p = sub.add_parser("cache", help="semantic answer cache: status, on, off, clear")
+    cache_p.add_argument("action", nargs="?", default="status", choices=["status", "on", "off", "clear"])
+    cache_p.set_defaults(func=cmd_cache)
 
     per = sub.add_parser("personas", help="saved personas: list, add, rm")
     per.add_argument("action", nargs="?", default="list", choices=["list", "add", "rm"])

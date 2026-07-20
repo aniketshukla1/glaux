@@ -189,6 +189,19 @@ def test_recipe_add_and_rm(monkeypatch):
     assert calls2 == [("DELETE", "/api/recipes/r1", None)]
 
 
+def test_cache_commands(monkeypatch):
+    calls = _record_api(monkeypatch, {"cleared": 3, "entries": 0})
+    cli.cmd_cache(cli.build_parser().parse_args(["cache", "clear"]))
+    assert calls == [("DELETE", "/api/cache", None)]
+    calls2 = _record_api(monkeypatch, {"enabled": False})
+    cli.cmd_cache(cli.build_parser().parse_args(["cache", "off"]))
+    assert calls2 == [("POST", "/api/cache", {"enabled": False})]
+    calls3 = _record_api(monkeypatch, {"enabled": True, "entries": 5, "hits": 2, "misses": 1, "threshold": 0.92})
+    cli.cmd_cache(cli.build_parser().parse_args(["cache"]))
+    assert calls3 == [("GET", "/api/cache", None)]
+    assert cli.build_parser().parse_args(["cache", "on"]).action == "on"
+
+
 def test_api_delete_routes_through_req_json(monkeypatch):
     seen = {}
     monkeypatch.setattr(cli, "_req_json", lambda m, u, p=None, **k: seen.update(method=m, url=u, payload=p) or {"ok": True})

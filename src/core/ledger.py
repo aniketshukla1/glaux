@@ -45,6 +45,7 @@ class Action:
     MCP_TOOL = "MCP_TOOL"
     COMPACT = "COMPACT_CONTEXT"
     EVOLVE = "EVOLVE_HARNESS"
+    CACHE_HIT = "CACHE_HIT"
 
 
 @dataclass

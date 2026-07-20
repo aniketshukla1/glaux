@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react'
 import {
   ArrowUp, Compass, Code2, Search, ShieldCheck, Wrench, Terminal,
   Check, AlertTriangle, ChevronRight, ChevronDown, ArrowDown, Loader2, GraduationCap, BadgeCheck,
-  Coins, Cpu, Mic, Volume2, VolumeX, Copy, RotateCcw, Square,
+  Coins, Cpu, Mic, Volume2, VolumeX, Copy, RotateCcw, Square, Zap,
   Globe, FlaskConical, BarChart3, Server, Bug, PenLine, Paperclip, X, FileText,
 } from 'lucide-react'
 import SwarmGraph from './SwarmGraph.jsx'
@@ -174,7 +174,13 @@ function ResultCard({ result, verification, onRegenerate, createdAt }) {
       {result.budget_halt && <div className="mt-2 text-xs text-amber-400">budget guard: {result.budget_halt}</div>}
       <div className="mt-4 pt-3 border-t border-line/10 flex flex-wrap items-center gap-x-5 gap-y-1 text-xs text-faint">
         {verification?.valid && <span className="flex items-center gap-1.5 text-emerald-400"><ShieldCheck className="w-3.5 h-3.5" /> chain verified</span>}
-        {result.model && <span className="flex items-center gap-1.5"><Cpu className="w-3.5 h-3.5" /> {result.model}</span>}
+        {result.cached && (
+          <span className="flex items-center gap-1.5 text-amber-400"
+            title={result.matched_directive ? `matched a prior ask: "${result.matched_directive}"` : 'served from the answer cache'}>
+            <Zap className="w-3.5 h-3.5" /> served from cache
+          </span>
+        )}
+        {result.model && !result.cached && <span className="flex items-center gap-1.5"><Cpu className="w-3.5 h-3.5" /> {result.model}</span>}
         <span>{c.llm_calls || 0} calls · {(c.total_tokens || 0).toLocaleString()} tokens</span>
         <span className="flex items-center gap-1.5"><Coins className="w-3.5 h-3.5" /> ~${(c.usd || 0).toFixed(4)}</span>
         <span className="ml-auto">{createdAt ? timeAgo(createdAt) : 'just now'}</span>
