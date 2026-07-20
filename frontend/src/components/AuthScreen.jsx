@@ -4,6 +4,7 @@ import {
   login, setToken, signupWithInvite, oauthStart, forgotPassword, resetPassword,
 } from '../api.js'
 import ConstellationSphere from './ConstellationSphere.jsx'
+import SwarmField from './SwarmField.jsx'
 
 function Input({ icon: Icon, value, onChange, type = 'text', ...props }) {
   return (
@@ -95,7 +96,9 @@ export default function AuthScreen({ firstRun, onAuthed, oauthProviders = [], in
   const cta = { login: 'Sign in', signup: 'Create account', forgot: 'Send reset link', reset: 'Set password' }[mode]
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center px-5 py-10 animate-fade-in">
+    <div className="relative min-h-screen flex flex-col items-center justify-center px-5 py-10 animate-fade-in overflow-hidden">
+      <SwarmField className="absolute inset-0 w-full h-full" opacity={0.75} />
+      <div className="relative z-10 w-full flex flex-col items-center">
       <ConstellationSphere size={300} owlRatio={0.36} />
       <h1 className="text-fg text-2xl font-medium tracking-tight mt-4 text-center">{heading}</h1>
       <p className="text-muted text-sm mt-2 text-center max-w-sm">{sub}</p>
@@ -144,6 +147,7 @@ export default function AuthScreen({ firstRun, onAuthed, oauthProviders = [], in
             <ArrowLeft className="w-3.5 h-3.5" /> Back to sign in
           </button>
         )}
+      </div>
       </div>
     </div>
   )

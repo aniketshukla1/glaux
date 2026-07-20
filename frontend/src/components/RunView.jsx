@@ -7,6 +7,7 @@ import {
 } from 'lucide-react'
 import SwarmGraph from './SwarmGraph.jsx'
 import ConstellationSphere from './ConstellationSphere.jsx'
+import SwarmField from './SwarmField.jsx'
 import Canvas from './Canvas.jsx'
 import Sources from './Sources.jsx'
 import { extractPdfText } from '../lib/pdf.js'
@@ -527,15 +528,18 @@ export default function RunView({ session, blocks, roleOf, running, result, goal
 
   if (!hasContent) {
     return (
-      <div className="min-h-[72vh] flex flex-col items-center justify-center text-center animate-fade-in px-5">
-        <ConstellationSphere size={300} />
-        <h1 className="text-fg text-2xl font-medium tracking-tight -mt-4">What should Athena do?</h1>
-        <p className="text-muted text-sm mt-2.5 max-w-md">Describe a goal. A swarm of agents plans it, does it, and proves every step.</p>
-        <Composer onDispatch={onDispatch} hero running={running} onStop={onStop} recipes={recipes} />
-        <div className="flex flex-wrap justify-center gap-2 mt-5 max-w-2xl">
-          {EXAMPLES.map((ex) => (
-            <button key={ex} onClick={() => onDispatch(ex)} className="text-xs px-3 py-1.5 rounded-full border border-line/15 text-muted hover:text-fg hover:border-line/30 transition">{ex}</button>
-          ))}
+      <div className="relative min-h-[72vh] flex flex-col items-center justify-center text-center animate-fade-in px-5 overflow-hidden">
+        <SwarmField className="absolute inset-0 w-full h-full" opacity={0.55} />
+        <div className="relative z-10 flex flex-col items-center w-full">
+          <ConstellationSphere size={300} />
+          <h1 className="text-fg text-2xl font-medium tracking-tight -mt-4">What should Athena do?</h1>
+          <p className="text-muted text-sm mt-2.5 max-w-md">Describe a goal. A swarm of agents plans it, does it, and proves every step.</p>
+          <Composer onDispatch={onDispatch} hero running={running} onStop={onStop} recipes={recipes} />
+          <div className="flex flex-wrap justify-center gap-2 mt-5 max-w-2xl">
+            {EXAMPLES.map((ex) => (
+              <button key={ex} onClick={() => onDispatch(ex)} className="text-xs px-3 py-1.5 rounded-full border border-line/15 text-muted hover:text-fg hover:border-line/30 transition">{ex}</button>
+            ))}
+          </div>
         </div>
       </div>
     )
