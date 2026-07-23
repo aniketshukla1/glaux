@@ -1,0 +1,33 @@
+name: Feature request
+description: Suggest a capability or improvement
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem would this solve?
+      description: Describe the situation you're stuck in, not just the feature you want.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What would you like Athena to do?
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives you've considered
+
+  - type: checkboxes
+    id: boundaries
+    attributes:
+      label: Does this touch a safety boundary?
+      description: >
+        The sandbox's zero-ambient-authority default, the workspace jail, the capability
+        checks, and the append-only ledger are load-bearing. Flag it if this would change one.
+      options:
+        - label: This proposal would change a safety boundary

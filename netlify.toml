@@ -1,0 +1,10 @@
+# Deploy the static docs site (same directory GitHub Pages serves).
+[build]
+  publish = "docs"
+  command = ""
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"

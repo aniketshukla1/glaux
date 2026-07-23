@@ -1,0 +1,58 @@
+name: Bug report
+description: Something isn't working the way it should
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. Please don't include API keys or other secrets.
+        For a **security vulnerability**, use private reporting instead — see SECURITY.md.
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What you expected, and what actually happened.
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: How can we reproduce it?
+      description: The smallest set of steps or the directive you ran.
+      placeholder: |
+        1. athena up
+        2. athena run "…"
+        3. …
+    validations:
+      required: true
+
+  - type: textarea
+    id: status
+    attributes:
+      label: "`athena status` output"
+      description: Model, safety mode, ledger size, capabilities. Redact anything sensitive.
+      render: shell
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs
+      description: The useful slice of `~/.athena/athena.log`.
+      render: shell
+
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Output of `athena version`
+      placeholder: athena 1.0.0
+    validations:
+      required: true
+
+  - type: input
+    id: platform
+    attributes:
+      label: OS and Python version
+      placeholder: macOS 15.5, Python 3.12

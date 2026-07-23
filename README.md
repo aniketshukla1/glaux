@@ -10,6 +10,7 @@ hash-chained ledger — so you can *verify* what your agents did, not just read 
 [![CI](https://github.com/aniketshukla/athena-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/aniketshukla/athena-agent/actions/workflows/ci.yml)
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue)
 ![Tests](https://img.shields.io/badge/tests-457%20passing-brightgreen)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
 
 </div>
 
@@ -160,4 +161,4 @@ To report a vulnerability, see [SECURITY.md](SECURITY.md).
 
 ## License
 
-See [LICENSE](LICENSE).
+[Apache License 2.0](LICENSE) — permissive, with an explicit patent grant.
