@@ -12,6 +12,8 @@ hash-chained ledger — so you can *verify* what your agents did, not just read 
 ![Tests](https://img.shields.io/badge/tests-457%20passing-brightgreen)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
 
+<img src="docs/images/console.png" alt="The Athena swarm console" width="860" />
+
 </div>
 
 ---
@@ -68,6 +70,14 @@ playbooks, its tool library, and retiring dead-weight specialists. Every mutatio
   replay accuracy on recorded episodes),
 - **signed** — written to the ledger as `EVOLVE_HARNESS`, and
 - **reversible** — one-click revert.
+
+<div align="center">
+  <img src="docs/images/evolution.png" alt="The self-evolving harness: routing accuracy, promoted tools, and a signed evolution log" width="760" />
+</div>
+
+Above: the harness has lifted its own routing accuracy to 95% over 71 episodes, promoted
+two synthesized skills (`reverse_string`, `slugify`) to permanent tools, and logged every
+change — each one signed and revertible.
 
 ### 4. It doesn't pay the full stack tax on every question
 
