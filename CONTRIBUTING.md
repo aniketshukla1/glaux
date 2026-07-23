@@ -42,6 +42,18 @@ npm --prefix frontend run build              # dashboard
 venv/bin/athena up                           # run the server
 ```
 
+## Docs
+
+The markdown in `docs/` is the source of truth. The website renders it into styled
+pages — after editing a `.md`, regenerate so the site matches:
+
+```bash
+pip install markdown
+python scripts/build_docs.py     # docs/*.md -> docs/*.html
+```
+
+CI rebuilds them on deploy too, so a missed run won't ship a stale site.
+
 ## Reporting bugs
 
 Open an issue with what you expected, what happened, and the smallest reproduction you

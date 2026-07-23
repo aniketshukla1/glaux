@@ -30,6 +30,7 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0", "httpx>=0.27"]
+docs = ["markdown>=3.5"]   # renders docs/*.md into the website (scripts/build_docs.py)
 
 [project.scripts]
 athena = "cli:main"
