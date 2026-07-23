@@ -4,9 +4,21 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "athena-agent"
-version = "0.1.0"
-description = "Self-improving multi-agent swarm with cryptographic identity, sandboxed skills, and curated self-improvement"
+version = "1.0.0"
+description = "A self-improving multi-agent swarm that proves its work — every action signed to a tamper-evident ledger"
+readme = "README.md"
 requires-python = ">=3.10"
+authors = [{ name = "Aniket Shukla" }]
+keywords = ["ai", "agents", "multi-agent", "llm", "swarm", "sandbox", "audit", "self-improving"]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
 dependencies = [
     "cryptography>=42.0",
     "base58>=2.1",

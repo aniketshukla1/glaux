@@ -1166,8 +1166,20 @@ def cmd_recipes(args) -> int:
     return 0
 
 
+FALLBACK_VERSION = "1.0.0"  # used when running from a source checkout (not installed)
+
+
+def athena_version() -> str:
+    try:
+        from importlib.metadata import version
+
+        return version("athena-agent")
+    except Exception:  # noqa: BLE001 - source checkout / metadata unavailable
+        return FALLBACK_VERSION
+
+
 def cmd_version(_args) -> int:
-    print("athena 0.2")
+    print(f"athena {athena_version()}")
     return 0
 
 
