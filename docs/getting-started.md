@@ -5,12 +5,12 @@
 - **Python 3.10+**
 - **A Rust toolchain** — the ledger kernel is a native crate built during install ([rustup.rs](https://rustup.rs))
 - **Node.js 18+** — to build the dashboard
-- *Optional:* [AthenaDB](https://github.com/aniketshukla/athenadb) cloned as a sibling directory, for the memory layers
+- *Optional:* [AthenaDB](https://github.com/athena-swarm/athenadb) cloned as a sibling directory, for the memory layers
 
 ## Install
 
 ```bash
-git clone https://github.com/aniketshukla/athena-agent && cd athena-agent
+git clone https://github.com/athena-swarm/athena && cd athena
 ./install.sh
 ```
 

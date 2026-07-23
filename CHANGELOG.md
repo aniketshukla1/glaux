@@ -55,4 +55,4 @@ The initial open-source release.
 ### Interfaces
 - Web dashboard, a full-parity `athena` CLI, a desktop app, and messaging gateways.
 
-[1.0.0]: https://github.com/aniketshukla/athena-agent/releases/tag/v1.0.0
+[1.0.0]: https://github.com/athena-swarm/athena/releases/tag/v1.0.0

@@ -7,7 +7,7 @@
 Every reasoning step, tool call, and self-modification is signed onto a tamper-evident,
 hash-chained ledger — so you can *verify* what your agents did, not just read a trace.
 
-[![CI](https://github.com/aniketshukla/athena-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/aniketshukla/athena-agent/actions/workflows/ci.yml)
+[![CI](https://github.com/athena-swarm/athena/actions/workflows/ci.yml/badge.svg)](https://github.com/athena-swarm/athena/actions/workflows/ci.yml)
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue)
 ![Tests](https://img.shields.io/badge/tests-457%20passing-brightgreen)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
@@ -26,7 +26,7 @@ sandbox-tests it, and uses it in the same run.
 It runs fully **local-first** on Ollama, or against 30+ hosted providers.
 
 ```bash
-git clone https://github.com/aniketshukla/athena-agent && cd athena-agent
+git clone https://github.com/athena-swarm/athena && cd athena
 ./install.sh                 # venv + native ledger kernel + dashboard
 ./venv/bin/athena up         # → http://127.0.0.1:8000
 ```
@@ -152,7 +152,7 @@ Architecture notes live in [ARCHITECTURE.md](ARCHITECTURE.md).
 - Python 3.10+
 - A Rust toolchain (the ledger kernel is a native crate, built by `install.sh`)
 - Node.js (to build the dashboard)
-- Optional: [AthenaDB](https://github.com/aniketshukla/athenadb) as a sibling repo for the memory layers
+- Optional: [AthenaDB](https://github.com/athena-swarm/athenadb) as a sibling repo for the memory layers
 
 ## Contributing
 

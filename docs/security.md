@@ -3,7 +3,7 @@
 Athena executes model-written code, so isolation is a core feature rather than an
 afterthought. This page describes what the system defends and what it deliberately does
 not. To *report* a vulnerability, see
-[SECURITY.md](https://github.com/aniketshukla/athena-agent/blob/main/SECURITY.md).
+[SECURITY.md](https://github.com/athena-swarm/athena/blob/main/SECURITY.md).
 
 ## Layers
 

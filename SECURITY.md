@@ -5,7 +5,7 @@
 **Please do not open a public issue for a security vulnerability.**
 
 Report it privately through
-[GitHub Security Advisories](https://github.com/aniketshukla/athena-agent/security/advisories/new).
+[GitHub Security Advisories](https://github.com/athena-swarm/athena/security/advisories/new).
 Include a description, reproduction steps, and the impact you believe it has. You'll
 get an acknowledgement within a few days, and credit in the fix unless you'd rather not.
 
