@@ -14,6 +14,8 @@ hash-chained ledger — so you can *verify* what your agents did, not just read 
 
 <img src="docs/images/console.png" alt="The Athena swarm console" width="860" />
 
+**[athena-swarm.github.io/athena](https://athena-swarm.github.io/athena/)** · [Documentation](https://athena-swarm.github.io/athena/docs/)
+
 </div>
 
 ---

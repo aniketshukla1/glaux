@@ -1,7 +1,11 @@
-# Deploy the static docs site (same directory GitHub Pages serves).
+# Deploy the Next.js site (static export) to Netlify.
 [build]
-  publish = "docs"
-  command = ""
+  base = "site"
+  command = "npm run build"
+  publish = "site/out"
+
+[build.environment]
+  NODE_VERSION = "20"
 
 [[headers]]
   for = "/*"

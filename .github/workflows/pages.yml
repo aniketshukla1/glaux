@@ -1,9 +1,9 @@
-name: Deploy docs site
+name: Deploy site
 
 on:
   push:
     branches: [main, master]
-    paths: ["docs/**", "scripts/build_docs.py", ".github/workflows/pages.yml"]
+    paths: ["site/**", "docs/**", "scripts/build_site_docs.py", ".github/workflows/pages.yml"]
   workflow_dispatch:
 
 permissions:
@@ -16,10 +16,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  deploy:
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+  build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -28,14 +25,38 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Render the markdown docs into styled pages
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: site/package-lock.json
+
+      - name: Regenerate docs pages from the canonical markdown
         run: |
           python -m pip install --upgrade pip markdown
-          python scripts/build_docs.py
+          python scripts/build_site_docs.py
+
+      - name: Build the Next.js site (static export)
+        working-directory: site
+        env:
+          # GitHub Pages serves a project site under /<repo>; a custom domain does not.
+          NEXT_PUBLIC_BASE_PATH: /athena
+        run: |
+          npm ci
+          npm run build
+          touch out/.nojekyll
 
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: docs
+          path: site/out
+
+  deploy:
+    needs: build
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
       - id: deployment
         uses: actions/deploy-pages@v4

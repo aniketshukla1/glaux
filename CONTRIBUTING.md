@@ -42,17 +42,20 @@ npm --prefix frontend run build              # dashboard
 venv/bin/athena up                           # run the server
 ```
 
-## Docs
+## Docs and the website
 
-The markdown in `docs/` is the source of truth. The website renders it into styled
-pages — after editing a `.md`, regenerate so the site matches:
+The markdown in `docs/` is the source of truth (and stays readable on GitHub). The
+website is a Next.js app in `site/` that renders those docs into styled pages — after
+editing a `.md`, regenerate so the site matches:
 
 ```bash
 pip install markdown
-python scripts/build_docs.py     # docs/*.md -> docs/*.html
+python scripts/build_site_docs.py    # docs/*.md -> site/app/docs/*/page.tsx
+cd site && npm run build             # optional: verify the static export
 ```
 
-CI rebuilds them on deploy too, so a missed run won't ship a stale site.
+CI regenerates + rebuilds on deploy too, so a missed run won't ship a stale site. See
+[site/README.md](site/README.md) for local development and deployment.
 
 ## Reporting bugs
 
