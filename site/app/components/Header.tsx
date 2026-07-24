@@ -11,8 +11,8 @@ export function Header() {
         <Link href="/" className="flex items-center gap-2 font-semibold text-fg">
           <Logo size={26} /> Athena
         </Link>
-        <nav className="ml-auto flex items-center gap-6 text-sm text-muted">
-          <Link href="/#different" className="transition hover:text-fg">
+        <nav className="ml-auto flex items-center gap-4 text-sm text-muted sm:gap-6">
+          <Link href="/#different" className="hidden transition hover:text-fg sm:inline">
             Why Athena
           </Link>
           <Link href="/docs/getting-started" className="transition hover:text-fg">

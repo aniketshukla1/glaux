@@ -75,7 +75,7 @@ export default function Home() {
           <div className="mx-auto mb-7 w-fit drop-shadow-[0_0_20px_rgb(var(--accent)/0.45)]">
             <Logo size={72} />
           </div>
-          <h1 className="text-[clamp(38px,6vw,62px)] font-semibold leading-[1.05] tracking-tight">
+          <h1 className="text-[clamp(30px,7vw,62px)] font-semibold leading-[1.07] tracking-tight">
             A multi-agent swarm
             <br />
             that <span className="gradient-text">proves its work</span>
