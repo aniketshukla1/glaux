@@ -113,15 +113,16 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Product shot */}
-      <section className="mx-auto -mt-10 max-w-content px-6">
-        <div className="overflow-hidden rounded-2xl border border-line/12 shadow-2xl shadow-black/40">
+      {/* Demo */}
+      <section className="mx-auto -mt-6 max-w-3xl px-6">
+        <div className="overflow-hidden rounded-2xl border border-line/12 shadow-2xl shadow-black/50">
           <Image
-            src="/images/console.png"
-            alt="The Athena swarm console"
-            width={2880}
-            height={1440}
+            src="/images/demo.gif"
+            alt="Athena running a task, streaming the swarm, and verifying the signed ledger"
+            width={800}
+            height={470}
             className="w-full"
+            unoptimized
             priority
           />
         </div>

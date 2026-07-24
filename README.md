@@ -12,9 +12,11 @@ hash-chained ledger — so you can *verify* what your agents did, not just read 
 ![Tests](https://img.shields.io/badge/tests-457%20passing-brightgreen)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
 
-<img src="docs/images/console.png" alt="The Athena swarm console" width="860" />
+<img src="docs/images/demo.gif" alt="Athena running a task, streaming the swarm, and verifying the signed ledger" width="720" />
 
 **[athena-swarm.github.io/athena](https://athena-swarm.github.io/athena/)** · [Documentation](https://athena-swarm.github.io/athena/docs/)
+
+<img src="docs/images/console.png" alt="The Athena swarm console" width="860" />
 
 </div>
 
