@@ -12,6 +12,8 @@ hash-chained ledger — so you can *verify* what your agents did, not just read 
 ![Tests](https://img.shields.io/badge/tests-457%20passing-brightgreen)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
 
+`multi-agent swarm` · `signed ledger` · `runtime tool synthesis` · `self-improving` · `WASM sandbox` · `local-first`
+
 <img src="docs/images/demo.gif" alt="Athena running a task, streaming the swarm, and verifying the signed ledger" width="720" />
 
 **[athena-swarm.github.io/athena](https://athena-swarm.github.io/athena/)** · [Documentation](https://athena-swarm.github.io/athena/docs/)

@@ -72,7 +72,20 @@ export default function Home() {
       <section className="relative flex min-h-[86vh] flex-col items-center justify-center overflow-hidden px-6 py-24 text-center">
         <SwarmField className="absolute inset-0 h-full w-full" />
         <div className="relative z-10 max-w-3xl animate-fade-up">
-          <div className="mx-auto mb-7 w-fit drop-shadow-[0_0_20px_rgb(var(--accent)/0.45)]">
+          <div className="mb-7 flex justify-center">
+            <a
+              href={REPO}
+              className="inline-flex items-center gap-2 rounded-full border border-line/15 bg-surface/60 px-3.5 py-1.5 text-[13px] text-muted backdrop-blur transition hover:border-accent/40 hover:text-fg"
+            >
+              <span className="relative flex h-1.5 w-1.5">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-accent opacity-75" />
+                <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-accent" />
+              </span>
+              Now open source — Apache-2.0
+              <ArrowRight className="h-3.5 w-3.5" />
+            </a>
+          </div>
+          <div className="mx-auto mb-6 w-fit drop-shadow-[0_0_20px_rgb(var(--accent)/0.45)]">
             <Logo size={72} />
           </div>
           <h1 className="text-[clamp(30px,7vw,62px)] font-semibold leading-[1.07] tracking-tight">
@@ -99,16 +112,17 @@ export default function Home() {
               What makes it different
             </Link>
           </div>
-          <div className="mt-8 flex flex-wrap justify-center gap-x-6 gap-y-2 text-[13px] text-faint">
-            <span>
-              <b className="font-semibold text-accent">Signed</b> provenance
-            </span>
-            <span>
-              <b className="font-semibold text-accent">Local-first</b> — runs offline
-            </span>
-            <span>
-              <b className="font-semibold text-accent">Apache-2.0</b>
-            </span>
+          <div className="mt-8 flex flex-wrap justify-center gap-2">
+            {["Proves every step", "Writes its own tools", "Can’t get worse", "WASM-sandboxed", "Runs offline"].map(
+              (t) => (
+                <span
+                  key={t}
+                  className="rounded-full border border-line/12 bg-surface/40 px-3 py-1 text-[12.5px] text-muted transition hover:border-accent/30 hover:text-fg"
+                >
+                  {t}
+                </span>
+              ),
+            )}
           </div>
         </div>
       </section>
