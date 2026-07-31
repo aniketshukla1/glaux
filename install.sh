@@ -48,11 +48,28 @@ say "Installing the 'athena' command"
 pip install --quiet -e .
 
 # --- dashboard ------------------------------------------------------------
-if command -v npm >/dev/null 2>&1; then
-  say "Building the dashboard"
-  ( cd frontend && npm install --silent && npm run build --silent )
+# The API and CLI are fully usable without the dashboard, so anything wrong here
+# is a warning, never a failed install. Notably: `apt install nodejs` on Ubuntu
+# 22.04 still gives Node 12, which dies inside Vite on a top-level await with a
+# bare "SyntaxError: Unexpected reserved word" — no hint that Node is the problem.
+NODE_MAJOR=0
+if command -v node >/dev/null 2>&1; then
+  NODE_MAJOR="$(node -p 'process.versions.node.split(".")[0]' 2>/dev/null || echo 0)"
+fi
+
+if ! command -v npm >/dev/null 2>&1 || ! command -v node >/dev/null 2>&1; then
+  echo "  (Node.js/npm not found — skipping the dashboard; the API and CLI still work)"
+elif [ "$NODE_MAJOR" -lt 18 ]; then
+  echo "  (Node $(node -v) is too old to build the dashboard — Vite needs 18+.)"
+  echo "   Install a newer Node with nvm or NodeSource, then:"
+  echo "     npm --prefix frontend install && npm --prefix frontend run build"
+  echo "   The API and CLI work without it."
 else
-  echo "  (npm not found — skipping the dashboard build; the API still runs)"
+  say "Building the dashboard"
+  if ! ( cd frontend && npm install --silent && npm run build --silent ); then
+    echo "  (the dashboard build failed — the API and CLI still work.)"
+    echo "   Retry with:  npm --prefix frontend install && npm --prefix frontend run build"
+  fi
 fi
 
 cat <<EOF

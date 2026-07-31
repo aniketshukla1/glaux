@@ -150,8 +150,9 @@ scripts/clean_install_test.sh         # install on a pristine container, end to 
 ```
 
 **Requires** Python 3.10+, a Rust toolchain (the ledger kernel is a native crate), and
-Node.js for the dashboard. Optionally [AthenaDB](https://github.com/athena-swarm/athenadb)
-as a sibling repo for the memory layers.
+**Node.js 18+** for the dashboard — note that Ubuntu's default `nodejs` package is older
+than that; the API and CLI work fine without it. Optionally
+[AthenaDB](https://github.com/athena-swarm/athenadb) as a sibling repo for the memory layers.
 
 ## Contributing
 
