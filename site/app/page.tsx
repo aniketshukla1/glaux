@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { SwarmField } from "./components/SwarmField";
 import { Logo } from "./components/Logo";
+import { asset } from "./config";
 
 const REPO = "https://github.com/athena-swarm/athena";
 
@@ -131,7 +132,7 @@ export default function Home() {
       <section className="mx-auto -mt-6 max-w-3xl px-6">
         <div className="overflow-hidden rounded-2xl border border-line/12 shadow-2xl shadow-black/50">
           <Image
-            src="/images/demo.gif"
+            src={asset("/images/demo.gif")}
             alt="Athena running a task, streaming the swarm, and verifying the signed ledger"
             width={800}
             height={470}
@@ -259,7 +260,7 @@ export default function Home() {
           </div>
           <div className="overflow-hidden rounded-2xl border border-line/12 shadow-xl shadow-black/30">
             <Image
-              src="/images/evolution.png"
+              src={asset("/images/evolution.png")}
               alt="The self-evolving harness"
               width={2400}
               height={2000}
