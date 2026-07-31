@@ -11,7 +11,9 @@ const title = "Athena — a multi-agent swarm that proves its work";
 const description =
   "A self-improving multi-agent swarm. Every action is signed onto a tamper-evident ledger, it writes its own tools at runtime, and it improves itself without being able to get worse.";
 
-const ogImage = `${SITE}/images/console.png`;
+// purpose-built 1280x640 card (scripts/build_brand_assets.py) — console.png is a
+// screenshot and crops badly at social aspect ratios
+const ogImage = `${SITE}/images/social-card.png`;
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE),
