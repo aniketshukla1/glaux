@@ -129,6 +129,18 @@ class Ledger:
         """Full block including payload."""
         return json.loads(self._led.block(index))
 
+    def block_json(self, index: int) -> str:
+        """The block exactly as the native kernel canonicalizes it.
+
+        Use this for anything that must stay verifiable — never
+        ``json.dumps(block(i))``. Block hashes are computed over the serialized
+        form, and Python and Rust can pick different (both valid) shortest
+        representations of the same f64: Rust writes 1785527751.8959339 where
+        Python writes 1785527751.895934. The value round-trips, the bytes do
+        not, and the chain then fails to verify at that block.
+        """
+        return self._led.block(index)
+
     def save(self, path) -> None:
         self._led.save(str(path))
 

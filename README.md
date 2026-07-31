@@ -29,8 +29,9 @@ sandbox-tests it, and uses it in the same run. It runs fully **local-first** on 
 or against 30+ hosted providers.
 
 ```bash
+git clone https://github.com/athena-swarm/athenadb        # the vector store, cloned alongside
 git clone https://github.com/athena-swarm/athena && cd athena
-./install.sh                 # venv + native ledger kernel + dashboard
+./install.sh                 # venv + native kernels + dashboard
 ./venv/bin/athena up         # → http://127.0.0.1:8000
 ```
 
@@ -149,10 +150,11 @@ venv/bin/python -m pytest -q          # 464 tests
 scripts/clean_install_test.sh         # install on a pristine container, end to end
 ```
 
-**Requires** Python 3.10+, a Rust toolchain (the ledger kernel is a native crate), and
-**Node.js 18+** for the dashboard — note that Ubuntu's default `nodejs` package is older
-than that; the API and CLI work fine without it. Optionally
-[AthenaDB](https://github.com/athena-swarm/athenadb) as a sibling repo for the memory layers.
+**Requires** Python 3.10+, a Rust toolchain (the ledger kernel and vector store are native
+crates), and [AthenaDB](https://github.com/athena-swarm/athenadb) cloned as a sibling
+directory — the memory layers and skill library are built on it. **Node.js 18+** is needed
+only for the dashboard; Ubuntu's default `nodejs` package is older than that, and the API
+and CLI work fine without it.
 
 ## Contributing
 

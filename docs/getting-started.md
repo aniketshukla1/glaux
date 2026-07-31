@@ -3,19 +3,31 @@
 ## Requirements
 
 - **Python 3.10+**
-- **A Rust toolchain** — the ledger kernel is a native crate built during install ([rustup.rs](https://rustup.rs))
-- **Node.js 18+** — to build the dashboard
-- *Optional:* [AthenaDB](https://github.com/athena-swarm/athenadb) cloned as a sibling directory, for the memory layers
+- **A Rust toolchain** — the ledger kernel and vector store are native crates built during install ([rustup.rs](https://rustup.rs))
+- **[AthenaDB](https://github.com/athena-swarm/athenadb)**, cloned as a sibling directory —
+  the memory layers and the skill library are built on it, so the server does not start
+  without it. `install.sh` checks for it before doing any work.
+- **Node.js 18+** — to build the dashboard. Ubuntu's default `nodejs` package is older
+  than this; install a current Node with [nvm](https://github.com/nvm-sh/nvm) or
+  [NodeSource](https://github.com/nodesource/distributions) if the dashboard is skipped.
+  The API and CLI work without it.
 
 ## Install
 
+Clone both repos side by side, then install from `athena`:
+
 ```bash
+git clone https://github.com/athena-swarm/athenadb
 git clone https://github.com/athena-swarm/athena && cd athena
 ./install.sh
 ```
 
 `install.sh` creates a virtualenv, installs dependencies, builds the native ledger
 kernel with maturin, installs the `athena` command, and builds the dashboard.
+
+To check the whole path on a pristine machine — the exact thing a new user hits —
+`scripts/clean_install_test.sh` runs it end to end in a clean container and verifies a
+signed ledger at the other side.
 
 ## First run
 

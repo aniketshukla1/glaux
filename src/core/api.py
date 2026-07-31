@@ -1846,7 +1846,10 @@ def export_ledger() -> PlainTextResponse:
     independently verifiable proof. Re-check it offline with:
         python scripts/verify_ledger.py <file>
     (every line is a block with its Ed25519 signature, signing key and hashes)."""
-    lines = [json.dumps(STATE.ledger.block(i)) for i in range(len(STATE.ledger))]
+    # Emit the kernel's own canonical bytes. Re-serializing via Python would
+    # reformat float timestamps just differently enough to break the hashes —
+    # see Ledger.block_json.
+    lines = [STATE.ledger.block_json(i) for i in range(len(STATE.ledger))]
     body = "\n".join(lines) + ("\n" if lines else "")
     return PlainTextResponse(
         body,

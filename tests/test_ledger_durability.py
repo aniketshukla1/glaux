@@ -44,3 +44,23 @@ def test_export_tamper_is_detected(tmp_path):
     f = tmp_path / "tampered.jsonl"
     f.write_text("\n".join(lines) + "\n")
     assert not Ledger.load(str(f)).verify().valid
+
+
+def test_export_is_byte_identical_to_the_kernel():
+    """The export must be the kernel's own canonical bytes, not a re-serialization.
+
+    Block hashes are computed over the serialized form, so round-tripping through
+    Python's json (``json.dumps(ledger.block(i))``) can reformat a float timestamp
+    into an equally-valid but different string and silently break the chain — an
+    exported ledger that fails independent verification. That showed up only for
+    certain timestamps, so this asserts the invariant directly instead of hoping
+    a run produces an unlucky float.
+    """
+    from core.api import STATE
+
+    client.post("/api/task", json={"directive": "summarize something briefly"})
+    lines = client.get("/api/ledger/export").text.strip().splitlines()
+    assert lines, "export should contain the signed chain"
+    assert len(lines) == len(STATE.ledger)
+    for i, line in enumerate(lines):
+        assert line == STATE.ledger.block_json(i), f"block {i} was re-serialized on export"

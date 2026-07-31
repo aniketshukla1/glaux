@@ -11,8 +11,30 @@ set -euo pipefail
 cd "$(dirname "$0")"
 ROOT="$(pwd)"
 VENV="$ROOT/venv"
+ATHENADB="$ROOT/../athenadb"
 
 say() { printf "\033[1;36m▸ %s\033[0m\n" "$1"; }
+
+# --- preflight ------------------------------------------------------------
+# AthenaDB backs the memory layers and the skill library, and core.api imports
+# them at module scope — so without it the server cannot start at all. Check now
+# rather than after a multi-minute Rust build.
+if [ ! -d "$ATHENADB" ]; then
+  PARENT="$(cd "$ROOT/.." && pwd)"
+  cat >&2 <<MSG
+AthenaDB is required, and was not found next to this repo.
+
+  expected at:  $PARENT/athenadb
+
+Athena's memory layers and skill library are built on it. Clone it beside this
+repo and run this script again:
+
+  git clone https://github.com/athena-swarm/athenadb $PARENT/athenadb
+  ./install.sh
+
+MSG
+  exit 1
+fi
 
 # --- python ---------------------------------------------------------------
 PY=""
@@ -36,12 +58,8 @@ pip install --quiet -r requirements.txt
 say "Building native ledger kernel (athena_ledger)"
 ( cd native/athena_ledger && VIRTUAL_ENV="$VENV" maturin develop --release )
 
-if [ -d "$ROOT/../athenadb" ]; then
-  say "Building AthenaDB from sibling repo"
-  ( cd "$ROOT/../athenadb" && VIRTUAL_ENV="$VENV" maturin develop --release )
-else
-  echo "  (AthenaDB sibling repo not found at ../athenadb — skipping; memory features need it)"
-fi
+say "Building AthenaDB (sibling repo)"
+( cd "$ATHENADB" && VIRTUAL_ENV="$VENV" maturin develop --release )
 
 # --- the athena CLI -------------------------------------------------------
 say "Installing the 'athena' command"
