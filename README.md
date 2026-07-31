@@ -54,9 +54,33 @@ and makes both safe by construction.
 ### 1. It proves its work — cryptographically
 
 Every action is Ed25519-signed by the agent that took it and appended to a hash-chained
-ledger. Tamper with any block and the chain breaks. `athena verify` checks it in one
-command. This is *provenance*, not logging: tracing tells you what a system claims it
+ledger. This is *provenance*, not logging: tracing tells you what a system claims it
 did; a signed chain lets you prove it.
+
+**Don't take our word for it — break it yourself.** Re-attribute a single action to a
+different agent and the chain names the exact block you touched:
+
+```bash
+athena run "compare Postgres and MongoDB for a multi-tenant SaaS"
+
+athena verify --file ~/.athena/ledger.jsonl
+#  ✓ chain verified   ·   14 signed blocks
+
+# claim someone else took the second action
+sed -i.bak '2s/"agent_id":"[^"]*"/"agent_id":"mallory"/' ~/.athena/ledger.jsonl
+
+athena verify --file ~/.athena/ledger.jsonl
+#  ✗ CHAIN INVALID at block 1 — block hash mismatch
+```
+
+`verify --file` reads the chain straight off disk — no running server, and no trust in
+the app that wrote it. Exit code is `0` for a valid chain and `1` for a broken one, so
+it drops into CI. Re-signing the forged block doesn't help either: the signature is
+checked against the acting agent's key, and every later block hashes the one before it.
+
+To be precise about what this buys you: it proves **integrity and attribution**, not
+**truth**. A wrong answer stays wrong — it just becomes non-repudiable, and it can't be
+quietly edited afterwards by anyone, including us.
 
 ### 2. It builds its own tools, at runtime
 

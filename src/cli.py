@@ -1067,16 +1067,69 @@ def cmd_search(args) -> int:
     return 0
 
 
+def _invalid(bad_index: int, reason: str) -> None:
+    print(
+        style("✗ CHAIN INVALID", "red")
+        + style(f" at block {bad_index}", "bold")
+        + style(f" — {reason}", "dim")
+    )
+
+
+def _verify_ledger_file(path: Path) -> int:
+    """Re-check the signatures and hash chain straight from a ledger file — no
+    running server, and no trust in the app that wrote it. This is the point of
+    signing the chain: a proof anyone can check for themselves."""
+    try:
+        from core.ledger import Ledger
+    except ModuleNotFoundError:  # running from a checkout rather than an install
+        sys.path.insert(0, str(SRC_DIR))
+        from core.ledger import Ledger
+
+    # A missing or empty file must never read as a pass: `Ledger.load` returns an
+    # empty chain, which verifies vacuously, so a typo'd path would print ✓.
+    if not path.exists():
+        return _err(f"No ledger at {path}")
+
+    try:
+        led = Ledger.load(str(path))
+    except Exception as e:  # noqa: BLE001 — any read/parse failure is a failed verify
+        return _err(f"Couldn't read the ledger at {path}: {e}")
+
+    result = led.verify()
+    count = len(led)
+    if not count:
+        return _err(f"No blocks in {path} — nothing to verify")
+    if not result.valid:
+        _invalid(result.first_bad_index, result.reason)
+        print(style(f"   {count} blocks read from {path}", "dim"))
+        return 1
+
+    print(style("✓ chain verified", "green") + style(f"   ·   {count} signed blocks", "dim"))
+    print(style(f"   head {led.head_hash[:16]}…   {path}", "dim"))
+    return 0
+
+
 def cmd_verify(args) -> int:
+    if getattr(args, "file", None):
+        return _verify_ledger_file(Path(args.file).expanduser())
+
+    # No file given: if nothing is serving, verify the chain on disk rather than
+    # making the user start a server just to re-check a ledger they already have.
+    if not _port_in_use(args.host, args.port):
+        on_disk = home_dir() / "ledger.jsonl"
+        if on_disk.exists():
+            return _verify_ledger_file(on_disk)
+
     base_url = f"http://{args.host}:{args.port}"
     data = _api(base_url, "GET", "/api/ledger")
     if data is None:
         return 1
     ver = data.get("verification") or {}
-    ok = ver.get("valid")
-    head = style("✓ chain verified", "green") if ok else style("✗ CHAIN INVALID", "red")
-    print(head + style(f"   ·   {data.get('count', 0)} signed blocks", "dim"))
-    return 0 if ok else 1
+    if not ver.get("valid"):
+        _invalid(ver.get("first_bad_index", -1), ver.get("reason") or "chain broken")
+        return 1
+    print(style("✓ chain verified", "green") + style(f"   ·   {data.get('count', 0)} signed blocks", "dim"))
+    return 0
 
 
 def cmd_metrics(args) -> int:
@@ -1257,7 +1310,9 @@ def build_parser() -> argparse.ArgumentParser:
     rec.add_argument("--desc", help="one-line description (add)")
     rec.add_argument("--emoji", help="an emoji (add)")
     rec.set_defaults(func=cmd_recipes)
-    sub.add_parser("verify", help="verify the signed ledger chain").set_defaults(func=cmd_verify)
+    ver_p = sub.add_parser("verify", help="verify the signed ledger chain (offline with --file)")
+    ver_p.add_argument("--file", metavar="PATH", help="verify a ledger .jsonl offline — no server needed")
+    ver_p.set_defaults(func=cmd_verify)
     sub.add_parser("metrics", help="show usage metrics").set_defaults(func=cmd_metrics)
     sub.add_parser("eval", help="run the benchmark suite").set_defaults(func=cmd_eval)
 

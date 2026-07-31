@@ -34,8 +34,26 @@ or is for a capability it wasn't granted.
 
 ### 5. The ledger
 Every action is signed by the acting agent and hash-chained. Undetected tampering means
-breaking the chain. `athena verify` checks it. This is what makes "prove it" more than a
-slogan: you can demonstrate what the system did, including how it modified itself.
+breaking the chain. This is what makes "prove it" more than a slogan: you can demonstrate
+what the system did, including how it modified itself.
+
+`athena verify --file <path>` re-checks a chain straight off disk — no running server,
+and no trust in the app that wrote it. Try to forge it and see:
+
+```bash
+sed -i.bak '2s/"agent_id":"[^"]*"/"agent_id":"mallory"/' ~/.athena/ledger.jsonl
+athena verify --file ~/.athena/ledger.jsonl
+#  ✗ CHAIN INVALID at block 1 — block hash mismatch
+```
+
+It exits `0` on a valid chain and `1` on a broken one, so it drops straight into CI or an
+audit script. Re-signing the forged block doesn't help: signatures are checked against the
+acting agent's key, and every later block hashes the one before it.
+
+**What this proves, precisely:** integrity and attribution — this record was produced by
+these agents, in this order, and has not been altered since. It does *not* prove the
+content is correct. A wrong answer stays wrong; it just becomes non-repudiable and
+impossible to quietly revise after the fact.
 
 ### 6. Human-in-the-loop controls
 - `athena approval gated` — a human approves each synthesized skill before it can run.

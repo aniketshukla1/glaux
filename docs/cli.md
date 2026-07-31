@@ -36,6 +36,7 @@ Directives can also be piped: `echo "summarize this" | athena run`.
 | Command | Does |
 |---|---|
 | `athena verify` | Verify the signed ledger chain |
+| `athena verify --file PATH` | Verify a ledger offline — no server, no trust in the app |
 | `athena metrics` | Tasks, tokens, cost, skills synthesized |
 | `athena eval` | Run the benchmark suite |
 | `athena agents` | The swarm's signed agent identities |

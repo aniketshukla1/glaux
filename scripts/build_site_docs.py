@@ -14,6 +14,7 @@ import html
 import json
 import pathlib
 import re
+import shutil
 import sys
 
 try:
@@ -24,6 +25,8 @@ except ImportError:
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 DOCS = ROOT / "docs"
 OUT = ROOT / "site" / "app" / "docs"
+IMAGES = ROOT / "docs" / "images"
+SITE_IMAGES = ROOT / "site" / "public" / "images"
 
 TITLES = {
     "getting-started": "Getting started",
@@ -54,7 +57,27 @@ def render(slug: str) -> str:
     return body
 
 
+def sync_images() -> None:
+    """Mirror docs/images into the site's public dir.
+
+    The README and the site share these assets; keeping the copy manual meant a
+    rebuilt demo.gif landed in the README while the site still served the old one.
+    """
+    if not IMAGES.is_dir():
+        return
+    SITE_IMAGES.mkdir(parents=True, exist_ok=True)
+    for src in sorted(IMAGES.iterdir()):
+        if not src.is_file() or src.name.startswith("."):
+            continue
+        dst = SITE_IMAGES / src.name
+        if dst.exists() and dst.read_bytes() == src.read_bytes():
+            continue
+        shutil.copy2(src, dst)
+        print(f"  synced site/public/images/{src.name}")
+
+
 def main() -> int:
+    sync_images()
     slugs = sorted(p.stem for p in DOCS.glob("*.md"))
     for slug in slugs:
         title = f"{TITLES.get(slug, slug.replace('-', ' ').capitalize())} — Athena docs"

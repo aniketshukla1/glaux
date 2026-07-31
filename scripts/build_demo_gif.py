@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
 """Render a deterministic terminal-demo GIF (no screen recorder needed).
 
-Types `athena run "..."`, streams the swarm's signed steps and the answer, then
-`athena verify -> chain verified`. Frame-by-frame with Pillow, so it is reproducible
-and renders anywhere GitHub does — the README and the website both use it.
+Types `athena run "..."`, streams the swarm's signed steps and the answer, verifies
+the chain, then *forges one result and verifies again* — because a chain that only
+ever prints ✓ proves nothing. The ✗ naming the exact broken block is the demo.
+
+Frame-by-frame with Pillow, so it is reproducible and renders anywhere GitHub does —
+the README and the website both use it.
 
     python scripts/build_demo_gif.py   # -> docs/images/demo.gif
 """
@@ -30,6 +33,8 @@ DIM = (100, 116, 139)
 TEAL = (45, 212, 191)
 INDIGO = (129, 140, 248)
 GREEN = (52, 211, 153)
+RED = (248, 113, 113)
+AMBER = (251, 191, 36)
 
 FONT_PATHS = ["/System/Library/Fonts/Menlo.ttc", "/Library/Fonts/DejaVuSansMono.ttf"]
 
@@ -60,13 +65,20 @@ SCRIPT: list[Line] = [
     line(("  ◆ ", TEAL), ("analyst     ", INDIGO), ("weighing the trade-offs", DIM)),
     line(("  ◆ ", TEAL), ("researcher  ", INDIGO), ("checking the facts", DIM)),
     line(("  ◆ ", TEAL), ("reflector   ", INDIGO), ("verifying", DIM), gap=10),
-    line(("  ⬡ ", GREEN), ("answer", GREEN), gap=4),
+    line(("  ● ", GREEN), ("answer", GREEN), gap=4),  # Menlo has no ⬡ — it renders as tofu
     line(("  Postgres is the safer default: row-level security gives", MUTED), typed=True, gap=1),
     line(("  per-tenant isolation in one database, and JSONB covers", MUTED), typed=True, gap=1),
     line(("  the flexible-schema cases Mongo is usually chosen for.", MUTED), typed=True, gap=10),
-    line(("  ✓ chain verified", GREEN), ("   ·   6 agents · 14 signed blocks", DIM), gap=14),
-    line(("$ ", DIM), ("athena verify", FG), typed=True, gap=10),
-    line(("  ✓ chain verified", GREEN), ("   ·   1,394 signed blocks", DIM), gap=20),
+    line(("$ ", DIM), ("athena verify --file .athena/ledger.jsonl", FG), typed=True, gap=6),
+    line(("  ✓ chain verified", GREEN), ("   ·   14 signed blocks", DIM), gap=16),
+    # the part that makes the ✓ mean something: forge one block, verify again.
+    # keep this identical to the README's tamper demo — both must reproduce exactly.
+    line(("$ ", DIM), ("sed -i.bak '2s/\"agent_id\":\"[^\"]*\"/\"agent_id\":\"mallory\"/' ledger.jsonl", FG),
+         typed=True, gap=2),
+    line(("  # claim someone else took the second action", AMBER), gap=10),
+    line(("$ ", DIM), ("athena verify --file .athena/ledger.jsonl", FG), typed=True, gap=6),
+    line(("  ✗ CHAIN INVALID", RED), (" at block 1", FG), (" — block hash mismatch", DIM), gap=4),
+    line(("  14 blocks read from .athena/ledger.jsonl", DIM), gap=34),
 ]
 
 
@@ -87,7 +99,7 @@ def build_frames() -> list[list[list[Span]]]:
         if typed:
             full = _spans_text(spans)
             shown.append([])
-            step = 3  # chars revealed per frame
+            step = 5  # chars revealed per frame (higher = snappier, smaller GIF)
             for n in range(step, len(full) + step, step):
                 shown[-1] = _slice_spans(spans, n)
                 snapshot()
@@ -97,9 +109,10 @@ def build_frames() -> list[list[list[Span]]]:
             snapshot()
         for _ in range(gap):
             snapshot()
-        # keep the window from overflowing
-        if len(shown) > 13:
-            shown = shown[-13:]
+        # keep the window from overflowing — 12 lines is the most that clears the
+        # bottom border at H=470 (y starts at 60, line height 30)
+        if len(shown) > 12:
+            shown = shown[-12:]
     return frames
 
 
@@ -140,7 +153,7 @@ def main() -> int:
     states = build_frames()
     frames = [render(v) for v in states]
     # quantize to keep the GIF small; a terminal needs few colors
-    pal = [f.convert("P", palette=Image.ADAPTIVE, colors=72) for f in frames]
+    pal = [f.convert("P", palette=Image.ADAPTIVE, colors=64) for f in frames]
     OUT.parent.mkdir(parents=True, exist_ok=True)
     pal[0].save(
         OUT, save_all=True, append_images=pal[1:],

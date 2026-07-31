@@ -291,3 +291,97 @@ def test_run_no_stream_uses_blocking_endpoint(monkeypatch, capsys):
     rc = cli.cmd_run(cli.build_parser().parse_args(["run", "--no-stream", "do", "something"]))
     assert rc == 1
     assert "couldn't reach" in capsys.readouterr().err.lower()
+
+
+# --- offline ledger verification (`athena verify --file`) -----------------
+#
+# The point of signing the chain is that anyone can re-check it without the
+# app that wrote it, so these exercise the no-server path end to end.
+
+
+def _signed_ledger(path):
+    """A small real chain: plan → tool call → observation → reflect."""
+    from core.ledger import Action, Ledger
+    from identity.keypair import AgentIdentity
+
+    led = Ledger()
+    router, worker = AgentIdentity.generate(), AgentIdentity.generate()
+    led.append(router, Action.PLAN, {"team": ["researcher"]})
+    led.append(worker, Action.CALL_SKILL, {"skill": "http_get"})
+    led.append(worker, Action.OBSERVATION, {"ok": True})
+    led.save(path)
+    return led
+
+
+def test_parser_verify_file():
+    args = cli.build_parser().parse_args(["verify", "--file", "/tmp/l.jsonl"])
+    assert args.command == "verify" and args.file == "/tmp/l.jsonl"
+    assert args.func is cli.cmd_verify
+    assert cli.build_parser().parse_args(["verify"]).file is None
+
+
+def test_verify_file_accepts_an_untouched_chain(tmp_path, capsys):
+    p = tmp_path / "ledger.jsonl"
+    _signed_ledger(p)
+    rc = cli.cmd_verify(cli.build_parser().parse_args(["verify", "--file", str(p)]))
+    assert rc == 0
+    assert "chain verified" in capsys.readouterr().out
+
+
+def test_verify_file_detects_a_forged_payload(tmp_path, capsys):
+    p = tmp_path / "ledger.jsonl"
+    _signed_ledger(p)
+    p.write_text(p.read_text().replace('"ok":true', '"ok":false'))
+
+    rc = cli.cmd_verify(cli.build_parser().parse_args(["verify", "--file", str(p)]))
+    assert rc == 1
+    out = capsys.readouterr().out
+    assert "CHAIN INVALID" in out and "block 2" in out  # names the block that broke
+
+
+def test_verify_file_detects_a_deleted_block(tmp_path, capsys):
+    p = tmp_path / "ledger.jsonl"
+    _signed_ledger(p)
+    lines = p.read_text().splitlines()
+    p.write_text("\n".join(lines[:1] + lines[2:]) + "\n")
+
+    rc = cli.cmd_verify(cli.build_parser().parse_args(["verify", "--file", str(p)]))
+    assert rc == 1
+    assert "CHAIN INVALID" in capsys.readouterr().out
+
+
+def test_verify_file_missing_or_empty_is_never_a_pass(tmp_path, capsys):
+    # `Ledger.load` returns an empty chain for both, and an empty chain verifies
+    # vacuously — so without an explicit guard a typo'd path prints ✓.
+    missing = cli.cmd_verify(cli.build_parser().parse_args(["verify", "--file", str(tmp_path / "nope.jsonl")]))
+    assert missing == 1
+    assert "no ledger" in capsys.readouterr().err.lower()
+
+    empty = tmp_path / "empty.jsonl"
+    empty.write_text("")
+    rc = cli.cmd_verify(cli.build_parser().parse_args(["verify", "--file", str(empty)]))
+    assert rc == 1
+    assert "nothing to verify" in capsys.readouterr().err.lower()
+
+
+def test_verify_falls_back_to_disk_when_no_server(tmp_path, monkeypatch, capsys):
+    _signed_ledger(tmp_path / "ledger.jsonl")
+    monkeypatch.setenv("ATHENA_HOME", str(tmp_path))
+    monkeypatch.setattr(cli, "_port_in_use", lambda h, p: False)
+    # would raise if it tried the network instead of reading the chain on disk
+    monkeypatch.setattr(cli, "_api", lambda *a, **k: pytest.fail("should not call the API"))
+
+    rc = cli.cmd_verify(cli.build_parser().parse_args(["verify"]))
+    assert rc == 0
+    assert "chain verified" in capsys.readouterr().out
+
+
+def test_verify_reports_the_bad_block_from_the_server(monkeypatch, capsys):
+    monkeypatch.setattr(cli, "_port_in_use", lambda h, p: True)
+    monkeypatch.setattr(cli, "_api", lambda *a, **k: {
+        "count": 9, "verification": {"valid": False, "first_bad_index": 4, "reason": "block hash mismatch"},
+    })
+    rc = cli.cmd_verify(cli.build_parser().parse_args(["verify"]))
+    assert rc == 1
+    out = capsys.readouterr().out
+    assert "block 4" in out and "block hash mismatch" in out
