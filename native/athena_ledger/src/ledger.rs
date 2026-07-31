@@ -20,17 +20,25 @@ pub fn genesis_hash() -> String {
     "0".repeat(64)
 }
 
-fn now_unix() -> f64 {
+/// Microseconds since the epoch.
+///
+/// Deliberately an integer: block hashes are computed over the canonical JSON,
+/// so any float in the hashed content makes integrity depend on f64 text
+/// round-tripping exactly. It does not always. A timestamp written as
+/// 1785528166.6964545 could be read back as 1785528166.6964543 — one ULP apart,
+/// same instant — and the chain then reported CHAIN INVALID on a ledger nobody
+/// had touched. Integers have exactly one representation, so this cannot recur.
+fn now_unix_us() -> i64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_secs_f64())
-        .unwrap_or(0.0)
+        .map(|d| d.as_micros() as i64)
+        .unwrap_or(0)
 }
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Block {
     pub index: u64,
-    pub timestamp: f64,
+    pub timestamp_us: i64,
     pub agent_id: String,
     pub signing_pubkey: String,
     pub action_type: String,
@@ -45,7 +53,7 @@ impl Block {
     fn content_value(&self) -> Value {
         let mut m = Map::new();
         m.insert("index".into(), json!(self.index));
-        m.insert("timestamp".into(), json!(self.timestamp));
+        m.insert("timestamp_us".into(), json!(self.timestamp_us));
         m.insert("agent_id".into(), json!(self.agent_id));
         m.insert("signing_pubkey".into(), json!(self.signing_pubkey));
         m.insert("action_type".into(), json!(self.action_type));
@@ -91,11 +99,11 @@ impl Ledger {
         secret_b58: &str,
         action_type: String,
         payload: Value,
-        timestamp: Option<f64>,
+        timestamp_us: Option<i64>,
     ) -> Result<Block, String> {
         let mut block = Block {
             index: self.blocks.len() as u64,
-            timestamp: timestamp.unwrap_or_else(now_unix),
+            timestamp_us: timestamp_us.unwrap_or_else(now_unix_us),
             agent_id,
             signing_pubkey,
             action_type,
@@ -189,11 +197,56 @@ mod tests {
                 &sk,
                 "THINK".into(),
                 json!({ "i": i }),
-                Some(i as f64),
+                Some(i as i64),
             )
             .unwrap();
         }
         l
+    }
+
+    #[test]
+    fn hashed_content_holds_no_floats() {
+        // Regression: block hashes are computed over the canonical JSON, so a float
+        // anywhere in the hashed content makes integrity depend on f64 text
+        // round-tripping exactly — which it did not, producing CHAIN INVALID on
+        // untouched ledgers. Nothing in the signed content may serialize as a float.
+        let l = ledger_with(3);
+        for b in &l.blocks {
+            let v = b.content_value();
+            fn assert_no_float(v: &Value, path: &str) {
+                match v {
+                    Value::Number(n) => assert!(
+                        !n.is_f64(),
+                        "float in hashed content at {path}: {n}"
+                    ),
+                    Value::Object(m) => {
+                        for (k, sub) in m {
+                            assert_no_float(sub, &format!("{path}.{k}"));
+                        }
+                    }
+                    Value::Array(a) => {
+                        for (i, sub) in a.iter().enumerate() {
+                            assert_no_float(sub, &format!("{path}[{i}]"));
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            assert_no_float(&v, "content");
+        }
+    }
+
+    #[test]
+    fn survives_a_json_round_trip() {
+        // Save/load must reproduce byte-identical canonical content, or the chain
+        // fails to verify on a ledger nobody touched.
+        let l = ledger_with(4);
+        for b in &l.blocks {
+            let text = serde_json::to_string(b).unwrap();
+            let back: Block = serde_json::from_str(&text).unwrap();
+            assert_eq!(b.content_bytes(), back.content_bytes());
+            assert_eq!(b.timestamp_us, back.timestamp_us);
+        }
     }
 
     #[test]

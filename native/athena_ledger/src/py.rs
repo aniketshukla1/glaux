@@ -80,7 +80,14 @@ impl PyLedger {
             .map_err(|e| PyValueError::new_err(format!("invalid payload JSON: {e}")))?;
         let block = self
             .inner
-            .append(agent_id, signing_pubkey, signing_secret_b58, action_type, payload, timestamp)
+            .append(
+                agent_id,
+                signing_pubkey,
+                signing_secret_b58,
+                action_type,
+                payload,
+                timestamp.map(|s| (s * 1_000_000.0).round() as i64),
+            )
             .map_err(PyValueError::new_err)?;
         serde_json::to_string(&block).map_err(|e| PyValueError::new_err(e.to_string()))
     }
@@ -118,7 +125,7 @@ impl PyLedger {
             .map(|b| {
                 json!({
                     "index": b.index,
-                    "timestamp": b.timestamp,
+                    "timestamp_us": b.timestamp_us,
                     "agent_id": b.agent_id,
                     "signing_pubkey": b.signing_pubkey,
                     "action_type": b.action_type,

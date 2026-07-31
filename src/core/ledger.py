@@ -114,7 +114,9 @@ class Ledger:
 
         if registry is not None:
             for b in json.loads(self._led.blocks_meta()):
-                if registry.key_at(b["agent_id"], b["timestamp"]) != b["signing_pubkey"]:
+                # blocks carry integer microseconds; key windows are in seconds
+                ts = b["timestamp_us"] / 1_000_000
+                if registry.key_at(b["agent_id"], ts) != b["signing_pubkey"]:
                     return LedgerVerification(
                         False, b["index"], "signing key not valid for agent at block time"
                     )
