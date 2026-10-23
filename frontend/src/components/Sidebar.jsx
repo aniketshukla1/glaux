@@ -1,208 +1,69 @@
-import React, { useEffect, useRef, useState } from 'react'
-import { createPortal } from 'react-dom'
+import React, { useState } from 'react'
 import {
-  Plus, MessageSquarePlus, Folder, FolderPlus, FolderInput, Pencil, Trash2,
-  PanelLeftClose, PanelLeft, ChevronDown, MessageSquare, SlidersHorizontal, X,
-  Pin, Search, Loader2,
+  Plus, Search, MessagesSquare, ShieldCheck, ShieldAlert, Library, Activity, Folder, FolderPlus,
+  ChevronRight, PanelLeftClose, PanelLeft, Settings, Keyboard, LogOut, Palette, MoreHorizontal,
+  SlidersHorizontal, Trash2, X,
 } from 'lucide-react'
-import AthenaMark from './AthenaMark.jsx'
-import { searchConversations } from '../api.js'
+import GlauxMark from './GlauxMark.jsx'
+import UserAvatar from './UserAvatar.jsx'
+import SessionRow from './sidebar/SessionRow.jsx'
+import { ConfirmDialog, NewProjectDialog, ProjectEditor } from './sidebar/Dialogs.jsx'
+import { Menu, MenuItem, MenuLabel, MenuSeparator } from './ui/Menu.jsx'
+import { BRAND } from '../lib/brand.js'
 
-// --- modals (in-app, so they work inside the desktop WebView) -------------
-// Portalled to <body> so they escape the sticky sidebar's stacking context and
-// sit above the whole app.
+export const THEMES = ['dark', 'light', 'oled', 'midnight', 'nord', 'ember']
+const cap = (s) => s[0].toUpperCase() + s.slice(1)
 
-function Modal({ children, onClose, width = 'max-w-md' }) {
-  useEffect(() => {
-    const onKey = (e) => { if (e.key === 'Escape') onClose() }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [onClose])
-  return createPortal(
-    <div className="fixed inset-0 z-[80] grid place-items-center p-5">
-      <div className="absolute inset-0 bg-black/50" onClick={onClose} />
-      <div className={`relative card w-full ${width} p-5`}>{children}</div>
-    </div>,
-    document.body,
+// Top-level views are peers, always on screen, with a visible active state.
+const NAV = [
+  { key: 'chats', label: 'Chats', Icon: MessagesSquare },
+  { key: 'proof', label: 'Proof', Icon: ShieldCheck },
+  { key: 'library', label: 'Library', Icon: Library },
+  { key: 'insights', label: 'Insights', Icon: Activity },
+]
+
+function NavItem({ item, active, onClick, badge, compact }) {
+  const { Icon, label } = item
+  return (
+    <button onClick={onClick} aria-current={active ? 'page' : undefined} title={compact ? label : undefined}
+      className={`w-full flex items-center gap-2.5 rounded-md text-[13px] transition-colors ${
+        compact ? 'justify-center p-2' : 'px-2.5 py-1.5'
+      } ${active ? 'bg-line/[0.09] text-fg font-medium' : 'text-muted hover:text-fg hover:bg-line/[0.05]'}`}>
+      <Icon className={`w-4 h-4 shrink-0 ${active ? 'text-accent' : ''}`} />
+      {!compact && <span className="flex-1 text-left">{label}</span>}
+      {!compact && badge}
+    </button>
   )
 }
 
-function ConfirmDialog({ title, message, confirmLabel = 'Delete', onConfirm, onClose }) {
+function Section({ title, action, children, dropProps, highlight }) {
   return (
-    <Modal onClose={onClose} width="max-w-sm">
-      <h2 className="text-fg font-medium">{title}</h2>
-      {message && <p className="text-muted text-sm mt-2">{message}</p>}
-      <div className="flex justify-end gap-2 mt-5">
-        <button onClick={onClose} className="btn px-3 py-2 text-sm">Cancel</button>
-        <button
-          onClick={() => { onConfirm(); onClose() }}
-          className="px-3 py-2 text-sm rounded-lg border border-rose-500/40 text-rose-400 bg-rose-500/10 hover:bg-rose-500/20"
-        >
-          {confirmLabel}
-        </button>
+    <div {...dropProps} className={`rounded-md transition ${highlight ? 'ring-1 ring-accent/50 bg-accent/5' : ''}`}>
+      <div className="flex items-center px-2.5 pt-3 pb-1">
+        <span className="eyebrow flex-1">{title}</span>
+        {action}
       </div>
-    </Modal>
-  )
-}
-
-function NewProjectDialog({ onCreate, onClose }) {
-  const [name, setName] = useState('')
-  const submit = (e) => { e.preventDefault(); if (name.trim()) { onCreate(name.trim()); onClose() } }
-  return (
-    <Modal onClose={onClose} width="max-w-sm">
-      <div className="flex items-center gap-2 mb-3">
-        <FolderPlus className="w-4 h-4 text-accent" />
-        <h2 className="text-fg font-medium">New project</h2>
-        <button onClick={onClose} className="ml-auto btn p-1.5" aria-label="Close"><X className="w-4 h-4" /></button>
-      </div>
-      <form onSubmit={submit}>
-        <input autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="Project name"
-          className="w-full glass px-3 py-2 bg-transparent outline-none text-sm text-fg placeholder:text-faint" />
-        <div className="flex justify-end gap-2 mt-4">
-          <button type="button" onClick={onClose} className="btn px-3 py-2 text-sm">Cancel</button>
-          <button type="submit" disabled={!name.trim()} className="btn-accent px-3 py-2 text-sm disabled:opacity-50">Create</button>
-        </div>
-      </form>
-    </Modal>
-  )
-}
-
-function ProjectEditor({ project, onSave, onClose }) {
-  const [name, setName] = useState(project.name || '')
-  const [instructions, setInstructions] = useState(project.instructions || '')
-  const save = () => { onSave(project.id, { name: name.trim() || project.name, instructions }); onClose() }
-  return (
-    <Modal onClose={onClose}>
-      <div className="flex items-center gap-2">
-        <Folder className="w-4 h-4 text-accent" />
-        <h2 className="text-fg font-medium">Customize project</h2>
-        <button onClick={onClose} className="ml-auto btn p-1.5" aria-label="Close"><X className="w-4 h-4" /></button>
-      </div>
-      <div className="mt-4">
-        <label className="text-faint text-xs">Name</label>
-        <input value={name} onChange={(e) => setName(e.target.value)}
-          className="w-full mt-1 glass px-3 py-2 bg-transparent outline-none text-sm text-fg" />
-      </div>
-      <div className="mt-4">
-        <label className="text-faint text-xs">Custom instructions</label>
-        <p className="text-faint text-xs mt-0.5 mb-1.5">Prepended as context to every task in this project's chats.</p>
-        <textarea value={instructions} onChange={(e) => setInstructions(e.target.value)} rows={5}
-          placeholder="e.g. Answer concisely. Prefer Python. Cite sources."
-          className="w-full glass px-3 py-2 bg-transparent outline-none text-sm text-fg placeholder:text-faint resize-none" />
-      </div>
-      <div className="flex justify-end gap-2 mt-4">
-        <button onClick={onClose} className="btn px-3 py-2 text-sm">Cancel</button>
-        <button onClick={save} className="btn-accent px-3 py-2 text-sm">Save</button>
-      </div>
-    </Modal>
-  )
-}
-
-// --- session row ----------------------------------------------------------
-
-function MoveMenu({ projects, currentProjectId, onMove, onClose }) {
-  const options = [
-    ...(currentProjectId ? [{ id: null, name: 'No project' }] : []),
-    ...projects.filter((p) => p.id !== currentProjectId).map((p) => ({ id: p.id, name: p.name })),
-  ]
-  return (
-    <>
-      <div className="fixed inset-0 z-40" onClick={(e) => { e.stopPropagation(); onClose() }} />
-      <div className="absolute right-0 top-full mt-1 z-50 w-44 card p-1 shadow-xl" onClick={(e) => e.stopPropagation()}>
-        <div className="px-2 py-1 text-[11px] uppercase tracking-wide text-faint">Move to</div>
-        {options.length === 0 ? (
-          <div className="px-2 py-1.5 text-xs text-faint">No projects yet</div>
-        ) : (
-          options.map((o) => (
-            <button key={o.id || 'none'} onClick={(e) => { e.stopPropagation(); onMove(o.id); onClose() }}
-              className="w-full text-left px-2 py-1.5 rounded text-sm text-muted hover:text-fg hover:bg-line/10 truncate">
-              {o.name}
-            </button>
-          ))
-        )}
-      </div>
-    </>
-  )
-}
-
-function SessionRow({ s, active, projects, onSelect, onRename, onDelete, onMove, onPin }) {
-  const [moveOpen, setMoveOpen] = useState(false)
-  const [editing, setEditing] = useState(false)
-  const [val, setVal] = useState(s.title)
-  const inputRef = useRef(null)
-
-  const startEdit = () => { setVal(s.title); setEditing(true) }
-  const commit = () => { setEditing(false); const t = val.trim(); if (t && t !== s.title) onRename(s.id, t) }
-  useEffect(() => { if (editing) inputRef.current?.select() }, [editing])
-
-  return (
-    <div
-      draggable={!editing}
-      onDragStart={(e) => { e.dataTransfer.setData('text/athena-session', s.id); e.dataTransfer.effectAllowed = 'move' }}
-      onClick={() => !editing && onSelect(s.id)}
-      className={`group relative flex items-center gap-2 px-2.5 py-2 rounded-lg cursor-pointer text-sm transition ${
-        active ? 'bg-line/10 text-fg' : 'text-muted hover:text-fg hover:bg-line/6'
-      }`}
-    >
-      <MessageSquare className="w-3.5 h-3.5 shrink-0 text-faint" />
-      {editing ? (
-        <input
-          ref={inputRef}
-          value={val}
-          onChange={(e) => setVal(e.target.value)}
-          onClick={(e) => e.stopPropagation()}
-          onKeyDown={(e) => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') setEditing(false) }}
-          onBlur={commit}
-          className="flex-1 min-w-0 bg-transparent outline-none text-fg border-b border-accent/40"
-        />
-      ) : (
-        <span className="flex-1 truncate">{s.title}</span>
-      )}
-      {!editing && s.pinned && (
-        <button onClick={(e) => { e.stopPropagation(); onPin(s.id, false) }}
-          className="shrink-0 p-0.5 text-accent group-hover:hidden" aria-label="Unpin" title="Pinned">
-          <Pin className="w-3 h-3 fill-current" />
-        </button>
-      )}
-      {!editing && (
-        <span className={`items-center gap-0.5 shrink-0 ${moveOpen ? 'flex' : 'hidden group-hover:flex'}`}>
-          <button onClick={(e) => { e.stopPropagation(); onPin(s.id, !s.pinned) }} className={`p-1 rounded hover:bg-line/15 ${s.pinned ? 'text-accent' : 'text-faint hover:text-fg'}`} aria-label={s.pinned ? 'Unpin' : 'Pin'} title={s.pinned ? 'Unpin' : 'Pin to top'}>
-            <Pin className={`w-3 h-3 ${s.pinned ? 'fill-current' : ''}`} />
-          </button>
-          <button onClick={(e) => { e.stopPropagation(); setMoveOpen((o) => !o) }} className="p-1 rounded hover:bg-line/15 text-faint hover:text-fg" aria-label="Move to project">
-            <FolderInput className="w-3 h-3" />
-          </button>
-          <button onClick={(e) => { e.stopPropagation(); startEdit() }} className="p-1 rounded hover:bg-line/15 text-faint hover:text-fg" aria-label="Rename">
-            <Pencil className="w-3 h-3" />
-          </button>
-          <button onClick={(e) => { e.stopPropagation(); onDelete(s) }} className="p-1 rounded hover:bg-line/15 text-faint hover:text-rose-400" aria-label="Delete session">
-            <Trash2 className="w-3 h-3" />
-          </button>
-        </span>
-      )}
-      {moveOpen && (
-        <MoveMenu projects={projects} currentProjectId={s.project_id} onMove={(pid) => onMove(s.id, pid)} onClose={() => setMoveOpen(false)} />
-      )}
+      {children}
     </div>
   )
 }
 
 export default function Sidebar({
-  workspace, collapsed, onToggleCollapse, onSelectSession, onNewSession,
-  onRenameSession, onDeleteSession, onNewProject, onUpdateProject, onDeleteProject, onMoveSession, onPinSession, loading,
+  workspace, collapsed, onToggleCollapse, view, onNavigate, ledger,
+  onSelectSession, onNewSession, onRenameSession, onDeleteSession,
+  onNewProject, onUpdateProject, onDeleteProject, onMoveSession, onPinSession, loading,
+  user, theme, onSetTheme, onOpenSettings, onOpenPalette, onOpenShortcuts, onSignOut,
+  mobileOpen, onCloseMobile,
 }) {
   const { projects = [], sessions = [], active_id } = workspace || {}
   const [openProjects, setOpenProjects] = useState({})
-  const [editing, setEditing] = useState(null)        // project being customized
-  const [confirm, setConfirm] = useState(null)        // { title, message, onConfirm }
+  const [editing, setEditing] = useState(null)
+  const [confirm, setConfirm] = useState(null)
   const [newProject, setNewProject] = useState(false)
-  const [query, setQuery] = useState('')
-  const [results, setResults] = useState(null)        // null = not searching
-  const [searching, setSearching] = useState(false)
-  const [dragOver, setDragOver] = useState(undefined) // drop target: undefined=none, null=ungrouped, id=project
+  const [dragOver, setDragOver] = useState(undefined)  // undefined = none, null = ungrouped, id = project
 
   const dropProps = (pid) => ({
-    onDragOver: (e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; if (dragOver !== pid) setDragOver(pid) },
+    onDragOver: (e) => { if (!e.dataTransfer.types.includes('text/athena-session')) return; e.preventDefault(); e.dataTransfer.dropEffect = 'move'; if (dragOver !== pid) setDragOver(pid) },
     onDragLeave: (e) => { if (!e.currentTarget.contains(e.relatedTarget)) setDragOver((v) => (v === pid ? undefined : v)) },
     onDrop: (e) => {
       e.preventDefault()
@@ -212,159 +73,192 @@ export default function Sidebar({
     },
   })
 
-  useEffect(() => {
-    const q = query.trim()
-    if (!q) { setResults(null); return undefined }
-    setSearching(true)
-    const id = setTimeout(async () => {
-      try { setResults((await searchConversations(q)).results) } catch { setResults([]) } finally { setSearching(false) }
-    }, 200)
-    return () => clearTimeout(id)
-  }, [query])
-
+  const selectSession = (id) => { onSelectSession(id); onCloseMobile?.() }
+  const navigate = (key) => { onNavigate(key); onCloseMobile?.() }
   const delSession = (s) => setConfirm({
     title: 'Delete conversation?',
-    message: `"${s.title}" and its history will be removed. This can't be undone.`,
+    message: `“${s.title}” and its history will be removed. The signed ledger keeps its record.`,
     onConfirm: () => onDeleteSession(s.id),
   })
   const delProject = (p) => setConfirm({
     title: 'Delete project?',
-    message: `"${p.name}" will be removed and its chats become ungrouped.`,
+    message: `“${p.name}” will be removed. Its chats move to Recent.`,
     onConfirm: () => onDeleteProject(p.id),
   })
 
   const pinned = sessions.filter((s) => s.pinned)
   const byProject = (pid) => sessions.filter((s) => s.project_id === pid && !s.pinned)
-  const ungrouped = sessions.filter((s) => !s.project_id && !s.pinned)
-  const rowProps = { projects, onSelect: onSelectSession, onRename: onRenameSession, onDelete: delSession, onMove: onMoveSession, onPin: onPinSession }
+  const recent = sessions.filter((s) => !s.project_id && !s.pinned)
+  const inChats = view === 'chats'
+  const rowProps = { projects, onSelect: selectSession, onRename: onRenameSession, onDelete: delSession, onMove: onMoveSession, onPin: onPinSession }
 
-  if (collapsed) {
+  const verified = ledger?.verification ? ledger.verification.valid : null
+  const proofBadge = ledger?.count > 0 && (
+    <span className={`flex items-center gap-1 text-[11px] tabular-nums ${verified === false ? 'text-bad' : 'text-faint'}`}
+      title={verified === false ? 'Chain tampered' : `${ledger.count} signed blocks, verified`}>
+      {verified === false ? <ShieldAlert className="w-3 h-3" /> : <span className="w-1.5 h-1.5 rounded-full bg-ok" />}
+      {ledger.count}
+    </span>
+  )
+
+  const userMenu = (compact) => (
+    <Menu side="top" align="start" width="w-60" className={compact ? '' : 'w-full'}
+      trigger={(t) => (
+        <button {...t} aria-label="Account and settings"
+          className={`flex items-center gap-2.5 rounded-md hover:bg-line/[0.06] transition ${compact ? 'p-1.5' : 'w-full px-2 py-1.5'}`}>
+          <UserAvatar user={user} size={26} />
+          {!compact && (
+            <>
+              <span className="flex-1 min-w-0 text-left">
+                <span className="block text-[13px] text-fg truncate">{user?.name || 'Account'}</span>
+                <span className="block text-[11px] text-faint truncate">{user?.email}</span>
+              </span>
+              <MoreHorizontal className="w-4 h-4 text-faint shrink-0" />
+            </>
+          )}
+        </button>
+      )}>
+      <MenuItem icon={Settings} hint="⌘," onSelect={() => onOpenSettings('general')}>Settings</MenuItem>
+      <MenuItem icon={Keyboard} hint="?" onSelect={onOpenShortcuts}>Keyboard shortcuts</MenuItem>
+      <MenuSeparator />
+      <MenuLabel><span className="inline-flex items-center gap-1.5"><Palette className="w-3 h-3" /> Theme</span></MenuLabel>
+      {THEMES.map((t) => <MenuItem key={t} checked={theme === t} onSelect={() => onSetTheme(t)}>{cap(t)}</MenuItem>)}
+      <MenuSeparator />
+      <MenuItem icon={LogOut} onSelect={onSignOut}>Sign out</MenuItem>
+    </Menu>
+  )
+
+  // ── collapsed rail (desktop) ────────────────────────────────────────────
+  if (collapsed && !mobileOpen) {
     return (
-      <div className="w-14 shrink-0 border-r border-line/10 flex flex-col items-center py-4 gap-3">
-        <button onClick={onToggleCollapse} className="btn p-2" aria-label="Expand sidebar"><PanelLeft className="w-4 h-4" /></button>
-        <button onClick={() => onNewSession()} className="btn-accent p-2" aria-label="New session" title="New session"><Plus className="w-4 h-4" /></button>
-      </div>
+      <aside className="hidden md:flex w-[52px] shrink-0 border-r border-line/[0.08] bg-sidebar flex-col items-center py-3 gap-1 h-screen sticky top-0">
+        <button onClick={onToggleCollapse} className="btn-ghost p-2" aria-label="Expand sidebar" title="Expand sidebar (⌘B)"><PanelLeft className="w-4 h-4" /></button>
+        <button onClick={() => onNewSession()} className="btn-accent p-2 mt-1" aria-label="New chat" title="New chat"><Plus className="w-4 h-4" /></button>
+        <button onClick={onOpenPalette} className="btn-ghost p-2" aria-label="Search" title="Search (⌘K)"><Search className="w-4 h-4" /></button>
+        <div className="w-6 h-px bg-line/10 my-1.5" />
+        {NAV.map((n) => <NavItem key={n.key} item={n} compact active={view === n.key} onClick={() => onNavigate(n.key)} />)}
+        <div className="mt-auto">{userMenu(true)}</div>
+      </aside>
     )
   }
 
   return (
-    <aside className="w-64 shrink-0 border-r border-line/10 flex flex-col h-screen sticky top-0">
-      <div className="flex items-center gap-2 px-3 h-14 shrink-0">
-        <div className="w-7 h-7 rounded-lg bg-accent/15 border border-accent/30 grid place-items-center">
-          <AthenaMark className="w-5 h-5" />
-        </div>
-        <span className="text-fg font-medium tracking-tight">Athena</span>
-        <button onClick={onToggleCollapse} className="ml-auto btn p-1.5" aria-label="Collapse sidebar"><PanelLeftClose className="w-4 h-4" /></button>
-      </div>
-
-      <div className="px-2.5 pb-2 flex gap-2">
-        <button onClick={() => onNewSession()} className="btn-accent flex-1 px-3 py-2 text-sm flex items-center justify-center gap-2">
-          <MessageSquarePlus className="w-4 h-4" /> New session
-        </button>
-        <button onClick={() => setNewProject(true)} className="btn p-2" aria-label="New project" title="New project"><FolderPlus className="w-4 h-4" /></button>
-      </div>
-
-      <div className="px-2.5 pb-2">
-        <div className="glass flex items-center gap-2 px-2.5 rounded-lg">
-          <Search className="w-3.5 h-3.5 text-faint shrink-0" />
-          <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search chats"
-            className="flex-1 min-w-0 bg-transparent outline-none text-sm text-fg placeholder-faint py-1.5"
-          />
-          {searching ? <Loader2 className="w-3.5 h-3.5 text-faint animate-spin shrink-0" />
-            : query && <button onClick={() => setQuery('')} className="text-faint hover:text-fg shrink-0" aria-label="Clear search"><X className="w-3.5 h-3.5" /></button>}
-        </div>
-      </div>
-
-      <div className="flex-1 overflow-y-auto px-2 pb-4 space-y-1">
-        {loading ? (
-          <div className="space-y-1.5 px-1 pt-1">
-            {[80, 64, 72, 56, 68].map((w, i) => (
-              <div key={i} className="h-7 rounded-lg shimmer bg-line/8" style={{ width: `${w}%` }} />
-            ))}
-          </div>
-        ) : results !== null ? (
-          results.length === 0 ? (
-            <div className="px-2.5 py-6 text-center text-faint text-sm">{searching ? 'Searching…' : 'No matches'}</div>
+    <>
+      {mobileOpen && <div className="md:hidden fixed inset-0 z-40 bg-black/50 animate-fade-in" onClick={onCloseMobile} />}
+      <aside className={`w-[248px] shrink-0 border-r border-line/[0.08] bg-sidebar flex flex-col h-screen top-0 ${
+        mobileOpen ? 'fixed left-0 z-50 shadow-2xl animate-fade-in' : 'hidden md:flex sticky'
+      }`}>
+        <div className="flex items-center gap-2 px-3 h-12 shrink-0">
+          <GlauxMark size={22} />
+          <span className="text-fg font-semibold tracking-tight text-[14px]">{BRAND}</span>
+          {mobileOpen ? (
+            <button onClick={onCloseMobile} className="ml-auto btn-ghost p-1.5" aria-label="Close menu"><X className="w-4 h-4" /></button>
           ) : (
-            <div className="space-y-0.5">
-              <div className="px-1.5 py-1 text-xs uppercase tracking-wide text-faint">{results.length} result{results.length > 1 ? 's' : ''}</div>
-              {results.map((s) => (
-                <button key={s.id} onClick={() => onSelectSession(s.id)}
-                  className={`w-full text-left px-2.5 py-2 rounded-lg text-sm transition ${s.id === active_id ? 'bg-line/10 text-fg' : 'text-muted hover:text-fg hover:bg-line/6'}`}>
-                  <div className="flex items-center gap-2">
-                    <MessageSquare className="w-3.5 h-3.5 shrink-0 text-faint" />
-                    <span className="truncate">{s.title}</span>
-                  </div>
-                  {s.match === 'content' && s.snippet && <div className="text-faint text-xs truncate mt-0.5 pl-5.5">{s.snippet}</div>}
-                </button>
-              ))}
+            <button onClick={onToggleCollapse} className="ml-auto btn-ghost p-1.5" aria-label="Collapse sidebar" title="Collapse sidebar (⌘B)"><PanelLeftClose className="w-4 h-4" /></button>
+          )}
+        </div>
+
+        <div className="px-2 space-y-1 shrink-0">
+          <button onClick={() => { onNewSession(); onCloseMobile?.() }}
+            className="btn-accent w-full px-2.5 py-1.5 text-[13px] !justify-start">
+            <Plus className="w-4 h-4" />
+            <span className="flex-1 text-left font-medium">New chat</span>
+          </button>
+          <button onClick={onOpenPalette}
+            className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-[13px] text-faint hover:text-muted border border-line/[0.1] bg-bg/40 hover:bg-line/[0.04] transition">
+            <Search className="w-4 h-4" />
+            <span className="flex-1 text-left">Search</span>
+            <span className="kbd">⌘K</span>
+          </button>
+        </div>
+
+        <nav aria-label="Main" className="px-2 pt-3 space-y-0.5 shrink-0">
+          {NAV.map((n) => (
+            <NavItem key={n.key} item={n} active={view === n.key} onClick={() => navigate(n.key)}
+              badge={n.key === 'proof' ? proofBadge : null} />
+          ))}
+        </nav>
+
+        <div className="mx-3 mt-3 h-px bg-line/[0.08] shrink-0" />
+
+        <div className="flex-1 overflow-y-auto px-2 pb-3" aria-label="Conversations">
+          {loading ? (
+            <div className="space-y-1.5 px-1 pt-3">
+              {[78, 62, 70, 54, 66].map((w, i) => <div key={i} className="h-6 rounded-md shimmer bg-line/[0.06]" style={{ width: `${w}%` }} />)}
             </div>
-          )
-        ) : (
-          <>
-        {pinned.length > 0 && (
-          <div>
-            <div className="px-1.5 py-1 text-xs uppercase tracking-wide text-faint flex items-center gap-1.5"><Pin className="w-3 h-3" /> Pinned</div>
-            <div className="space-y-0.5">
-              {pinned.map((s) => <SessionRow key={s.id} s={s} active={s.id === active_id} {...rowProps} />)}
-            </div>
-          </div>
-        )}
-        {projects.map((p) => {
-          const open = openProjects[p.id] !== false
-          const list = byProject(p.id)
-          return (
-            <div key={p.id} {...dropProps(p.id)}
-              className={`mt-2 rounded-lg transition ${dragOver === p.id ? 'ring-1 ring-accent/50 bg-accent/5' : ''}`}>
-              <div className="group flex items-center gap-1.5 px-1.5 py-1 text-xs uppercase tracking-wide text-faint">
-                <button onClick={() => setOpenProjects((o) => ({ ...o, [p.id]: !open }))} className="flex items-center gap-1.5 flex-1 min-w-0">
-                  <ChevronDown className={`w-3 h-3 transition ${open ? '' : '-rotate-90'}`} />
-                  <Folder className="w-3.5 h-3.5" />
-                  <span className="truncate normal-case text-muted text-sm">{p.name}</span>
-                </button>
-                <button onClick={() => onNewSession(p.id)} className="hidden group-hover:block p-0.5 hover:text-fg" aria-label="New session in project" title="New session"><Plus className="w-3.5 h-3.5" /></button>
-                <button onClick={() => setEditing(p)} className="hidden group-hover:block p-0.5 hover:text-fg" aria-label="Customize project" title="Customize"><SlidersHorizontal className="w-3 h-3" /></button>
-                <button onClick={() => delProject(p)} className="hidden group-hover:block p-0.5 hover:text-rose-400" aria-label="Delete project"><Trash2 className="w-3 h-3" /></button>
-              </div>
-              {open && (
-                <div className="pl-2 space-y-0.5">
-                  {list.length === 0 ? (
-                    <div className="px-2.5 py-1.5 text-xs text-faint">No chats yet</div>
-                  ) : (
-                    list.map((s) => <SessionRow key={s.id} s={s} active={s.id === active_id} {...rowProps} />)
-                  )}
-                </div>
+          ) : (
+            <>
+              {pinned.length > 0 && (
+                <Section title="Pinned">
+                  <div className="space-y-px">{pinned.map((s) => <SessionRow key={s.id} s={s} active={s.id === active_id && inChats} {...rowProps} />)}</div>
+                </Section>
               )}
-            </div>
-          )
-        })}
 
-        {ungrouped.length > 0 && (
-          <div {...dropProps(null)}
-            className={`mt-2 rounded-lg transition ${dragOver === null ? 'ring-1 ring-accent/50 bg-accent/5' : ''}`}>
-            <div className="px-1.5 py-1 text-xs uppercase tracking-wide text-faint">Chats</div>
-            <div className="space-y-0.5">
-              {ungrouped.map((s) => <SessionRow key={s.id} s={s} active={s.id === active_id} {...rowProps} />)}
-            </div>
-          </div>
-        )}
-        {projects.length === 0 && sessions.length === 0 && (
-          <div className="px-3 py-10 text-center">
-            <MessageSquare className="w-7 h-7 text-faint/50 mx-auto mb-2.5" />
-            <p className="text-faint text-sm">No conversations yet.</p>
-            <p className="text-faint/70 text-xs mt-1">Start one with <span className="text-muted">New session</span>.</p>
-          </div>
-        )}
-          </>
-        )}
-      </div>
+              <Section title="Projects" action={
+                <button onClick={() => setNewProject(true)} className="btn-ghost p-0.5 -mr-1" aria-label="New project" title="New project">
+                  <FolderPlus className="w-3.5 h-3.5" />
+                </button>
+              }>
+                {projects.length === 0 ? (
+                  <button onClick={() => setNewProject(true)} className="w-full text-left px-2.5 py-1 text-[12px] text-faint hover:text-muted">
+                    Group chats into a project…
+                  </button>
+                ) : projects.map((p) => {
+                  const open = openProjects[p.id] !== false
+                  const list = byProject(p.id)
+                  return (
+                    <div key={p.id} {...dropProps(p.id)}
+                      className={`rounded-md transition ${dragOver === p.id ? 'ring-1 ring-accent/50 bg-accent/5' : ''}`}>
+                      <div className="group flex items-center rounded-md text-muted hover:text-fg hover:bg-line/[0.05]">
+                        <button onClick={() => setOpenProjects((o) => ({ ...o, [p.id]: !open }))} aria-expanded={open}
+                          className="flex-1 min-w-0 flex items-center gap-1.5 pl-1.5 pr-1 py-[5px] text-[13px]">
+                          <ChevronRight className={`w-3 h-3 shrink-0 text-faint transition-transform ${open ? 'rotate-90' : ''}`} />
+                          <Folder className="w-3.5 h-3.5 shrink-0 text-faint" />
+                          <span className="truncate">{p.name}</span>
+                          <span className="ml-auto text-[11px] text-faint tabular-nums">{list.length || ''}</span>
+                        </button>
+                        <Menu align="end" width="w-48" className="shrink-0"
+                          trigger={(t) => (
+                            <button {...t} aria-label={`Actions for project ${p.name}`}
+                              className={`mr-1 p-1 rounded text-faint hover:text-fg hover:bg-line/10 ${t.open ? '' : 'opacity-0 group-hover:opacity-100 focus-visible:opacity-100'}`}>
+                              <MoreHorizontal className="w-3.5 h-3.5" />
+                            </button>
+                          )}>
+                          <MenuItem icon={Plus} onSelect={() => onNewSession(p.id)}>New chat in project</MenuItem>
+                          <MenuItem icon={SlidersHorizontal} onSelect={() => setEditing(p)}>Project settings</MenuItem>
+                          <MenuSeparator />
+                          <MenuItem icon={Trash2} danger onSelect={() => delProject(p)}>Delete project</MenuItem>
+                        </Menu>
+                      </div>
+                      {open && (
+                        <div className="ml-3 pl-1.5 border-l border-line/[0.08] space-y-px">
+                          {list.length === 0
+                            ? <div className="px-2.5 py-1 text-[12px] text-faint">Drag chats here</div>
+                            : list.map((s) => <SessionRow key={s.id} s={s} active={s.id === active_id && inChats} {...rowProps} />)}
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </Section>
 
-      {editing && <ProjectEditor project={editing} onSave={onUpdateProject} onClose={() => setEditing(null)} />}
-      {newProject && <NewProjectDialog onCreate={onNewProject} onClose={() => setNewProject(false)} />}
-      {confirm && <ConfirmDialog {...confirm} onClose={() => setConfirm(null)} />}
-    </aside>
+              <Section title="Recent" dropProps={dropProps(null)} highlight={dragOver === null}>
+                {recent.length === 0 ? (
+                  <div className="px-2.5 py-1 text-[12px] text-faint">{sessions.length ? 'All chats are in projects' : 'No chats yet'}</div>
+                ) : (
+                  <div className="space-y-px">{recent.map((s) => <SessionRow key={s.id} s={s} active={s.id === active_id && inChats} {...rowProps} />)}</div>
+                )}
+              </Section>
+            </>
+          )}
+        </div>
+
+        <div className="p-2 border-t border-line/[0.08] shrink-0">{userMenu(false)}</div>
+
+        {editing && <ProjectEditor project={editing} onSave={onUpdateProject} onClose={() => setEditing(null)} />}
+        {newProject && <NewProjectDialog onCreate={onNewProject} onClose={() => setNewProject(false)} />}
+        {confirm && <ConfirmDialog {...confirm} onClose={() => setConfirm(null)} />}
+      </aside>
+    </>
   )
 }

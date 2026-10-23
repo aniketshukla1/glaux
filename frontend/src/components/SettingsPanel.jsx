@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import {
-  Settings, Palette, ShieldHalf, Cpu, Lock, Check, UserCog, KeyRound, LogOut, Trash2, Loader2, X, Sparkles, BookMarked,
-  SlidersHorizontal, ScrollText, Bot, Dna,
+  Settings, ShieldHalf, Cpu, Check, UserCog, KeyRound, LogOut, Trash2, Loader2, X, SlidersHorizontal, UsersRound, MessageSquare,
 } from 'lucide-react'
 import {
   getFsWorkspace, setFsWorkspace,
@@ -14,8 +13,7 @@ import LlmControl from './LlmControl.jsx'
 import SafetyControl from './SafetyControl.jsx'
 import ApprovalControl from './ApprovalControl.jsx'
 import UserAvatar from './UserAvatar.jsx'
-import Personas from './Personas.jsx'
-import Recipes from './Recipes.jsx'
+import AdminPanel from './AdminPanel.jsx'
 
 const THEMES = [
   { key: 'dark', label: 'Dark', bg: '#090b10', surface: '#11151e', accent: '#2dd4bf', fg: '#e2e8f0' },
@@ -27,17 +25,14 @@ const THEMES = [
 ]
 
 const TABS = [
-  { key: 'account', label: 'Account', Icon: UserCog },
-  { key: 'personas', label: 'Personas', Icon: Sparkles },
-  { key: 'recipes', label: 'Recipes', Icon: BookMarked },
-  { key: 'appearance', label: 'Appearance', Icon: Palette },
+  { key: 'general', label: 'General', Icon: UserCog },
   { key: 'model', label: 'Model', Icon: Cpu },
-  { key: 'advanced', label: 'Advanced', Icon: SlidersHorizontal },
-  { key: 'playbooks', label: 'Playbooks', Icon: ScrollText },
-  { key: 'subagents', label: 'Sub-agents', Icon: Bot },
-  { key: 'evolution', label: 'Evolution', Icon: Dna },
   { key: 'safety', label: 'Safety', Icon: ShieldHalf },
-  { key: 'security', label: 'Security', Icon: Lock },
+  { key: 'advanced', label: 'Advanced', Icon: SlidersHorizontal },
+]
+const ADMIN_TABS = [
+  { key: 'team', label: 'Team', Icon: UsersRound },
+  { key: 'messaging', label: 'Messaging', Icon: MessageSquare },
 ]
 
 function Input(props) {
@@ -64,7 +59,7 @@ function Section({ title, hint, children, first }) {
 function Btn({ children, onClick, busy, disabled, danger, kind = 'border' }) {
   const base = 'px-3 py-2 rounded-lg text-sm inline-flex items-center justify-center gap-1.5 transition disabled:opacity-50'
   const styles = danger
-    ? 'border border-rose-500/40 text-rose-300 hover:bg-rose-500/10'
+    ? 'border border-bad/40 text-bad hover:bg-bad/10'
     : kind === 'accent'
       ? 'btn-accent'
       : 'border border-line/16 text-muted hover:text-fg hover:border-line/30'
@@ -78,7 +73,7 @@ function Btn({ children, onClick, busy, disabled, danger, kind = 'border' }) {
 function Notice({ msg }) {
   if (!msg) return null
   const ok = msg.kind === 'ok'
-  return <div className={`text-xs mt-2 ${ok ? 'text-emerald-400' : 'text-rose-400'}`}>{msg.text}</div>
+  return <div className={`text-xs mt-2 ${ok ? 'text-ok' : 'text-bad'}`}>{msg.text}</div>
 }
 
 function AccountTab({ user, onUpdateProfile, onChangePassword, onSignOut, onSignOutEverywhere, onDeleteAccount }) {
@@ -222,7 +217,7 @@ function StatRow({ label, value }) {
 
 // Runtime capabilities: the jailed workspace file tools (toggle) and the
 // long-horizon context-management budget (read-only, from /api/health).
-function AdvancedTab({ health, onRefresh }) {
+export function AdvancedTab({ health, onRefresh }) {
   const [ws, setWs] = useState(null)
   const [wsBusy, setWsBusy] = useState(false)
   const [wsMsg, setWsMsg] = useState(null)
@@ -288,7 +283,7 @@ function AdvancedTab({ health, onRefresh }) {
 }
 
 // Authored playbooks: list, toggle exposure to the swarm, and author new ones.
-function PlaybooksTab({ onRefresh }) {
+export function PlaybooksTab({ onRefresh }) {
   const [data, setData] = useState(null)
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState(null)
@@ -353,7 +348,7 @@ function PlaybooksTab({ onRefresh }) {
                   <div className="text-fg text-sm truncate">{p.name}</div>
                   {p.description && <div className="text-faint text-xs truncate mt-0.5">{p.description}</div>}
                 </div>
-                <button onClick={() => remove(p.slug)} className="btn p-1.5 text-muted hover:text-rose-300 shrink-0" aria-label="Delete playbook">
+                <button onClick={() => remove(p.slug)} className="btn p-1.5 text-muted hover:text-bad shrink-0" aria-label="Delete playbook">
                   <Trash2 className="w-3.5 h-3.5" />
                 </button>
               </div>
@@ -382,7 +377,7 @@ function PlaybooksTab({ onRefresh }) {
 }
 
 // Custom sub-agents: view the built-in roster and define your own specialists.
-function SubagentsTab() {
+export function SubagentsTab() {
   const [data, setData] = useState(null)
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState(null)
@@ -441,7 +436,7 @@ function SubagentsTab() {
                   </div>
                   {c.description && <div className="text-faint text-xs truncate mt-0.5">{c.description}</div>}
                 </div>
-                <button onClick={() => remove(c.slug)} className="btn p-1.5 text-muted hover:text-rose-300 shrink-0" aria-label="Delete sub-agent">
+                <button onClick={() => remove(c.slug)} className="btn p-1.5 text-muted hover:text-bad shrink-0" aria-label="Delete sub-agent">
                   <Trash2 className="w-3.5 h-3.5" />
                 </button>
               </div>
@@ -477,7 +472,7 @@ function SubagentsTab() {
 }
 
 // Self-evolving harness: routing / budgets / lessons / playbooks that learn from outcomes.
-function EvolutionTab({ onRefresh }) {
+export function EvolutionTab({ onRefresh }) {
   const [data, setData] = useState(null)
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState(null)
@@ -597,7 +592,7 @@ function EvolutionTab({ onRefresh }) {
             {pinnedTools.map((s) => (
               <div key={s.id} className="glass rounded-lg px-3.5 py-2.5 flex items-center justify-between gap-3">
                 <div className="text-fg text-sm font-mono truncate">{s.name}</div>
-                <button onClick={() => unpin(s.id)} className="btn p-1.5 text-muted hover:text-rose-300 shrink-0" aria-label="Unpin tool">
+                <button onClick={() => unpin(s.id)} className="btn p-1.5 text-muted hover:text-bad shrink-0" aria-label="Unpin tool">
                   <X className="w-3.5 h-3.5" />
                 </button>
               </div>
@@ -656,97 +651,93 @@ function EvolutionTab({ onRefresh }) {
 export default function SettingsPanel({
   open, onClose, theme, onSetTheme, safety, onSafety, approval, onApproval, auth,
   initialTab, user, onUpdateProfile, onChangePassword, onSignOut, onSignOutEverywhere, onDeleteAccount,
-  personas, onCreatePersona, onUpdatePersona, onDeletePersona,
-  recipes, onCreateRecipe, onUpdateRecipe, onDeleteRecipe,
-  health, onRefresh,
+  health, onRefresh, onOpenMessaging,
 }) {
-  const [tab, setTab] = useState(initialTab || 'account')
-  useEffect(() => { if (open) setTab(initialTab || 'account') }, [open, initialTab])
+  const tabs = user?.is_admin ? [...TABS, ...ADMIN_TABS] : TABS
+  const pick = (t) => (tabs.some((x) => x.key === t) ? t : 'general')
+  const [tab, setTab] = useState(pick(initialTab))
+  useEffect(() => { if (open) setTab(pick(initialTab)) }, [open, initialTab]) // eslint-disable-line react-hooks/exhaustive-deps
   return (
-    <Modal open={open} onClose={onClose} className="max-w-4xl">
-      <div className="flex items-center gap-2 px-5 py-3.5 border-b border-line/10 shrink-0">
+    <Modal open={open} onClose={onClose} className="max-w-4xl" label="Settings">
+      <div className="flex items-center gap-2 px-5 py-3 border-b border-line/[0.08] shrink-0">
         <Settings className="w-4 h-4 text-muted" />
-        <h2 className="text-fg font-medium">Settings</h2>
-        <button onClick={onClose} className="btn p-1.5 ml-auto" aria-label="Close"><X className="w-4 h-4" /></button>
+        <h2 className="text-fg font-medium text-[14px]">Settings</h2>
+        <button onClick={onClose} className="btn-ghost p-1.5 ml-auto" aria-label="Close settings"><X className="w-4 h-4" /></button>
       </div>
 
       <div className="flex flex-1 min-h-0">
-        <nav className="w-48 sm:w-52 shrink-0 border-r border-line/10 p-3 space-y-0.5 overflow-y-auto">
-          {TABS.map(({ key, label, Icon }) => (
-            <button key={key} onClick={() => setTab(key)}
-              className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition ${
-                tab === key ? 'text-fg bg-line/10 font-medium' : 'text-muted hover:text-fg hover:bg-line/5'
+        <nav aria-label="Settings sections" className="w-44 shrink-0 border-r border-line/[0.08] p-2 space-y-0.5 overflow-y-auto">
+          {tabs.map(({ key, label, Icon }) => (
+            <button key={key} onClick={() => setTab(key)} aria-current={tab === key ? 'page' : undefined}
+              className={`w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-[13px] transition-colors ${
+                tab === key ? 'text-fg bg-line/[0.09] font-medium' : 'text-muted hover:text-fg hover:bg-line/[0.05]'
               }`}>
-              <Icon className="w-4 h-4" /> {label}
+              <Icon className={`w-4 h-4 ${tab === key ? 'text-accent' : ''}`} /> {label}
             </button>
           ))}
         </nav>
 
         <div className="flex-1 overflow-y-auto">
-          <div className="max-w-2xl mx-auto px-6 sm:px-10 py-8">
-            {tab === 'account' && (
-              <AccountTab
-                user={user}
-                onUpdateProfile={onUpdateProfile}
-                onChangePassword={onChangePassword}
-                onSignOut={onSignOut}
-                onSignOutEverywhere={onSignOutEverywhere}
-                onDeleteAccount={onDeleteAccount}
-              />
-            )}
-
-            {tab === 'personas' && (
-              <Field title="Personas" hint="Custom assistants you can apply to any chat.">
-                <Personas personas={personas} onCreate={onCreatePersona} onUpdate={onUpdatePersona} onDelete={onDeletePersona} />
-              </Field>
-            )}
-
-            {tab === 'recipes' && (
-              <Field title="Recipes" hint="Saved task templates — run them from the composer with “/”.">
-                <Recipes recipes={recipes} onCreate={onCreateRecipe} onUpdate={onUpdateRecipe} onDelete={onDeleteRecipe} />
-              </Field>
-            )}
-
-            {tab === 'appearance' && (
-              <Field title="Theme" hint="Pick a look — the whole app follows it.">
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                  {THEMES.map((t) => <ThemeSwatch key={t.key} t={t} active={theme === t.key} onPick={onSetTheme} />)}
+          <div className="max-w-2xl mx-auto px-6 sm:px-8 py-7">
+            {tab === 'general' && (
+              <>
+                <Field title="Theme" hint="The whole app follows it.">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                    {THEMES.map((t) => <ThemeSwatch key={t.key} t={t} active={theme === t.key} onPick={onSetTheme} />)}
+                  </div>
+                </Field>
+                <div className="mt-7 pt-7 border-t border-line/10">
+                  <AccountTab
+                    user={user}
+                    onUpdateProfile={onUpdateProfile}
+                    onChangePassword={onChangePassword}
+                    onSignOut={onSignOut}
+                    onSignOutEverywhere={onSignOutEverywhere}
+                    onDeleteAccount={onDeleteAccount}
+                  />
                 </div>
-              </Field>
+              </>
             )}
 
             {tab === 'model' && (
-              <Field title="Model" hint="Run the swarm on any of 30+ providers — OpenAI, Gemini, Grok, DeepSeek, Mistral, Sarvam, Groq, OpenRouter, local models, or the offline demo.">
+              <Field title="Model" hint="Run the swarm on any of 30+ providers (OpenAI, Gemini, Grok, DeepSeek, Mistral, Groq, OpenRouter), a local model, or the offline demo.">
                 <LlmControl />
               </Field>
             )}
 
-            {tab === 'advanced' && <AdvancedTab health={health} onRefresh={onRefresh} />}
-
-            {tab === 'playbooks' && <PlaybooksTab onRefresh={onRefresh} />}
-
-            {tab === 'subagents' && <SubagentsTab />}
-
-            {tab === 'evolution' && <EvolutionTab onRefresh={onRefresh} />}
-
             {tab === 'safety' && (
               <>
-                <Field title="Kill switch" hint="Halted stops all execution; dry-run skips side effects.">
+                <Field title="Kill switch" hint="Halted stops all execution. Dry run reasons through a task but skips side effects.">
                   <SafetyControl mode={safety} onChange={onSafety} />
                 </Field>
-                <Field title="Approval" hint="In gated mode, skills the swarm writes need your approval before they can run.">
+                <Field title="Approval" hint="In gated mode, skills the swarm writes wait for your approval before they can run.">
                   <ApprovalControl mode={approval} onChange={onApproval} />
                 </Field>
               </>
             )}
 
-            {tab === 'security' && (
-              <Field title="API security" hint="How the backend authenticates requests.">
-                <div className="text-xs text-muted leading-relaxed">
-                  {auth?.enabled
-                    ? 'HMAC request signing is enabled — every request is verified.'
-                    : 'Open (no auth). Set ATHENA_API_SECRET to require signed requests.'}
+            {tab === 'advanced' && (
+              <>
+                <AdvancedTab health={health} onRefresh={onRefresh} />
+                <div className="mt-7 pt-7 border-t border-line/10">
+                  <Field title="API security" hint="How the backend authenticates requests.">
+                    <div className="text-xs text-muted leading-relaxed">
+                      {auth?.enabled
+                        ? 'HMAC request signing is on. Every request is verified.'
+                        : 'Open, with no request signing. Set ATHENA_API_SECRET to require signed requests.'}
+                    </div>
+                  </Field>
                 </div>
+              </>
+            )}
+
+            {tab === 'team' && user?.is_admin && <AdminPanel currentUserId={user.id} />}
+
+            {tab === 'messaging' && user?.is_admin && (
+              <Field title="Messaging gateways" hint="Let people reach the swarm from Telegram, Discord, Slack and more. Each message runs as a normal, signed task.">
+                <button onClick={() => { onClose(); onOpenMessaging?.() }} className="btn-primary px-3 py-1.5 text-[13px]">
+                  <MessageSquare className="w-3.5 h-3.5" /> Open gateways
+                </button>
               </Field>
             )}
           </div>

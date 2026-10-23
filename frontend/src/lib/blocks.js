@@ -1,8 +1,10 @@
+import { BRAND } from './brand.js'
+
 // Turn the raw signed ledger into a human-readable timeline.
 // Power users can still open the underlying blocks (the "proof") on any step.
 
 export const ROLE_META = {
-  router: { label: 'Athena', sub: 'orchestrator', color: '#818cf8' },
+  router: { label: BRAND, sub: 'orchestrator', color: '#818cf8' },
   coder: { label: 'Coder', sub: 'builds & computes', color: '#f472b6' },
   researcher: { label: 'Researcher', sub: 'gathers & explains', color: '#22d3ee' },
   web: { label: 'Web Scout', sub: 'reads & cites the web', color: '#38bdf8' },
@@ -16,6 +18,23 @@ export const ROLE_META = {
 }
 
 export const short = (s) => (s ? `${s.slice(0, 6)}…${s.slice(-4)}` : '')
+
+// Role hues are fixed identity colours. Mixing them toward the foreground keeps
+// icons legible in light themes (they darken) and dark themes (they lighten).
+export const roleColor = (role) =>
+  `color-mix(in oklab, ${(ROLE_META[role] || ROLE_META.agent).color} 74%, rgb(var(--fg)))`
+
+// One-line summary of a run for the collapsed trace: who worked, how many
+// steps, what was learned, how many blocks were signed.
+export function summarizeRun(blocks, roleOf) {
+  const timeline = buildTimeline(blocks || [], roleOf)
+  const steps = timeline.filter((i) => i.kind === 'step' && i.role !== 'router')
+  const roles = [...new Set(steps.map((s) => s.role))]
+  const learned = steps.map((s) => s.learned).filter(Boolean)
+  const tools = steps.reduce((n, s) => n + s.activities.filter((a) => a.icon === 'tool' || a.icon === 'skill').length, 0)
+  const revised = steps.some((s) => s.verdict === 'retry')
+  return { timeline, steps, roles, learned, tools, revised, signed: (blocks || []).length }
+}
 
 function clip(s, n = 90) {
   if (!s) return ''

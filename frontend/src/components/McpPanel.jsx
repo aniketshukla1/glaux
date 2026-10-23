@@ -1,15 +1,13 @@
 import React, { useCallback, useEffect, useState } from 'react'
-import {
-  Plug, Plus, RefreshCw, Trash2, Wrench, Server, Loader2, ChevronDown, Play,
-} from 'lucide-react'
+import { Plug, Plus, RefreshCw, Trash2, Wrench, Server, Loader2, ChevronDown, Play } from 'lucide-react'
 import {
   getMcpTools, callMcpTool, getMcpServers, addMcpServer, removeMcpServer, reconnectMcpServer,
 } from '../api.js'
 import SearchEngine from './SearchEngine.jsx'
 
 const STATUS_COLOR = {
-  connected: 'rgb(52 211 153)',
-  error: 'rgb(251 113 133)',
+  connected: 'rgb(var(--ok))',
+  error: 'rgb(var(--bad))',
 }
 
 function StatusDot({ status }) {
@@ -107,7 +105,7 @@ function AddServerForm({ onAdded }) {
         />
       )}
 
-      {error && <div className="text-xs" style={{ color: 'rgb(251 113 133)' }}>{error}</div>}
+      {error && <div className="text-xs" style={{ color: 'rgb(var(--bad))' }}>{error}</div>}
 
       <button disabled={busy} className="btn-accent px-3 py-2 text-sm flex items-center gap-2 disabled:opacity-50">
         {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plug className="w-4 h-4" />}
@@ -143,7 +141,7 @@ function ServerRow({ server, onChanged }) {
         {server.transport === 'stdio' ? [server.command, ...(server.args || [])].join(' ') : server.url}
       </div>
       {server.status === 'error' && server.error && (
-        <div className="text-xs mt-1" style={{ color: 'rgb(251 113 133)' }}>{server.error}</div>
+        <div className="text-xs mt-1" style={{ color: 'rgb(var(--bad))' }}>{server.error}</div>
       )}
     </div>
   )
@@ -198,7 +196,7 @@ function ToolTester({ tools }) {
             <button disabled={busy} className="btn-accent px-3 py-2 text-sm disabled:opacity-50">Call</button>
           </div>
           {result && (
-            <div className="text-sm" style={{ color: result.ok ? 'rgb(52 211 153)' : 'rgb(251 113 133)' }}>
+            <div className="text-sm" style={{ color: result.ok ? 'rgb(var(--ok))' : 'rgb(var(--bad))' }}>
               {result.ok ? `→ ${JSON.stringify(result.result)}` : `✗ ${result.error}`}
             </div>
           )}
@@ -226,11 +224,7 @@ export default function McpPanel({ user }) {
 
   return (
     <section className="space-y-4">
-      <div className="flex items-center gap-2">
-        <Plug className="w-4 h-4 text-accent" />
-        <h2 className="text-fg font-medium">Tools</h2>
-        <span className="text-faint text-xs">{tools.length} available · {servers.length} servers</span>
-      </div>
+      <p className="text-faint text-xs">{tools.length} tools available · {servers.length} connected server{servers.length === 1 ? '' : 's'}</p>
 
       {tools.some((t) => t.server === 'athena-web') && <SearchEngine user={user} />}
 

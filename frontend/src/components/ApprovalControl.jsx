@@ -2,7 +2,7 @@ import React from 'react'
 
 const MODES = [
   { key: 'auto', label: 'auto', cls: 'text-fg border-line/20 bg-line/10' },
-  { key: 'gated', label: 'gated', cls: 'text-violet-300 border-violet-500/40 bg-violet-500/10' },
+  { key: 'gated', label: 'gated', cls: 'text-accent2 border-accent2/40 bg-accent2/10' },
 ]
 
 export default function ApprovalControl({ mode, onChange }) {

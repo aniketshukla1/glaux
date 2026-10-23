@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { BarChart3, TrendingUp } from 'lucide-react'
+import { TrendingUp } from 'lucide-react'
 import { getEvalRuns, runEval } from '../api.js'
 
 // A tiny pass-rate sparkline over the benchmark history.
@@ -58,7 +58,7 @@ export default function EvalDashboard() {
   return (
     <section>
       <div className="flex items-center justify-between mb-3">
-        <h2 className="text-fg flex items-center gap-2"><BarChart3 className="w-4 h-4 text-accent" /> Eval Dashboard</h2>
+        <p className="text-muted text-[13px]">Score the skill library against a fixed benchmark suite.</p>
         <button
           onClick={onRun}
           disabled={busy}
@@ -78,7 +78,7 @@ export default function EvalDashboard() {
               <span className="text-muted text-sm">{pct(trend.first_pass_rate)}</span>
               <span className="text-faint">→</span>
               <span className="text-fg text-2xl font-semibold">{pct(trend.last_pass_rate)}</span>
-              <span className={`text-sm font-medium ${trend.delta >= 0 ? 'text-emerald-300' : 'text-rose-300'}`}>
+              <span className={`text-sm font-medium ${trend.delta >= 0 ? 'text-ok' : 'text-bad'}`}>
                 {trend.delta >= 0 ? '+' : ''}{(trend.delta * 100).toFixed(0)} pts
               </span>
             </div>
@@ -102,7 +102,7 @@ export default function EvalDashboard() {
               {lift && history.length > 1 && lift.delta_pass_rate !== 0 && (
                 <span
                   className={`text-sm mb-1 ml-auto ${
-                    lift.delta_pass_rate > 0 ? 'text-emerald-300' : 'text-rose-300'
+                    lift.delta_pass_rate > 0 ? 'text-ok' : 'text-bad'
                   }`}
                 >
                   {lift.delta_pass_rate > 0 ? '▲' : '▼'} {pct(Math.abs(lift.delta_pass_rate))} vs last
@@ -110,12 +110,12 @@ export default function EvalDashboard() {
               )}
             </div>
             {lift && lift.newly_passing.length > 0 && (
-              <div className="text-xs text-emerald-300 mt-2">
+              <div className="text-xs text-ok mt-2">
                 newly passing: {lift.newly_passing.join(', ')}
               </div>
             )}
             {lift && lift.newly_failing.length > 0 && (
-              <div className="text-xs text-rose-300 mt-1">
+              <div className="text-xs text-bad mt-1">
                 regressed: {lift.newly_failing.join(', ')}
               </div>
             )}
@@ -125,7 +125,7 @@ export default function EvalDashboard() {
             {run.cases.map((c) => (
               <div key={c.name} className="glass p-3 text-sm">
                 <div className="flex items-center gap-2">
-                  <span className={c.passed ? 'text-emerald-300' : 'text-rose-300'}>
+                  <span className={c.passed ? 'text-ok' : 'text-bad'}>
                     {c.passed ? '✓' : '✗'}
                   </span>
                   <span className="text-fg">{c.name}</span>

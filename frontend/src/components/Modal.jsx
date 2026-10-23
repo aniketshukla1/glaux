@@ -4,7 +4,7 @@ import { createPortal } from 'react-dom'
 // A large, centered full-screen card (a bit smaller than the viewport) with a
 // blurred backdrop. Portaled to <body> so it sits above the sticky shell, and
 // closes on Escape or a backdrop click. Children own the internal layout.
-export default function Modal({ open, onClose, className = 'max-w-5xl', children }) {
+export default function Modal({ open, onClose, className = 'max-w-5xl', label, children }) {
   useEffect(() => {
     if (!open) return undefined
     const onKey = (e) => { if (e.key === 'Escape') onClose?.() }
@@ -20,6 +20,7 @@ export default function Modal({ open, onClose, className = 'max-w-5xl', children
         className={`relative card w-full ${className} h-[90vh] max-h-[920px] flex flex-col overflow-hidden shadow-2xl animate-fade-up`}
         role="dialog"
         aria-modal="true"
+        aria-label={label}
       >
         {children}
       </div>

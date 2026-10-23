@@ -116,9 +116,9 @@ export default function AuthScreen({ firstRun, onAuthed, oauthProviders = [], in
             value={password} onChange={setPassword} autoFocus={mode === 'reset'}
             autoComplete={mode === 'login' ? 'current-password' : 'new-password'} required />
         )}
-        {error && <div className="text-rose-400 text-xs px-1 animate-fade-in">{error}</div>}
+        {error && <div className="text-bad text-xs px-1 animate-fade-in">{error}</div>}
         {info && (
-          <div className="text-emerald-400 text-xs px-1 animate-fade-in">
+          <div className="text-ok text-xs px-1 animate-fade-in">
             {info.text}
             {info.link && (
               <button type="button" onClick={() => { window.location.href = info.link }}

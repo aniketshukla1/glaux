@@ -10,9 +10,9 @@ const SERIES_COLORS = ['rgb(var(--accent))', 'rgb(var(--accent2))', '#fbbf24', '
 
 const CALLOUT = {
   info: { Icon: Info, cls: 'border-accent/30 bg-accent/8 text-accent' },
-  success: { Icon: CheckCircle2, cls: 'border-emerald-500/30 bg-emerald-500/8 text-emerald-300' },
-  warn: { Icon: AlertTriangle, cls: 'border-amber-500/30 bg-amber-500/8 text-amber-300' },
-  danger: { Icon: XCircle, cls: 'border-rose-500/30 bg-rose-500/8 text-rose-300' },
+  success: { Icon: CheckCircle2, cls: 'border-ok/30 bg-ok/8 text-ok' },
+  warn: { Icon: AlertTriangle, cls: 'border-warn/30 bg-warn/8 text-warn' },
+  danger: { Icon: XCircle, cls: 'border-bad/30 bg-bad/8 text-bad' },
 }
 
 function Callout({ tone = 'info', text }) {
@@ -32,7 +32,7 @@ function Metrics({ items = [] }) {
         <div key={i} className="card p-3">
           <div className="text-faint text-xs truncate">{m.label}</div>
           <div className="text-fg text-xl font-semibold mt-1 truncate">{m.value}</div>
-          {m.delta != null && <div className={`text-xs mt-0.5 ${String(m.delta).startsWith('-') ? 'text-rose-400' : 'text-emerald-400'}`}>{m.delta}</div>}
+          {m.delta != null && <div className={`text-xs mt-0.5 ${String(m.delta).startsWith('-') ? 'text-bad' : 'text-ok'}`}>{m.delta}</div>}
         </div>
       ))}
     </div>

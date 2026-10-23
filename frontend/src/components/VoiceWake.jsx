@@ -67,11 +67,11 @@ export default function VoiceWake({ enabled, running, result, onDispatch, onDisa
     <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-40 flex items-center gap-2.5 pl-3 pr-2 py-2 rounded-full glass shadow-2xl border border-line/15">
       <span className="relative flex items-center justify-center w-6 h-6">
         {!busy && !denied && (
-          <span className={`absolute inline-flex w-full h-full rounded-full ${armed ? 'bg-accent/40' : 'bg-emerald-500/40'} animate-ping`} />
+          <span className={`absolute inline-flex w-full h-full rounded-full ${armed ? 'bg-accent/40' : 'bg-ok/40'} animate-ping`} />
         )}
         {busy
           ? <Loader2 className="w-4 h-4 text-accent animate-spin" />
-          : <Mic className={`w-4 h-4 ${denied ? 'text-rose-400' : armed ? 'text-accent' : 'text-emerald-400'}`} />}
+          : <Mic className={`w-4 h-4 ${denied ? 'text-bad' : armed ? 'text-accent' : 'text-ok'}`} />}
       </span>
       <span className="text-fg text-[13px] whitespace-nowrap pr-0.5">{label}</span>
       {ttsSupported() && (

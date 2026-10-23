@@ -1,5 +1,4 @@
 import React, { useEffect, useState } from 'react'
-import { Database } from 'lucide-react'
 import { addMemory, getMemory } from '../api.js'
 
 const LAYERS = ['semantic', 'episodic', 'procedural']
@@ -45,7 +44,6 @@ export default function MemoryPanel() {
 
   return (
     <section>
-      <h2 className="text-fg mb-3 flex items-center gap-2"><Database className="w-4 h-4 text-accent" /> Memory</h2>
 
       <div className="flex gap-1 mb-3">
         {LAYERS.map((l) => (

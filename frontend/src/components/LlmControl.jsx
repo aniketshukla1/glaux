@@ -265,7 +265,7 @@ export default function LlmControl({ onChange }) {
             className={inputCls}
           />
           {current.key_present && !apiKey && (
-            <div className="flex items-center gap-1 text-xs mt-1" style={{ color: 'rgb(52 211 153)' }}>
+            <div className="flex items-center gap-1 text-xs mt-1" style={{ color: 'rgb(var(--ok))' }}>
               <Check className="w-3 h-3" /> key detected in {current.key_env}
             </div>
           )}
@@ -287,7 +287,7 @@ export default function LlmControl({ onChange }) {
         </span>
       </div>
 
-      {err && <div className="text-xs" style={{ color: 'rgb(251 113 133)' }}>{err}</div>}
+      {err && <div className="text-xs" style={{ color: 'rgb(var(--bad))' }}>{err}</div>}
 
       {/* Model tiering: a fast/cheap model for routing + reflection */}
       <div className="card p-3 mt-1">
@@ -332,7 +332,7 @@ export default function LlmControl({ onChange }) {
                 {llm.fast ? <>tiering on: <span className="text-accent">{llm.fast.model_id}</span></> : 'off — one model for everything'}
               </span>
             </div>
-            {fastErr && <div className="text-xs" style={{ color: 'rgb(251 113 133)' }}>{fastErr}</div>}
+            {fastErr && <div className="text-xs" style={{ color: 'rgb(var(--bad))' }}>{fastErr}</div>}
           </div>
         )}
       </div>
@@ -371,7 +371,7 @@ export default function LlmControl({ onChange }) {
                     onClick={() => { navigator.clipboard?.writeText(hfCommand); setCopied(true); setTimeout(() => setCopied(false), 1200) }}
                     className="btn p-1.5 shrink-0" aria-label="Copy command"
                   >
-                    {copied ? <Check className="w-3.5 h-3.5" style={{ color: 'rgb(52 211 153)' }} /> : <Copy className="w-3.5 h-3.5" />}
+                    {copied ? <Check className="w-3.5 h-3.5" style={{ color: 'rgb(var(--ok))' }} /> : <Copy className="w-3.5 h-3.5" />}
                   </button>
                 </div>
               )}
@@ -396,7 +396,7 @@ export default function LlmControl({ onChange }) {
       <div className="card p-3">
         <button onClick={() => setLmOpen((o) => !o)} className="flex items-center gap-2 text-muted text-sm w-full">
           <HardDrive className="w-3.5 h-3.5 text-accent" /> Run a local model file
-          {lm.running && <span className="w-1.5 h-1.5 rounded-full" style={{ background: 'rgb(52 211 153)' }} />}
+          {lm.running && <span className="w-1.5 h-1.5 rounded-full" style={{ background: 'rgb(var(--ok))' }} />}
           <ChevronDown className={`w-3.5 h-3.5 ml-auto transition ${lmOpen ? 'rotate-180' : ''}`} />
         </button>
         {lmOpen && (
@@ -424,11 +424,11 @@ export default function LlmControl({ onChange }) {
               )}
             </div>
             {lm.running && (
-              <div className="text-xs" style={{ color: 'rgb(52 211 153)' }}>
+              <div className="text-xs" style={{ color: 'rgb(var(--ok))' }}>
                 running: {lm.runtime} · {lm.model} on :{lm.port}
               </div>
             )}
-            {lmErr && <div className="text-xs whitespace-pre-wrap" style={{ color: 'rgb(251 113 133)' }}>{lmErr}</div>}
+            {lmErr && <div className="text-xs whitespace-pre-wrap" style={{ color: 'rgb(var(--bad))' }}>{lmErr}</div>}
             <p className="text-faint text-xs">Loading large weights can take a while — Athena waits for the server to come up.</p>
           </div>
         )}

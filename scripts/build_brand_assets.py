@@ -3,9 +3,10 @@
 
     python scripts/build_brand_assets.py    # -> docs/images/
 
-The owl mark is defined once as SVG (site/public/favicon.svg) and redrawn here on
-the same 0..64 grid, so the icon, the README banner and the social cards can never
-drift from the favicon. Everything is deterministic — a rebuild is byte-stable.
+The constellation mark is defined once (frontend/src/components/GlauxMark.jsx) and
+redrawn here on the same 0..64 grid, so the icon, the README banner and the social
+cards can never drift from the app. Everything is deterministic — a rebuild is
+byte-stable.
 
   icon.png             512x512    avatar / app icon
   banner.png          1280x360    README hero
@@ -32,6 +33,7 @@ INDIGO = (129, 140, 248)
 FG = (237, 242, 249)
 MUTED = (148, 163, 184)
 
+NAME = "Glaux"
 TAGLINE = "A multi-agent swarm that proves its work"
 
 BOLD = ["/System/Library/Fonts/Supplemental/Arial Bold.ttf", "/Library/Fonts/DejaVuSans-Bold.ttf"]
@@ -58,29 +60,43 @@ def gradient(size: tuple[int, int], c1=TEAL, c2=INDIGO) -> Image.Image:
     return g
 
 
-def owl_mark(px: int, stroke: float = 4.0) -> Image.Image:
-    """The Athena mark, gradient-filled, on the SVG's 0..64 grid."""
+# The full cut of GlauxMark: the swarm as a constellation shaped like an owl.
+EDGES = [[(12, 12), (21, 24), (32, 29), (43, 24), (52, 12)],
+         [(21, 24), (16, 38), (32, 52), (48, 38), (43, 24)]]
+NODES = [(12, 12, 2.8), (52, 12, 2.8), (21, 24, 3.2), (43, 24, 3.2),
+         (32, 29, 2.8), (16, 38, 2.8), (48, 38, 2.8), (32, 52, 3.2)]
+EYES = [(25, 37, 4.6), (39, 37, 4.6)]
+
+
+def mark(px: int) -> Image.Image:
+    """The constellation mark at px square, cropped to the SVG's 8..56 viewBox."""
     ss = 4  # supersample, then downsample for clean curves
-    n, k = px * ss, px * ss / 64.0
-    mask = Image.new("L", (n, n), 0)
-    d = ImageDraw.Draw(mask)
-    w = max(1, round(stroke * k))
+    n = px * ss
+    k = n / 48.0
 
-    for cx in (23, 41):
-        d.ellipse([(cx - 11) * k, 23 * k, (cx + 11) * k, 45 * k], outline=255, width=w)
-        r = 3.8 * k
-        d.ellipse([cx * k - r, 34 * k - r, cx * k + r, 34 * k + r], fill=255)
+    def at(x, y):
+        return (x - 8) * k, (y - 8) * k
 
-    for x1, y1, x2, y2 in ((14, 20, 21, 26), (50, 20, 43, 26)):  # ear tufts
-        d.line([x1 * k, y1 * k, x2 * k, y2 * k], fill=255, width=w)
-        for x, y in ((x1, y1), (x2, y2)):  # round caps
-            r = w / 2
-            d.ellipse([x * k - r, y * k - r, x * k + r, y * k + r], fill=255)
+    # Lines go on their own layer and are faded as one, like the SVG's
+    # stroke-opacity, so overlapping joints don't darken.
+    lines = Image.new("RGBA", (n, n), (0, 0, 0, 0))
+    dl = ImageDraw.Draw(lines)
+    w = max(1, round(2 * k))
+    for path in EDGES:
+        pts = [at(x, y) for x, y in path]
+        dl.line(pts, fill=(*TEAL, 255), width=w, joint="curve")
+        for x, y in pts:  # round caps
+            dl.ellipse([x - w / 2, y - w / 2, x + w / 2, y + w / 2], fill=(*TEAL, 255))
+    lines.putalpha(lines.getchannel("A").point(lambda a: int(a * 0.55)))
 
-    mask = mask.resize((px, px), Image.LANCZOS)
-    out = Image.new("RGBA", (px, px), (0, 0, 0, 0))
-    out.paste(gradient((px, px)), (0, 0), mask)
-    return out
+    out = Image.new("RGBA", (n, n), (0, 0, 0, 0))
+    out.alpha_composite(lines)
+    d = ImageDraw.Draw(out)
+    for dots, color in ((NODES, TEAL), (EYES, INDIGO)):
+        for x, y, r in dots:
+            cx, cy = at(x, y)
+            d.ellipse([cx - r * k, cy - r * k, cx + r * k, cy + r * k], fill=(*color, 255))
+    return out.resize((px, px), Image.LANCZOS)
 
 
 def swarm_field(im: Image.Image, seed: int = 7, density: int = 13000) -> None:
@@ -149,7 +165,7 @@ def build_icon(px: int = 512) -> None:
 
     glow(im, px // 2, int(px * 0.53), int(px * 0.30), strength=52)
     m = int(px * 0.62)
-    im.alpha_composite(owl_mark(m, stroke=4.4), ((px - m) // 2, (px - m) // 2))
+    im.alpha_composite(mark(m), ((px - m) // 2, (px - m) // 2))
     save(im, "icon.png")
 
 
@@ -158,9 +174,9 @@ def build_banner(w: int = 1280, h: int = 360) -> None:
     glow(im, w // 2, int(h * 0.40), int(h * 0.52), strength=44)
 
     m = 92
-    im.alpha_composite(owl_mark(m, stroke=4.2), ((w - m) // 2, 44))
+    im.alpha_composite(mark(m), ((w - m) // 2, 44))
     d = ImageDraw.Draw(im)
-    centered(d, 152, "Athena", font(BOLD, 74), FG, w)
+    centered(d, 152, NAME, font(BOLD, 74), FG, w)
     centered(d, 244, TAGLINE, font(REG, 27), MUTED, w)
 
     bar = Image.new("RGBA", (w, 3), (0, 0, 0, 0))
@@ -174,9 +190,9 @@ def build_social_card(w: int = 1280, h: int = 640) -> None:
     glow(im, w // 2, int(h * 0.34), int(h * 0.40), strength=50)
 
     m = 118
-    im.alpha_composite(owl_mark(m, stroke=4.2), ((w - m) // 2, 96))
+    im.alpha_composite(mark(m), ((w - m) // 2, 96))
     d = ImageDraw.Draw(im)
-    centered(d, 238, "Athena", font(BOLD, 92), FG, w)
+    centered(d, 238, NAME, font(BOLD, 92), FG, w)
     centered(d, 350, TAGLINE, font(REG, 32), MUTED, w)
 
     # the hook: a chain that only ever prints ✓ proves nothing
@@ -187,7 +203,6 @@ def build_social_card(w: int = 1280, h: int = 640) -> None:
     d.rounded_rectangle([x0, y0, x0 + tw + 60, y0 + 66], radius=12,
                         fill=(16, 20, 28, 255), outline=(46, 54, 70, 255), width=1)
     d.text((x0 + 30, y0 + 19), line, font=mono, fill=(248, 113, 113))
-    centered(d, 542, "github.com/athena-swarm/athena", font(REG, 25), (110, 125, 148), w)
 
     bar = Image.new("RGBA", (w, 4), (0, 0, 0, 0))
     bar.paste(gradient((w, 4)), (0, 0))
@@ -209,14 +224,14 @@ def build_wide(name: str, w: int, h: int, seed: int) -> None:
     # Align the mark to the wordmark's *optical* centre, not the text box: the
     # ascender box is much taller than the cap height, so anchoring on the box
     # drops the mark well below the letters.
-    bx0, by0, bx1, by1 = d.textbbox((0, 0), "Athena", font=title)
+    bx0, by0, bx1, by1 = d.textbbox((0, 0), NAME, font=title)
     tw, th = bx1 - bx0, by1 - by0
     m = int(h * 0.34)
     gap = int(h * 0.05)
 
     x = cx - (m + gap + tw) // 2
-    im.alpha_composite(owl_mark(m, stroke=4.2), (x, cy - m // 2))
-    d.text((x + m + gap - bx0, cy - th // 2 - by0), "Athena", font=title, fill=FG)
+    im.alpha_composite(mark(m), (x, cy - m // 2))
+    d.text((x + m + gap - bx0, cy - th // 2 - by0), NAME, font=title, fill=FG)
 
     tagw = d.textbbox((0, 0), TAGLINE, font=tag)[2]
     d.text((cx - tagw / 2, cy + m // 2 + gap), TAGLINE, font=tag, fill=MUTED)

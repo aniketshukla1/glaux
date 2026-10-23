@@ -1,7 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react'
-import {
-  CalendarClock, Plus, Play, Pause, Trash2, Zap, Clock, Loader2, CheckCircle2, AlertTriangle,
-} from 'lucide-react'
+import { CalendarClock, Plus, Play, Pause, Trash2, Zap, Clock, Loader2, CheckCircle2, AlertTriangle } from 'lucide-react'
 import { getSchedules, addSchedule, removeSchedule, enableSchedule, runSchedule } from '../api.js'
 
 const PRESETS = [
@@ -19,8 +17,8 @@ const fmt = (iso) => {
 }
 
 function StatusBadge({ status }) {
-  if (status === 'ok') return <span className="flex items-center gap-1 text-xs" style={{ color: 'rgb(52 211 153)' }}><CheckCircle2 className="w-3 h-3" /> ok</span>
-  if (status === 'error') return <span className="flex items-center gap-1 text-xs" style={{ color: 'rgb(251 113 133)' }}><AlertTriangle className="w-3 h-3" /> error</span>
+  if (status === 'ok') return <span className="flex items-center gap-1 text-xs" style={{ color: 'rgb(var(--ok))' }}><CheckCircle2 className="w-3 h-3" /> ok</span>
+  if (status === 'error') return <span className="flex items-center gap-1 text-xs" style={{ color: 'rgb(var(--bad))' }}><AlertTriangle className="w-3 h-3" /> error</span>
   if (status === 'running') return <span className="flex items-center gap-1 text-xs text-muted"><Loader2 className="w-3 h-3 animate-spin" /> running</span>
   return null
 }
@@ -101,11 +99,6 @@ export default function SchedulePanel() {
 
   return (
     <section className="space-y-4">
-      <div className="flex items-center gap-2">
-        <CalendarClock className="w-4 h-4 text-accent" />
-        <h2 className="text-fg font-medium">Schedules</h2>
-        <span className="text-faint text-xs">{jobs.length} job{jobs.length === 1 ? '' : 's'}</span>
-      </div>
 
       <form onSubmit={submit} className="card p-3 space-y-2.5">
         <div className="flex items-center gap-2">
@@ -121,7 +114,7 @@ export default function SchedulePanel() {
             </button>
           ))}
         </div>
-        {err && <div className="text-xs whitespace-pre-wrap" style={{ color: 'rgb(251 113 133)' }}>{err}</div>}
+        {err && <div className="text-xs whitespace-pre-wrap" style={{ color: 'rgb(var(--bad))' }}>{err}</div>}
         <button disabled={busy} className="btn-accent px-3 py-2 text-sm flex items-center gap-2 disabled:opacity-50">
           {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <CalendarClock className="w-4 h-4" />}
           Schedule

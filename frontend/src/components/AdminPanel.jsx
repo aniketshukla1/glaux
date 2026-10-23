@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { Users, Shield, ShieldOff, UserCheck, UserX, Trash2, Link2, Copy, Check, Loader2 } from 'lucide-react'
+import { Shield, ShieldOff, UserCheck, UserX, Trash2, Link2, Copy, Check, Loader2 } from 'lucide-react'
 import { getAdminUsers, updateAdminUser, deleteAdminUser, createInvite } from '../api.js'
 import UserAvatar from './UserAvatar.jsx'
 
@@ -27,7 +27,7 @@ export default function AdminPanel({ currentUserId }) {
   return (
     <section>
       <div className="flex items-center justify-between mb-3">
-        <h2 className="text-fg flex items-center gap-2"><Users className="w-4 h-4 text-accent" /> Team <span className="text-xs text-faint">({users.length})</span></h2>
+        <p className="text-muted text-[13px]">{users.length} member{users.length === 1 ? '' : 's'}</p>
         <button onClick={makeInvite} className="btn px-2.5 py-1.5 text-sm flex items-center gap-1.5"><Link2 className="w-3.5 h-3.5" /> Invite</button>
       </div>
 
@@ -39,7 +39,7 @@ export default function AdminPanel({ currentUserId }) {
           </button>
         </div>
       )}
-      {error && <div className="text-rose-400 text-xs mb-3">{error}</div>}
+      {error && <div className="text-bad text-xs mb-3">{error}</div>}
       {loading && <div className="text-faint text-sm flex items-center gap-2"><Loader2 className="w-4 h-4 animate-spin" /> Loading…</div>}
 
       <div className="space-y-2 max-h-[60vh] overflow-auto pr-1">
@@ -52,8 +52,8 @@ export default function AdminPanel({ currentUserId }) {
                 <div className="flex items-center gap-2">
                   <span className="text-fg text-sm truncate">{u.name}</span>
                   {u.is_admin && <span className="text-[10px] px-1.5 py-0.5 rounded bg-accent/15 text-accent border border-accent/30">admin</span>}
-                  {!u.email_verified && <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-300 border border-amber-500/30">unverified</span>}
-                  {!u.is_active && <span className="text-[10px] px-1.5 py-0.5 rounded bg-rose-500/10 text-rose-300 border border-rose-500/30">disabled</span>}
+                  {!u.email_verified && <span className="text-[10px] px-1.5 py-0.5 rounded bg-warn/10 text-warn border border-warn/30">unverified</span>}
+                  {!u.is_active && <span className="text-[10px] px-1.5 py-0.5 rounded bg-bad/10 text-bad border border-bad/30">disabled</span>}
                   {self && <span className="text-[10px] text-faint">you</span>}
                 </div>
                 <div className="text-faint text-xs truncate">{u.email}{u.oauth?.length ? ` · ${u.oauth.join(', ')}` : ''}</div>
@@ -66,7 +66,7 @@ export default function AdminPanel({ currentUserId }) {
                     <button onClick={() => patch(u.id, { is_active: !u.is_active })} title={u.is_active ? 'Deactivate' : 'Activate'}
                       className="btn p-1.5">{u.is_active ? <UserX className="w-3.5 h-3.5" /> : <UserCheck className="w-3.5 h-3.5" />}</button>
                     <button onClick={() => remove(u.id)} title="Delete user"
-                      className="btn p-1.5 text-rose-300 hover:text-rose-200"><Trash2 className="w-3.5 h-3.5" /></button>
+                      className="btn p-1.5 text-bad hover:text-bad"><Trash2 className="w-3.5 h-3.5" /></button>
                   </>
                 )}
               </div>

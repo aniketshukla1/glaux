@@ -80,7 +80,7 @@ export default function Recipes({ recipes = [], onCreate, onUpdate, onDelete }) 
             </div>
             <div className="flex items-center gap-0.5 shrink-0 opacity-0 group-hover:opacity-100 transition">
               <button onClick={() => setEditing(r.id)} className="btn p-1.5" aria-label="Edit"><Pencil className="w-3.5 h-3.5" /></button>
-              <button onClick={() => onDelete(r.id)} className="btn p-1.5 text-rose-300 hover:text-rose-200" aria-label="Delete"><Trash2 className="w-3.5 h-3.5" /></button>
+              <button onClick={() => onDelete(r.id)} className="btn p-1.5 text-bad hover:text-bad" aria-label="Delete"><Trash2 className="w-3.5 h-3.5" /></button>
             </div>
           </div>
         ),

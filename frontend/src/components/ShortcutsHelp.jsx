@@ -1,23 +1,16 @@
 import React, { useEffect } from 'react'
-import { createPortal } from 'react-dom'
-import { Keyboard, X } from 'lucide-react'
+import { X, Keyboard } from 'lucide-react'
 
 const SHORTCUTS = [
-  { keys: ['⌘', 'K'], label: 'Command palette' },
-  { keys: ['⌘', 'B'], label: 'Toggle sidebar' },
-  { keys: ['?'], label: 'This shortcuts panel' },
-  { keys: ['Enter'], label: 'Send message' },
-  { keys: ['⇧', 'Enter'], label: 'New line in message' },
-  { keys: ['Esc'], label: 'Close dialog / panel' },
+  { keys: ['⌘', 'K'], label: 'Search and commands' },
+  { keys: ['⌘', 'B'], label: 'Collapse or expand the sidebar' },
+  { keys: ['⌘', ','], label: 'Settings' },
+  { keys: ['?'], label: 'This list' },
+  { keys: ['Enter'], label: 'Send' },
+  { keys: ['⇧', 'Enter'], label: 'New line' },
+  { keys: ['/'], label: 'Commands and recipes, at the start of a message' },
+  { keys: ['Esc'], label: 'Close a dialog or menu' },
 ]
-
-function Key({ k }) {
-  return (
-    <kbd className="px-1.5 py-0.5 rounded-md border border-line/20 bg-line/8 text-[11px] text-muted min-w-[22px] inline-block text-center">
-      {k}
-    </kbd>
-  )
-}
 
 export default function ShortcutsHelp({ open, onClose }) {
   useEffect(() => {
@@ -26,27 +19,25 @@ export default function ShortcutsHelp({ open, onClose }) {
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [open, onClose])
-
   if (!open) return null
-  return createPortal(
+  return (
     <div className="fixed inset-0 z-[75] grid place-items-center p-5">
-      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm animate-fade-in" onClick={onClose} />
-      <div className="relative card w-full max-w-sm p-5 animate-fade-up">
-        <div className="flex items-center gap-2 mb-4">
+      <div className="absolute inset-0 bg-black/45 backdrop-blur-[2px] animate-fade-in" onClick={onClose} />
+      <div role="dialog" aria-modal="true" aria-label="Keyboard shortcuts" className="relative popover w-full max-w-sm p-5 animate-pop-in">
+        <div className="flex items-center gap-2 mb-3">
           <Keyboard className="w-4 h-4 text-accent" />
-          <h2 className="text-fg font-medium">Keyboard shortcuts</h2>
-          <button onClick={onClose} className="ml-auto btn p-1.5" aria-label="Close"><X className="w-4 h-4" /></button>
+          <h2 className="text-fg font-medium text-[15px]">Keyboard shortcuts</h2>
+          <button onClick={onClose} className="ml-auto btn-ghost p-1.5" aria-label="Close"><X className="w-4 h-4" /></button>
         </div>
-        <div className="space-y-2.5">
+        <ul className="divide-y divide-line/[0.07]">
           {SHORTCUTS.map((s) => (
-            <div key={s.label} className="flex items-center justify-between gap-3">
-              <span className="text-sm text-muted">{s.label}</span>
-              <span className="flex items-center gap-1">{s.keys.map((k, j) => <Key key={j} k={k} />)}</span>
-            </div>
+            <li key={s.label} className="flex items-center justify-between gap-4 py-2 text-[13px]">
+              <span className="text-muted">{s.label}</span>
+              <span className="flex items-center gap-1 shrink-0">{s.keys.map((k) => <span key={k} className="kbd">{k}</span>)}</span>
+            </li>
           ))}
-        </div>
+        </ul>
       </div>
-    </div>,
-    document.body,
+    </div>
   )
 }

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
-import { Hammer, AlertTriangle, Check, X, Shield, ShieldCheck } from 'lucide-react'
-import { approveSkill, getHealth, getSkills, rejectSkill, synthesizeSkill, useSkill } from '../api.js'
+import { AlertTriangle, Check, X, Shield, ShieldCheck } from 'lucide-react'
+import { approveSkill, getHealth, getSkills, rejectSkill, synthesizeSkill } from '../api.js'
 
 // How skill code is isolated when it runs. WASM = the v2 no-ambient-authority
 // backend (can't syscall at all); subprocess = the hardened child-process sandbox.
@@ -10,8 +10,8 @@ function SandboxBadge({ sandbox }) {
   const Icon = wasm ? ShieldCheck : Shield
   const label = wasm ? 'WASM isolation' : 'subprocess sandbox'
   const cls = wasm
-    ? 'text-emerald-300 border-emerald-500/40 bg-emerald-500/10'
-    : 'text-sky-300 border-sky-500/40 bg-sky-500/10'
+    ? 'text-ok border-ok/40 bg-ok/10'
+    : 'text-info border-info/40 bg-info/10'
   const title = wasm
     ? 'Skills run in a WebAssembly guest with no ambient authority (no syscalls by default).'
     : sandbox.wasm_runtime
@@ -28,16 +28,16 @@ function SandboxBadge({ sandbox }) {
 }
 
 const STATUS = {
-  pending_approval: 'text-violet-300 border-violet-500/40 bg-violet-500/10',
-  quarantined: 'text-amber-300 border-amber-500/40 bg-amber-500/10',
-  promoted: 'text-emerald-300 border-emerald-500/40 bg-emerald-500/10',
-  deprecated: 'text-rose-300 border-rose-500/40 bg-rose-500/10',
+  pending_approval: 'text-accent2 border-accent2/40 bg-accent2/10',
+  quarantined: 'text-warn border-warn/40 bg-warn/10',
+  promoted: 'text-ok border-ok/40 bg-ok/10',
+  deprecated: 'text-bad border-bad/40 bg-bad/10',
   rejected: 'text-muted border-line/15 bg-line/8',
 }
 
 export default function SkillLibrary() {
   const [skills, setSkills] = useState([])
-  const [task, setTask] = useState('Reverse a string')
+  const [task, setTask] = useState('')
   const [busy, setBusy] = useState(false)
   const [result, setResult] = useState(null)
   const [sandbox, setSandbox] = useState(null)
@@ -67,11 +67,6 @@ export default function SkillLibrary() {
     }
   }
 
-  const onUse = async (id, success) => {
-    await useSkill(id, success)
-    await load()
-  }
-
   const onApprove = async (id) => {
     await approveSkill(id)
     await load()
@@ -85,7 +80,6 @@ export default function SkillLibrary() {
   return (
     <section>
       <div className="flex items-center gap-2 mb-3">
-        <h2 className="text-fg flex items-center gap-2"><Hammer className="w-4 h-4 text-accent" /> Skill Library</h2>
         <span className="ml-auto"><SandboxBadge sandbox={sandbox} /></span>
       </div>
 
@@ -93,7 +87,7 @@ export default function SkillLibrary() {
         <input
           value={task}
           onChange={(e) => setTask(e.target.value)}
-          placeholder="Describe a skill to synthesize…"
+          placeholder="Describe a skill to write, e.g. reverse a string"
           className="flex-1 glass px-3 py-2 bg-transparent outline-none text-sm text-fg placeholder:text-faint"
         />
         <button
@@ -107,14 +101,14 @@ export default function SkillLibrary() {
       {result && (
         <div
           className={`glass p-3 mb-3 text-xs border ${
-            result.ok ? 'border-emerald-500/40' : 'border-rose-500/40'
+            result.ok ? 'border-ok/40' : 'border-bad/40'
           }`}
         >
-          <div className={result.ok ? 'text-emerald-300' : 'text-rose-300'}>
+          <div className={result.ok ? 'text-ok' : 'text-bad'}>
             {result.ok ? '✓ synthesized + sandbox-tested' : `✗ rejected: ${result.reason}`}
           </div>
           {result.cap_violations?.length > 0 && (
-            <div className="text-rose-300 mt-1">caps: {result.cap_violations.join('; ')}</div>
+            <div className="text-bad mt-1">caps: {result.cap_violations.join('; ')}</div>
           )}
           {result.test_results?.length > 0 && (
             <div className="text-muted mt-1">
@@ -124,12 +118,7 @@ export default function SkillLibrary() {
         </div>
       )}
 
-      <p className="text-xs text-faint mb-2">
-        Synthesized skills are sandbox-tested, then <span className="text-amber-300">quarantined</span>{' '}
-        → <span className="text-emerald-300">promoted</span> after repeated success.
-      </p>
-
-      <div className="space-y-2 max-h-[55vh] overflow-auto pr-1">
+      <div className="space-y-2 mt-3">
         {skills.length === 0 && (
           <div className="glass p-6 text-center text-faint text-sm">
             No skills yet. Synthesize one above.
@@ -142,7 +131,7 @@ export default function SkillLibrary() {
                 {s.status.replace('_', ' ')}
               </span>
               {s.sensitive && (
-                <span className="px-2 py-0.5 rounded text-xs border border-amber-500/40 text-amber-300 inline-flex items-center gap-1">
+                <span className="px-2 py-0.5 rounded text-xs border border-warn/40 text-warn inline-flex items-center gap-1">
                   <AlertTriangle className="w-3 h-3" /> sensitive
                 </span>
               )}
@@ -157,35 +146,18 @@ export default function SkillLibrary() {
               <div className="flex gap-2 mt-2">
                 <button
                   onClick={() => onApprove(s.id)}
-                  className="px-2 py-1 rounded text-xs border border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/10 inline-flex items-center gap-1"
+                  className="px-2 py-1 rounded text-xs border border-ok/40 text-ok hover:bg-ok/10 inline-flex items-center gap-1"
                 >
                   <Check className="w-3 h-3" /> approve
                 </button>
                 <button
                   onClick={() => onReject(s.id)}
-                  className="px-2 py-1 rounded text-xs border border-rose-500/40 text-rose-300 hover:bg-rose-500/10 inline-flex items-center gap-1"
+                  className="px-2 py-1 rounded text-xs border border-bad/40 text-bad hover:bg-bad/10 inline-flex items-center gap-1"
                 >
                   <X className="w-3 h-3" /> reject
                 </button>
               </div>
-            ) : (
-              s.status !== 'rejected' && (
-                <div className="flex gap-2 mt-2">
-                  <button
-                    onClick={() => onUse(s.id, true)}
-                    className="px-2 py-1 rounded text-xs border border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/10"
-                  >
-                    record success
-                  </button>
-                  <button
-                    onClick={() => onUse(s.id, false)}
-                    className="px-2 py-1 rounded text-xs border border-rose-500/40 text-rose-300 hover:bg-rose-500/10"
-                  >
-                    record failure
-                  </button>
-                </div>
-              )
-            )}
+            ) : null}
           </div>
         ))}
       </div>

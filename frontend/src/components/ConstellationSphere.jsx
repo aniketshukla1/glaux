@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react'
-import AthenaMark from './AthenaMark.jsx'
+import GlauxMark from './GlauxMark.jsx'
 
 // Athena's owl, alive — the logo at the centre, breathing, wrapped in a slowly
 // rotating constellation of swarm nodes (brand gradient, depth-shaded, pulsing).
@@ -131,7 +131,7 @@ export default function ConstellationSphere({ size = 300, owlRatio = 0.32 }) {
     <div className="relative grid place-items-center" style={{ width: size, height: size }}>
       <canvas ref={ref} className="absolute inset-0 pointer-events-none select-none" style={{ width: size, height: size }} aria-hidden="true" />
       <div className="relative animate-breathe" style={{ width: owl, height: owl, filter: 'drop-shadow(0 0 14px rgb(var(--accent) / 0.5))' }}>
-        <AthenaMark className="w-full h-full" />
+        <GlauxMark size={owl} />
       </div>
     </div>
   )

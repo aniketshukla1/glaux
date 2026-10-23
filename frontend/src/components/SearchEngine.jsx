@@ -54,7 +54,7 @@ export default function SearchEngine({ user }) {
                   provider === p ? 'border-accent/40 text-accent bg-accent/10' : 'border-line/15 text-muted hover:text-fg'
                 }`}>
                 {p ? LABELS[p] : 'Auto'}
-                {p && keyed[p] && <Check className="w-3 h-3 text-emerald-400" />}
+                {p && keyed[p] && <Check className="w-3 h-3 text-ok" />}
               </button>
             ))}
           </div>

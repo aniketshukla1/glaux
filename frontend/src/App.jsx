@@ -1,28 +1,42 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react'
-import { MessageSquarePlus, MessageSquare, LayoutGrid, Settings as SettingsIcon, Palette, PanelLeft, Loader2, Keyboard, Download, Copy, Mic, BookMarked } from 'lucide-react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import {
+  MessageSquarePlus, MessageSquare, MessagesSquare, ShieldCheck, Library, Activity, Settings as SettingsIcon,
+  Palette, PanelLeft, Loader2, Keyboard, Download, Copy, Mic, Cpu, Share, AlertTriangle, MailWarning,
+} from 'lucide-react'
 import { exportConversation, conversationToMarkdown } from './lib/export.js'
 import {
   getHealth, getLedger, getAgents, getSafety, setSafety, getApproval, setApproval,
   getAuth, dispatchTask, stopTask, getWorkspace, getSession, createSession, activateSession,
   updateSession, deleteSession, pinSession, createProject, updateProject, deleteProject,
   createPersona, updatePersona, deletePersona,
-  createRecipe, updateRecipe, deleteRecipe,
+  createRecipe, updateRecipe, deleteRecipe, searchConversations,
   getAuthState, updateProfile, changePassword, logoutEverywhere, deleteAccount,
   getToken, setToken, clearToken, verifyEmail, resendVerification,
 } from './api.js'
 import TopBar from './components/TopBar.jsx'
-import Sidebar from './components/Sidebar.jsx'
+import Sidebar, { THEMES } from './components/Sidebar.jsx'
 import RunView from './components/RunView.jsx'
-import Studio from './components/Studio.jsx'
+import ProofPage from './components/pages/ProofPage.jsx'
+import LibraryPage, { LIBRARY_TABS } from './components/pages/LibraryPage.jsx'
+import InsightsPage, { INSIGHTS_TABS } from './components/pages/InsightsPage.jsx'
 import SettingsPanel from './components/SettingsPanel.jsx'
 import CommandPalette from './components/CommandPalette.jsx'
 import AuthScreen from './components/AuthScreen.jsx'
 import ShortcutsHelp from './components/ShortcutsHelp.jsx'
 import Messaging from './components/Messaging.jsx'
 import VoiceWake from './components/VoiceWake.jsx'
+import { Menu, MenuItem } from './components/ui/Menu.jsx'
 import { recognitionSupported } from './lib/speech.js'
+import { BRAND, CLI } from './lib/brand.js'
 
-const PALETTE_THEMES = ['dark', 'light', 'oled', 'midnight', 'nord', 'ember']
+// Top-level views live in the URL hash (#/proof, #/library/tools) so every page
+// is linkable and the back button works.
+const VIEWS = ['chats', 'proof', 'library', 'insights']
+const readRoute = () => {
+  const [view, sub] = window.location.hash.replace(/^#\/?/, '').split('/')
+  return VIEWS.includes(view) ? { view, sub: sub || '' } : { view: 'chats', sub: '' }
+}
+const cap = (s) => s[0].toUpperCase() + s.slice(1)
 
 const mergeBlocks = (a, b) => {
   const seen = new Set(a.map((x) => x.index))
@@ -37,17 +51,28 @@ const notifyDone = (r) => {
   try {
     if (!('Notification' in window) || Notification.permission !== 'granted' || !document.hidden) return
     const body = (r?.final || '').replace(/\s+/g, ' ').slice(0, 140) || (r?.success ? 'Task complete' : 'Task finished')
-    const n = new Notification(r?.success ? 'Athena finished ✓' : 'Athena stopped', { body })
+    const n = new Notification(r?.success ? `${BRAND} finished` : `${BRAND} stopped`, { body })
     n.onclick = () => { window.focus(); n.close() }
   } catch { /* ignore */ }
+}
+
+function Banner({ tone, icon: Icon, children }) {
+  const cls = tone === 'bad' ? 'border-bad/30 bg-bad/[0.07] text-bad' : 'border-warn/30 bg-warn/[0.07] text-warn'
+  return (
+    <div role={tone === 'bad' ? 'alert' : 'status'} className={`mx-auto mt-3 w-[calc(100%-2.5rem)] max-w-5xl flex items-center gap-2 rounded-lg border px-3 py-2 text-[12.5px] ${cls}`}>
+      <Icon className="w-4 h-4 shrink-0" /><div className="min-w-0 flex-1 flex flex-wrap items-center gap-x-2">{children}</div>
+    </div>
+  )
 }
 
 export default function App() {
   const [theme, setTheme] = useState(() => localStorage.getItem('athena-theme') || 'dark')
   const [collapsed, setCollapsed] = useState(() => localStorage.getItem('athena-sidebar') === 'collapsed')
-  const [studioOpen, setStudioOpen] = useState(false)
+  const [route, setRoute] = useState(readRoute)
+  const [mobileNav, setMobileNav] = useState(false)
+  const [proofFocus, setProofFocus] = useState(null)
   const [settingsOpen, setSettingsOpen] = useState(false)
-  const [settingsTab, setSettingsTab] = useState('appearance')
+  const [settingsTab, setSettingsTab] = useState('general')
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [helpOpen, setHelpOpen] = useState(false)
   const [messagingOpen, setMessagingOpen] = useState(false)
@@ -84,6 +109,21 @@ export default function App() {
     localStorage.setItem('athena-theme', theme)
   }, [theme])
 
+  useEffect(() => {
+    const onHash = () => setRoute(readRoute())
+    window.addEventListener('hashchange', onHash)
+    return () => window.removeEventListener('hashchange', onHash)
+  }, [])
+  const navigate = (view, sub = '') => { window.location.hash = `/${view}${sub ? `/${sub}` : ''}` }
+  const { view } = route
+  const libTab = LIBRARY_TABS.some((t) => t.key === route.sub) ? route.sub : 'skills'
+  const insTab = INSIGHTS_TABS.some((t) => t.key === route.sub) ? route.sub : 'usage'
+
+  useEffect(() => {
+    const where = view === 'chats' ? (activeSession?.title || 'New chat') : cap(view)
+    document.title = `${where} · ${BRAND}`
+  }, [view, activeSession?.title])
+
   // bootstrap auth: handle any auth links (oauth callback, verify, reset, invite),
   // then figure out who's signed in and what login options exist.
   useEffect(() => {
@@ -105,7 +145,7 @@ export default function App() {
         if (s.authenticated && s.user) { setUser(s.user); if (s.user.settings?.theme) setTheme(s.user.settings.theme) }
       } catch { /* backend down — AuthScreen still shows */ }
       if (verifyParam) {
-        try { const r = await verifyEmail(verifyParam); setUser((u) => (u ? r.user : u)); setVerifyMsg('Email verified ✓') }
+        try { const r = await verifyEmail(verifyParam); setUser((u) => (u ? r.user : u)); setVerifyMsg('Email verified') }
         catch { /* invalid/expired link */ }
       }
       setAuthReady(true)
@@ -116,7 +156,7 @@ export default function App() {
     try {
       const out = await resendVerification()
       if (out.dev_link) { window.location.href = out.dev_link; return }  // dev mode: link verifies on reload
-      setVerifyMsg('Verification email sent — check your inbox.')
+      setVerifyMsg('Sent. Check your inbox.')
     } catch { /* ignore */ }
   }
 
@@ -136,8 +176,8 @@ export default function App() {
     setTheme(t)
     if (user) updateProfile({ settings: { theme: t } }).then((r) => setUser(r.user)).catch(() => {})
   }
-
-  const openSettings = (tab = 'appearance') => { setSettingsTab(tab); setSettingsOpen(true) }
+  const openSettings = (tab = 'general') => { setSettingsTab(tab); setSettingsOpen(true) }
+  const openProof = (indexes) => { setProofFocus(indexes?.length ? indexes : null); navigate('proof') }
 
   // account actions
   const onSignOut = () => { clearToken(); setUser(null); setSettingsOpen(false) }
@@ -155,23 +195,24 @@ export default function App() {
   }
   const onDeleteAccount = async () => { try { await deleteAccount() } catch { /* ignore */ } finally { onSignOut() } }
 
-  useEffect(() => {
-    const onKey = (e) => {
-      const typing = ['INPUT', 'TEXTAREA'].includes(e.target.tagName) || e.target.isContentEditable
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); setPaletteOpen((o) => !o) }
-      else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'b') {
-        e.preventDefault()
-        setCollapsed((c) => { localStorage.setItem('athena-sidebar', c ? 'expanded' : 'collapsed'); return !c })
-      } else if (e.key === '?' && !typing) { e.preventDefault(); setHelpOpen((o) => !o) }
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [])
-
   const toggleCollapse = () => setCollapsed((c) => {
     localStorage.setItem('athena-sidebar', c ? 'expanded' : 'collapsed')
     return !c
   })
+
+  useEffect(() => {
+    const onKey = (e) => {
+      const typing = ['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName) || e.target.isContentEditable
+      const mod = e.metaKey || e.ctrlKey
+      const k = e.key.toLowerCase()
+      if (mod && k === 'k') { e.preventDefault(); setPaletteOpen((o) => !o) }
+      else if (mod && k === 'b') { e.preventDefault(); toggleCollapse() }
+      else if (mod && k === ',') { e.preventDefault(); openSettings('general') }
+      else if (e.key === '?' && !typing) { e.preventDefault(); setHelpOpen((o) => !o) }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
 
   const refresh = useCallback(async () => {
     try {
@@ -183,7 +224,7 @@ export default function App() {
       setAgentsMap(Object.fromEntries(a.agents.map((x) => [x.agent_id, x.role])))
       setSafetyMode(s.mode); setApprovalMode(ap.mode); setAuth(au); setError(null)
     } catch {
-      setError('Backend unreachable — start it with:  athena up')
+      setError(`Can’t reach the server. Start it with:  ${CLI} up`)
     }
   }, [])
 
@@ -194,11 +235,11 @@ export default function App() {
 
   const loadSession = useCallback(async (id) => {
     if (!id) return
-    try { const { session } = await getSession(id); setActiveSession(session) } catch {}
+    try { const { session } = await getSession(id); setActiveSession(session) } catch { /* ignore */ }
   }, [])
 
   useEffect(() => {
-    if (!user) return
+    if (!user) return undefined
     refresh()
     const id = setInterval(refresh, 4000)
     return () => clearInterval(id)
@@ -211,7 +252,7 @@ export default function App() {
 
   // live block streaming
   useEffect(() => {
-    if (!user) return
+    if (!user) return undefined
     let ws, retry, closed = false
     const connect = () => {
       const proto = location.protocol === 'https:' ? 'wss' : 'ws'
@@ -246,7 +287,7 @@ export default function App() {
       await loadWorkspace()
       clearLive() // the completed run is now in the session history; drop the transient turn
     } catch (e) {
-      setError(`Dispatch failed: ${e.message}`)
+      setError(`That task didn’t go through: ${e.message}`)
     } finally {
       setRunning(false)
     }
@@ -255,16 +296,23 @@ export default function App() {
   const onStop = async () => { try { await stopTask() } catch { /* ignore */ } }
 
   const selectSession = async (id) => {
+    navigate('chats')
     if (id === workspace.active_id) return
     clearLive()
-    try { await activateSession(id) } catch {}
+    try { await activateSession(id) } catch { /* ignore */ }
     await loadSession(id)
     await loadWorkspace()
   }
+  const selectRef = useRef(selectSession)
+  selectRef.current = selectSession
 
   const newSession = async (projectId) => {
+    navigate('chats')
+    // Already on a blank chat in the same place: reuse it rather than piling up empty ones.
+    const blank = activeSession && !activeSession.runs?.length && !running && !result
+    if (blank && (activeSession.project_id || null) === (projectId || null)) return
     clearLive()
-    try { const { session } = await createSession(null, projectId); await loadSession(session.id) } catch {}
+    try { const { session } = await createSession(null, projectId); await loadSession(session.id) } catch { /* ignore */ }
     await loadWorkspace()
   }
 
@@ -280,50 +328,59 @@ export default function App() {
     try { await updateSession(activeSession.id, { persona_id: personaId }) } catch { /* ignore */ }
     await loadWorkspace(); loadSession(activeSession.id)
   }
-  const onRenameSession = async (id, title) => { try { await updateSession(id, { title }) } catch {}; await loadWorkspace(); if (id === activeSession?.id) loadSession(id) }
+  const onRenameSession = async (id, title) => { try { await updateSession(id, { title }) } catch { /* ignore */ }; await loadWorkspace(); if (id === activeSession?.id) loadSession(id) }
   const onDeleteSession = async (id) => {
     try {
       const res = await deleteSession(id)
       setWorkspace(res)
       if (id === activeSession?.id) { clearLive(); await loadSession(res.active_id) }
-    } catch {}
+    } catch { /* ignore */ }
   }
-  const onNewProject = async (name) => { try { await createProject(name) } catch {}; await loadWorkspace() }
-  const onUpdateProject = async (id, patch) => { try { await updateProject(id, patch) } catch {}; await loadWorkspace() }
-  const onDeleteProject = async (id) => { try { const res = await deleteProject(id); setWorkspace(res) } catch {} }
+  const onNewProject = async (name) => { try { await createProject(name) } catch { /* ignore */ }; await loadWorkspace() }
+  const onUpdateProject = async (id, patch) => { try { await updateProject(id, patch) } catch { /* ignore */ }; await loadWorkspace() }
+  const onDeleteProject = async (id) => { try { const res = await deleteProject(id); setWorkspace(res) } catch { /* ignore */ } }
   const onMoveSession = async (id, projectId) => {
-    try { await updateSession(id, { project_id: projectId }) } catch {}
+    try { await updateSession(id, { project_id: projectId }) } catch { /* ignore */ }
     await loadWorkspace()
     if (id === activeSession?.id) loadSession(id)
   }
 
-  const onSafety = async (mode) => { try { setSafetyMode((await setSafety(mode)).mode) } catch {} }
-  const onApproval = async (mode) => { try { setApprovalMode((await setApproval(mode)).mode) } catch {} }
+  const onSafety = async (mode) => { try { setSafetyMode((await setSafety(mode)).mode) } catch { /* ignore */ } }
+  const onApproval = async (mode) => { try { setApprovalMode((await setApproval(mode)).mode) } catch { /* ignore */ } }
 
   const verification = result?.verification || ledger.verification
+  const hasRuns = activeSession?.runs?.length > 0
 
-  const commands = useMemo(() => {
-    const cmds = [
-      { id: 'new', section: 'Actions', label: 'New session', icon: MessageSquarePlus, run: () => newSession(), keywords: 'chat conversation' },
-      { id: 'studio', section: 'Actions', label: 'Open Studio', icon: LayoutGrid, run: () => setStudioOpen(true), keywords: 'skills tools eval metrics memory ledger schedules' },
-      { id: 'settings', section: 'Actions', label: 'Open Settings', icon: SettingsIcon, run: () => setSettingsOpen(true), keywords: 'model safety approval' },
-      { id: 'sidebar', section: 'Actions', label: collapsed ? 'Expand sidebar' : 'Collapse sidebar', icon: PanelLeft, run: toggleCollapse },
-      { id: 'help', section: 'Actions', label: 'Keyboard shortcuts', icon: Keyboard, run: () => setHelpOpen(true), keywords: 'keys hotkeys cheatsheet' },
-      { id: 'recipes', section: 'Actions', label: 'Recipes', icon: BookMarked, run: () => openSettings('recipes'), keywords: 'workflow template saved prompt task' },
-      ...(recognitionSupported() ? [{ id: 'wake', section: 'Actions', label: wakeOn ? 'Turn off hands-free voice' : 'Turn on hands-free voice', icon: Mic, run: () => setWakeOn((v) => !v), keywords: 'voice wake word hey athena dictation listen microphone' }] : []),
-      ...(user?.is_admin ? [{ id: 'messaging', section: 'Actions', label: 'Messaging gateways', icon: MessageSquare, run: () => setMessagingOpen(true), keywords: 'telegram discord slack whatsapp signal channels bot' }] : []),
-      ...(activeSession?.runs?.length ? [
-        { id: 'export', section: 'Actions', label: 'Export conversation (Markdown)', icon: Download, run: () => exportConversation(activeSession), keywords: 'download save share md file' },
-        { id: 'copy-convo', section: 'Actions', label: 'Copy conversation', icon: Copy, run: () => navigator.clipboard?.writeText(conversationToMarkdown(activeSession)), keywords: 'clipboard share markdown' },
-      ] : []),
-      ...PALETTE_THEMES.map((t) => ({ id: `theme-${t}`, section: 'Theme', label: `Theme: ${t[0].toUpperCase()}${t.slice(1)}`, icon: Palette, run: () => setTheme(t), keywords: 'appearance color' })),
-      ...(workspace.sessions || []).map((s) => ({ id: `sess-${s.id}`, section: 'Switch to', label: s.title, icon: MessageSquare, hint: s.id === workspace.active_id ? 'current' : '', run: () => selectSession(s.id), keywords: 'conversation chat open' })),
-    ]
-    return cmds
-  }, [workspace, collapsed, user, activeSession])
+  const commands = useMemo(() => [
+    { id: 'new', section: 'Actions', label: 'New chat', icon: MessageSquarePlus, run: () => newSession(), keywords: 'conversation start' },
+    { id: 'settings', section: 'Actions', label: 'Settings', icon: SettingsIcon, hint: '⌘,', run: () => openSettings('general'), keywords: 'account profile password' },
+    { id: 'model', section: 'Actions', label: 'Change model', icon: Cpu, run: () => openSettings('model'), keywords: 'llm provider ollama openai anthropic key connect' },
+    { id: 'shortcuts', section: 'Actions', label: 'Keyboard shortcuts', icon: Keyboard, hint: '?', run: () => setHelpOpen(true), keywords: 'keys hotkeys' },
+    { id: 'sidebar', section: 'Actions', label: collapsed ? 'Expand sidebar' : 'Collapse sidebar', icon: PanelLeft, hint: '⌘B', run: toggleCollapse },
+    ...(recognitionSupported() ? [{ id: 'wake', section: 'Actions', label: wakeOn ? 'Turn off hands-free voice' : 'Turn on hands-free voice', icon: Mic, run: () => setWakeOn((v) => !v), keywords: 'voice wake word dictation microphone' }] : []),
+    ...(user?.is_admin ? [{ id: 'messaging', section: 'Actions', label: 'Messaging gateways', icon: MessageSquare, run: () => setMessagingOpen(true), keywords: 'telegram discord slack whatsapp channels bot' }] : []),
+    ...(hasRuns ? [
+      { id: 'export', section: 'Actions', label: 'Download conversation as Markdown', icon: Download, run: () => exportConversation(activeSession), keywords: 'export save share md file' },
+      { id: 'copy-convo', section: 'Actions', label: 'Copy conversation as Markdown', icon: Copy, run: () => navigator.clipboard?.writeText(conversationToMarkdown(activeSession)), keywords: 'clipboard share' },
+    ] : []),
+    { id: 'go-chats', section: 'Go to', label: 'Chats', icon: MessagesSquare, run: () => navigate('chats') },
+    { id: 'go-proof', section: 'Go to', label: 'Proof', icon: ShieldCheck, run: () => openProof(null), keywords: 'ledger chain verify signed blocks audit export' },
+    ...LIBRARY_TABS.map((t) => ({ id: `lib-${t.key}`, section: 'Go to', label: `Library · ${t.label}`, icon: Library, run: () => navigate('library', t.key), keywords: 'library' })),
+    ...INSIGHTS_TABS.map((t) => ({ id: `ins-${t.key}`, section: 'Go to', label: `Insights · ${t.label}`, icon: Activity, run: () => navigate('insights', t.key), keywords: 'insights metrics cost tokens' })),
+    ...THEMES.map((t) => ({ id: `theme-${t}`, section: 'Theme', label: `${cap(t)} theme`, icon: Palette, hint: theme === t ? 'current' : '', run: () => applyTheme(t), keywords: 'appearance color' })),
+    ...(workspace.sessions || []).map((s) => ({ id: `sess-${s.id}`, sessionId: s.id, section: 'Conversations', label: s.title, icon: MessageSquare, hint: s.id === workspace.active_id ? 'current' : '', run: () => selectRef.current(s.id), keywords: 'chat' })),
+  ], [workspace, collapsed, user, activeSession, hasRuns, wakeOn, theme]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const searchContent = useCallback(async (q) => {
+    const { results = [] } = await searchConversations(q)
+    return results.map((r) => ({
+      id: `hit-${r.id}`, sessionId: r.id, section: 'Matching conversations', label: r.title,
+      snippet: r.match === 'content' ? r.snippet : '', icon: MessageSquare, run: () => selectRef.current(r.id),
+    }))
+  }, [])
 
   if (!authReady) {
-    return <div className="min-h-screen grid place-items-center"><Loader2 className="w-6 h-6 animate-spin text-muted" /></div>
+    return <div className="min-h-screen grid place-items-center"><Loader2 className="w-5 h-5 animate-spin text-faint" aria-label="Loading" /></div>
   }
   if (!user) {
     return (
@@ -344,6 +401,9 @@ export default function App() {
         workspace={workspace}
         collapsed={collapsed}
         onToggleCollapse={toggleCollapse}
+        view={view}
+        onNavigate={(k) => (k === 'proof' ? openProof(null) : navigate(k))}
+        ledger={ledger}
         onSelectSession={selectSession}
         onNewSession={newSession}
         onRenameSession={onRenameSession}
@@ -354,67 +414,95 @@ export default function App() {
         onMoveSession={onMoveSession}
         onPinSession={onPinSession}
         loading={wsLoading}
+        user={user}
+        theme={theme}
+        onSetTheme={applyTheme}
+        onOpenSettings={openSettings}
+        onOpenPalette={() => setPaletteOpen(true)}
+        onOpenShortcuts={() => setHelpOpen(true)}
+        onSignOut={onSignOut}
+        mobileOpen={mobileNav}
+        onCloseMobile={() => setMobileNav(false)}
       />
 
       <div className="flex-1 min-w-0 flex flex-col">
-        <div className="sticky top-0 z-30 px-5 sm:px-8 bg-[rgb(var(--bg))]/85 backdrop-blur-md border-b border-line/8">
-          <TopBar
-            title={activeSession?.title}
-            theme={theme}
-            onToggleTheme={() => applyTheme(theme === 'dark' ? 'light' : 'dark')}
-            onOpenStudio={() => setStudioOpen(true)}
-            onOpenSettings={() => openSettings('appearance')}
-            onOpenPalette={() => setPaletteOpen(true)}
-            verified={ledger.verification ? ledger.verification.valid : null}
-            health={health}
-            user={user}
-            onOpenAccount={() => openSettings('account')}
-            onModelChanged={refresh}
-            onOpenModel={() => openSettings('model')}
-            personas={workspace.personas || []}
-            activePersonaId={activeSession?.persona_id}
-            onPickPersona={onSetSessionPersona}
-            onManagePersonas={() => openSettings('personas')}
-            wakeSupported={recognitionSupported()}
-            wakeOn={wakeOn}
-            onToggleWake={() => setWakeOn((v) => !v)}
-          />
-          {error && (
-            <div className="glass p-3 mb-4 text-sm" style={{ borderColor: 'rgb(244 63 94 / 0.4)', color: 'rgb(251 113 133)' }}>
-              {error}
-            </div>
+        <TopBar title={view === 'chats' ? (activeSession?.title || 'New chat') : null} onOpenMobileNav={() => setMobileNav(true)}>
+          {view === 'chats' && recognitionSupported() && (
+            <button onClick={() => setWakeOn((v) => !v)} aria-pressed={wakeOn}
+              className={`btn-ghost p-1.5 relative ${wakeOn ? '!text-accent' : ''}`}
+              aria-label={wakeOn ? 'Turn off hands-free voice' : 'Turn on hands-free voice'}
+              title={wakeOn ? 'Hands-free voice is on' : 'Hands-free voice'}>
+              <Mic className="w-4 h-4" />
+              {wakeOn && <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-accent animate-pulse" />}
+            </button>
           )}
-          {user && !user.email_verified && (
-            <div className="glass p-2.5 mb-4 text-xs flex items-center gap-2 flex-wrap" style={{ borderColor: 'rgb(251 191 36 / 0.4)' }}>
-              <span className="text-amber-300">Verify your email to secure your account — we sent a link to {user.email}.</span>
-              <button onClick={onResendVerification} className="text-accent underline underline-offset-2">Resend</button>
-              {verifyMsg && <span className="text-emerald-400">{verifyMsg}</span>}
-            </div>
+          {view === 'chats' && hasRuns && (
+            <Menu align="end" width="w-56"
+              trigger={(t) => (
+                <button {...t} className="btn-ghost p-1.5" aria-label="Export conversation" title="Export">
+                  <Share className="w-4 h-4" />
+                </button>
+              )}>
+              <MenuItem icon={Copy} onSelect={() => navigator.clipboard?.writeText(conversationToMarkdown(activeSession))}>Copy as Markdown</MenuItem>
+              <MenuItem icon={Download} onSelect={() => exportConversation(activeSession)}>Download Markdown</MenuItem>
+            </Menu>
           )}
-        </div>
+        </TopBar>
 
-        <main className="flex-1">
-          <RunView
-            session={activeSession}
-            blocks={liveBlocks}
-            roleOf={roleOf}
-            running={running}
-            result={result}
-            goal={goal}
-            streamingText={streamingText}
-            onDispatch={onDispatch}
-            onStop={onStop}
-            verification={verification}
-            recipes={workspace.recipes || []}
-          />
+        <main className="flex-1 flex flex-col">
+          {error && <Banner tone="bad" icon={AlertTriangle}><span>{error}</span></Banner>}
+          {!user.email_verified && (
+            <Banner tone="warn" icon={MailWarning}>
+              <span>Verify your email to secure your account. We sent a link to {user.email}.</span>
+              <button onClick={onResendVerification} className="underline underline-offset-2">Resend</button>
+              {verifyMsg && <span className="text-ok">{verifyMsg}</span>}
+            </Banner>
+          )}
+
+          {view === 'chats' && (
+            <RunView
+              session={activeSession}
+              blocks={liveBlocks}
+              roleOf={roleOf}
+              running={running}
+              result={result}
+              goal={goal}
+              streamingText={streamingText}
+              onDispatch={onDispatch}
+              onStop={onStop}
+              verification={verification}
+              recipes={workspace.recipes || []}
+              demo={health ? !health.live : false}
+              onOpenModel={() => openSettings('model')}
+              onOpenProof={openProof}
+              model={{ current: health?.llm, live: health?.live, onChanged: refresh, onOpenModel: () => openSettings('model') }}
+              persona={{
+                personas: workspace.personas || [],
+                activeId: activeSession?.persona_id,
+                onPick: onSetSessionPersona,
+                onManage: () => navigate('library', 'personas'),
+              }}
+            />
+          )}
+          {view === 'proof' && (
+            <ProofPage ledger={ledger} roleOf={roleOf} agentsMap={agentsMap} onVerify={refresh}
+              focus={proofFocus} onClearFocus={() => setProofFocus(null)} />
+          )}
+          {view === 'library' && (
+            <LibraryPage
+              tab={libTab} onTab={(t) => navigate('library', t)} user={user} onRefresh={refresh}
+              personas={workspace.personas || []} onCreatePersona={onCreatePersona} onUpdatePersona={onUpdatePersona} onDeletePersona={onDeletePersona}
+              recipes={workspace.recipes || []} onCreateRecipe={onCreateRecipe} onUpdateRecipe={onUpdateRecipe} onDeleteRecipe={onDeleteRecipe}
+            />
+          )}
+          {view === 'insights' && <InsightsPage tab={insTab} onTab={(t) => navigate('insights', t)} onRefresh={refresh} />}
         </main>
       </div>
 
-      <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} commands={commands} />
+      <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} commands={commands} search={searchContent} />
       <ShortcutsHelp open={helpOpen} onClose={() => setHelpOpen(false)} />
       <Messaging open={messagingOpen} onClose={() => setMessagingOpen(false)} />
       <VoiceWake enabled={wakeOn} running={running} result={result} onDispatch={onDispatch} onDisable={() => setWakeOn(false)} />
-      <Studio open={studioOpen} onClose={() => setStudioOpen(false)} ledger={ledger} blocks={liveBlocks} onVerify={refresh} user={user} onOpenMessaging={() => setMessagingOpen(true)} />
       <SettingsPanel
         open={settingsOpen} onClose={() => setSettingsOpen(false)}
         initialTab={settingsTab}
@@ -429,14 +517,7 @@ export default function App() {
         onSignOut={onSignOut}
         onSignOutEverywhere={onSignOutEverywhere}
         onDeleteAccount={onDeleteAccount}
-        personas={workspace.personas || []}
-        onCreatePersona={onCreatePersona}
-        onUpdatePersona={onUpdatePersona}
-        onDeletePersona={onDeletePersona}
-        recipes={workspace.recipes || []}
-        onCreateRecipe={onCreateRecipe}
-        onUpdateRecipe={onUpdateRecipe}
-        onDeleteRecipe={onDeleteRecipe}
+        onOpenMessaging={() => setMessagingOpen(true)}
       />
     </div>
   )

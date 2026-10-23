@@ -6,8 +6,8 @@ import { avatarColor } from '../lib/avatar.js'
 
 const STATUS = {
   disabled: { label: 'Disabled', cls: 'text-faint', dot: 'rgb(var(--line))' },
-  needs_setup: { label: 'Needs setup', cls: 'text-amber-300', dot: '#fbbf24' },
-  ready: { label: 'Ready', cls: 'text-emerald-300', dot: '#34d399' },
+  needs_setup: { label: 'Needs setup', cls: 'text-warn', dot: 'rgb(var(--warn))' },
+  ready: { label: 'Ready', cls: 'text-ok', dot: 'rgb(var(--ok))' },
 }
 
 function PlatformIcon({ p, size = 28 }) {
