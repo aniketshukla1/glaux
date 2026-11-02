@@ -197,6 +197,24 @@ def test_save_load_roundtrip(tmp_path):
     assert reloaded.block(1)["payload"] == {"skill_id": "y"}
 
 
+def test_a_save_killed_mid_write_keeps_the_previous_chain(tmp_path):
+    led = Ledger()
+    led.append(AgentIdentity.generate(), Action.THINK, {"x": 1})
+    path = tmp_path / "ledger.jsonl"
+    led.save(path)
+
+    class DiesMidWrite:  # a kernel whose process is killed half-way through a block
+        def save(self, p):
+            with open(p, "w") as f:
+                f.write('{"index": 0, "prev_ha')
+            raise OSError("killed")
+
+    with pytest.raises(OSError):
+        Ledger(_native=DiesMidWrite()).save(path)
+    reloaded = Ledger.load(path)
+    assert len(reloaded) == 1 and reloaded.verify().valid
+
+
 def test_large_chain_verifies():
     led = Ledger()
     a = AgentIdentity.generate()

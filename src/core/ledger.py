@@ -16,6 +16,7 @@ there is no Python/Rust canonical-bytes coupling to keep in sync.
 from __future__ import annotations
 
 import json
+import os
 import threading
 from dataclasses import dataclass
 from typing import Optional
@@ -144,7 +145,15 @@ class Ledger:
         return self._led.block(index)
 
     def save(self, path) -> None:
-        self._led.save(str(path))
+        """Write the chain to a sibling file, then rename it over ``path``.
+
+        A kill mid-write leaves the previous chain intact, not a truncated file
+        that ``load`` rejects (the API would then start from an empty chain).
+        """
+        tmp = f"{path}.tmp"
+        with self._lock:  # one save at a time: they share the temp file
+            self._led.save(tmp)
+            os.replace(tmp, path)
 
     @classmethod
     def load(cls, path) -> "Ledger":
