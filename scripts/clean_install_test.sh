@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Install Athena on a pristine Linux box and prove it reaches first value.
+# Install Glaux on a pristine Linux box and prove it reaches first value.
 #
 #   scripts/clean_install_test.sh [--keep] [--image ubuntu:24.04]
 #
@@ -27,13 +27,13 @@ while [ $# -gt 0 ]; do
 done
 
 say() { printf "\033[1;36m▸ %s\033[0m\n" "$1"; }
-CONTAINER="athena-clean-install-$$"
+CONTAINER="glaux-clean-install-$$"
 
 command -v docker >/dev/null 2>&1 || { echo "docker is required" >&2; exit 2; }
 docker info >/dev/null 2>&1 || { echo "the docker daemon is not running" >&2; exit 2; }
 
 # Exactly what a user gets from `git clone` — tracked files at HEAD, so a local
-# venv/, node_modules/ or .athena/ cannot leak in and fake a passing install.
+# venv/, node_modules/ or .glaux/ cannot leak in and fake a passing install.
 # Both repos, side by side, because that is the documented layout: AthenaDB backs
 # the memory layers and core.api imports them at module scope.
 ATHENADB_SRC="$ROOT/../athenadb"
@@ -42,11 +42,11 @@ ATHENADB_SRC="$ROOT/../athenadb"
 say "Exporting HEAD of both repos (tracked files only)"
 STAGE="$(mktemp -d)"
 trap 'rm -rf "$STAGE"' EXIT
-mkdir -p "$STAGE/athena" "$STAGE/athenadb"
-git archive --format=tar HEAD | tar -x -C "$STAGE/athena"
+mkdir -p "$STAGE/glaux" "$STAGE/athenadb"
+git archive --format=tar HEAD | tar -x -C "$STAGE/glaux"
 git -C "$ATHENADB_SRC" archive --format=tar HEAD | tar -x -C "$STAGE/athenadb"
-printf '  athena %s files · athenadb %s files\n' \
-  "$(find "$STAGE/athena" -type f | wc -l | tr -d ' ')" \
+printf '  glaux %s files · athenadb %s files\n' \
+  "$(find "$STAGE/glaux" -type f | wc -l | tr -d ' ')" \
   "$(find "$STAGE/athenadb" -type f | wc -l | tr -d ' ')"
 
 say "Starting a clean $IMAGE container"
@@ -82,8 +82,8 @@ docker exec "$CONTAINER" bash -euo pipefail -c '
   rustc --version
 
   # install.sh writes into the tree, so work on a copy of the read-only mount.
-  # Keep the sibling layout: /work/athena + /work/athenadb.
-  cp -r /src /work && cd /work/athena
+  # Keep the sibling layout: /work/glaux + /work/athenadb.
+  cp -r /src /work && cd /work/glaux
 
   echo
   echo "=== ./install.sh ==="
@@ -94,23 +94,23 @@ docker exec "$CONTAINER" bash -euo pipefail -c '
 
 say "Smoke test — does a clean install actually reach first value?"
 docker exec "$CONTAINER" bash -euo pipefail -c '
-  cd /work/athena
+  cd /work/glaux
   export PATH="$HOME/.cargo/bin:$PATH"
 
   echo "--- the CLI is installed and self-describes ---"
-  ./venv/bin/athena version
-  ./venv/bin/athena --help >/dev/null && echo "athena --help ok"
+  ./venv/bin/glaux version
+  ./venv/bin/glaux --help >/dev/null && echo "glaux --help ok"
 
-  # `athena version` and `--help` never import the app, so they pass even when the
-  # server cannot start at all. The README tells a new user to run `athena up`
+  # `glaux version` and `--help` never import the app, so they pass even when the
+  # server cannot start at all. The README tells a new user to run `glaux up`
   # second — so that is what has to work here.
   echo
-  echo "--- the API app imports (what athena up actually does) ---"
+  echo "--- the API app imports (what glaux up actually does) ---"
   ./venv/bin/python -c "import sys; sys.path.insert(0, \"src\"); import core.api; print(\"  core.api imported\")"
 
   echo
   echo "--- and the server comes up and answers ---"
-  ./venv/bin/athena up >/tmp/up.log 2>&1 || true
+  ./venv/bin/glaux up >/tmp/up.log 2>&1 || true
   up=0
   for _ in $(seq 1 40); do
     if curl -fsS http://127.0.0.1:8000/api/health >/dev/null 2>&1; then up=1; break; fi
@@ -120,7 +120,7 @@ docker exec "$CONTAINER" bash -euo pipefail -c '
     echo "FAIL: the server never became healthy" >&2; tail -20 /tmp/up.log >&2; exit 1
   fi
   curl -fsS http://127.0.0.1:8000/api/health | head -c 200; echo
-  ./venv/bin/athena down >/dev/null 2>&1 || true
+  ./venv/bin/glaux down >/dev/null 2>&1 || true
 
   echo
   echo "--- the native ledger kernel signs a real chain ---"
@@ -139,12 +139,12 @@ PY
 
   echo
   echo "--- verify accepts the untouched chain ---"
-  ./venv/bin/athena verify --file /tmp/ledger.jsonl
+  ./venv/bin/glaux verify --file /tmp/ledger.jsonl
 
   echo
   echo "--- and catches a forged one (the README demo, verbatim) ---"
   sed -i.bak "2s/\"agent_id\":\"[^\"]*\"/\"agent_id\":\"mallory\"/" /tmp/ledger.jsonl
-  if ./venv/bin/athena verify --file /tmp/ledger.jsonl; then
+  if ./venv/bin/glaux verify --file /tmp/ledger.jsonl; then
     echo "FAIL: a forged chain verified as valid" >&2; exit 1
   fi
   echo "  (correctly exited non-zero)"

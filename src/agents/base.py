@@ -44,7 +44,7 @@ Only call skills/tools that are listed as available — never invent an id. If n
 skill or tool fits, just answer directly and finish. Do not repeat an action that
 already failed. Keep all args JSON-serializable."""
 
-DEFAULT_ROLE = "You are {name}, a specialist agent in the Athena swarm."
+DEFAULT_ROLE = "You are {name}, a specialist agent in the Glaux swarm."
 
 
 class HandoffRejected(Exception):
@@ -318,7 +318,7 @@ class BaseAgent:
 
     def _create_skill(self, action: dict, available: dict) -> dict:
         """On-the-fly tool creation. When no existing skill/tool fits, the agent
-        describes what it needs; Athena synthesizes the code, static-cap-checks it,
+        describes what it needs; Glaux synthesizes the code, static-cap-checks it,
         runs its auto-generated tests in the sandbox, and — if they pass — adds it
         to this run's skills so the agent can call_skill it next. Signed to the
         ledger, so the whole creation is auditable."""
@@ -506,7 +506,7 @@ class BaseAgent:
             lines.append(
                 'If NO available skill or tool does what you need, CREATE one: '
                 '{"action": "create_skill", "name": "<id>", "task": "<precise description of the '
-                'tool: inputs, output, behavior>"} — Athena writes it, sandbox-tests it, and adds '
+                'tool: inputs, output, behavior>"} — Glaux writes it, sandbox-tests it, and adds '
                 'it so you can call_skill it on the next step.'
             )
         if scratchpad:

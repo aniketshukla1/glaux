@@ -1,4 +1,4 @@
-"""Athena LLM gateway."""
+"""Glaux LLM gateway."""
 
 from .gateway import AnthropicClient, LLMClient, LLMResponse, Message, ScriptedLLM
 from .ollama import OllamaClient, ollama_status

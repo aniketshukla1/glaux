@@ -30,7 +30,7 @@ class DictSecretsBackend:
 class EnvSecretsBackend:
     """Resolves ``name`` from ``<prefix><NAME>`` environment variables."""
 
-    def __init__(self, prefix: str = "ATHENA_SECRET_") -> None:
+    def __init__(self, prefix: str = "GLAUX_SECRET_") -> None:
         self._prefix = prefix
 
     def get(self, name: str) -> Optional[str]:

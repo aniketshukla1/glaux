@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="docs/images/banner.png" alt="Athena — a multi-agent swarm that proves its work" width="100%" />
+<img src="docs/images/banner.png" alt="Glaux — a multi-agent swarm that proves its work" width="100%" />
 
 Every reasoning step, tool call, and self-modification is signed onto a tamper-evident,
 hash-chained ledger — so you can *verify* what your agents did, not just read a trace.
@@ -14,17 +14,17 @@ hash-chained ledger — so you can *verify* what your agents did, not just read 
 
 **[athena-swarm.github.io/athena](https://athena-swarm.github.io/athena/)** · [Documentation](https://athena-swarm.github.io/athena/docs/)
 
-<img src="docs/images/demo.gif" alt="Athena running a task, then catching a forged block in the signed ledger" width="760" />
+<img src="docs/images/demo.gif" alt="Glaux running a task, then catching a forged block in the signed ledger" width="760" />
 
 </div>
 
 ---
 
-## What is Athena?
+## What is Glaux?
 
-Athena turns a goal into a **swarm**: a router plans a team of specialists, they work in
+Glaux turns a goal into a **swarm**: a router plans a team of specialists, they work in
 parallel across a dependency graph, a reflector verifies the result, and a lead
-synthesizes the answer. When no tool exists for the job, Athena **writes one**,
+synthesizes the answer. When no tool exists for the job, Glaux **writes one**,
 sandbox-tests it, and uses it in the same run. It runs fully **local-first** on Ollama,
 or against 30+ hosted providers.
 
@@ -32,18 +32,18 @@ or against 30+ hosted providers.
 git clone https://github.com/athena-swarm/athenadb        # the vector store, cloned alongside
 git clone https://github.com/athena-swarm/athena && cd athena
 ./install.sh                 # venv + native kernels + dashboard
-./venv/bin/athena up         # → http://127.0.0.1:8000
+./venv/bin/glaux up         # → http://127.0.0.1:8000
 ```
 
 <div align="center">
-<img src="docs/images/console.png" alt="The Athena swarm console" width="860" />
+<img src="docs/images/console.png" alt="The Glaux swarm console" width="860" />
 </div>
 
 ---
 
-## What makes Athena different
+## What makes Glaux different
 
-| | Athena | Typical agent framework |
+| | Glaux | Typical agent framework |
 |---|---|---|
 | Audit trail | Signed, hash-chained ledger | Tracing / logs |
 | New tools | Synthesized + sandbox-tested at runtime | Pre-registered by you |
@@ -60,13 +60,13 @@ ledger. Tracing tells you what a system *claims* it did; a signed chain lets you
 agent and the chain names the exact block you touched:
 
 ```bash
-athena verify --file ~/.athena/ledger.jsonl
+glaux verify --file ~/.glaux/ledger.jsonl
 #  ✓ chain verified   ·   14 signed blocks
 
 # claim someone else took the second action
-sed -i.bak '2s/"agent_id":"[^"]*"/"agent_id":"mallory"/' ~/.athena/ledger.jsonl
+sed -i.bak '2s/"agent_id":"[^"]*"/"agent_id":"mallory"/' ~/.glaux/ledger.jsonl
 
-athena verify --file ~/.athena/ledger.jsonl
+glaux verify --file ~/.glaux/ledger.jsonl
 #  ✗ CHAIN INVALID at block 1 — block hash mismatch
 ```
 
@@ -81,7 +81,7 @@ afterwards by anyone, including us.
 
 ### 2. It builds its own tools, at runtime
 
-When nothing fits, an agent emits `create_skill`. Athena synthesizes the code, runs a
+When nothing fits, an agent emits `create_skill`. Glaux synthesizes the code, runs a
 **static capability check**, executes its generated tests **in the sandbox**, and — only if
 they pass — injects it into the live run. Proven skills get promoted to permanent tools;
 failing ones get **self-healed**, re-tested, and retried.
@@ -110,23 +110,23 @@ prior answer with zero LLM calls.
 
 Synthesized code runs in a WebAssembly guest with **no ambient authority** — it cannot
 syscall by default. File access is a separate, opt-in **jailed workspace** with per-file and
-total size caps. Athena enforces this itself rather than delegating it to you.
+total size caps. Glaux enforces this itself rather than delegating it to you.
 
 ---
 
 ## The CLI
 
 ```bash
-athena up | down | restart | status          # run the server
-athena run "…" | chat                        # drive the swarm (streams live)
-athena verify | metrics | eval               # trust + performance
-athena skills [synth|approve|reject]         # the skill lifecycle
-athena evolution [status|evolve|revert]      # the self-evolving harness
-athena workspace|playbooks|subagents|cache   # capabilities
-athena safety [live|dry-run|halted]          # the kill switch
+glaux up | down | restart | status          # run the server
+glaux run "…" | chat                        # drive the swarm (streams live)
+glaux verify | metrics | eval               # trust + performance
+glaux skills [synth|approve|reject]         # the skill lifecycle
+glaux evolution [status|evolve|revert]      # the self-evolving harness
+glaux workspace|playbooks|subagents|cache   # capabilities
+glaux safety [live|dry-run|halted]          # the kill switch
 ```
 
-Everything in the dashboard is in the CLI. `athena --help` lists it all.
+Everything in the dashboard is in the CLI. `glaux --help` lists it all.
 
 Also included: **playbooks** (authored procedures the swarm consults), **sub-agents** (define
 your own specialists), a **jailed workspace**, semantic/episodic/procedural **memory**, **MCP**

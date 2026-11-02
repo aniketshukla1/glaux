@@ -16,14 +16,14 @@ fn backend_listening() -> bool {
 }
 
 /// Best-effort: start the backend daemon if it isn't already running. Uses a
-/// login shell so the user's PATH (and the venv that holds `athena`) is in
+/// login shell so the user's PATH (and the venv that holds `glaux`) is in
 /// scope. Any failure is non-fatal — the loading shell shows a friendly hint
 /// and keeps polling, so the window still opens.
 fn ensure_backend() {
     if backend_listening() {
         return;
     }
-    let _ = Command::new("sh").arg("-lc").arg("athena up").spawn();
+    let _ = Command::new("sh").arg("-lc").arg("glaux up").spawn();
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]

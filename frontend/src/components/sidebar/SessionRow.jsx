@@ -25,7 +25,7 @@ export default function SessionRow({ s, active, projects, onSelect, onRename, on
   return (
     <div
       draggable={!editing}
-      onDragStart={(e) => { e.dataTransfer.setData('text/athena-session', s.id); e.dataTransfer.effectAllowed = 'move' }}
+      onDragStart={(e) => { e.dataTransfer.setData('text/glaux-session', s.id); e.dataTransfer.effectAllowed = 'move' }}
       className={`group relative flex items-center rounded-md transition-colors ${
         active ? 'bg-line/[0.09] text-fg' : 'text-muted hover:text-fg hover:bg-line/[0.05]'
       }`}

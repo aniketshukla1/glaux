@@ -3,7 +3,7 @@
 A **session** is a conversation: an ordered list of runs (a directive the swarm
 carried out, with its result and the signed blocks it produced). A **project**
 groups sessions and can carry custom instructions. The active session is where
-new tasks land. Everything persists to ``~/.athena/workspace.json`` so history
+new tasks land. Everything persists to ``~/.glaux/workspace.json`` so history
 survives restarts.
 
 This is an organizational layer over the existing swarm — the global signed

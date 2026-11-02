@@ -8,7 +8,7 @@ that still doesn't fit is elided with a count. Deterministic by default (no extr
 LLM call, so it doesn't add latency); an optional ``summarize`` hook can fold the
 elided steps into a prose summary when fidelity matters more than speed.
 
-This is Athena's answer to deepagents' SummarizationMiddleware — but budget-first
+This is Glaux's answer to deepagents' SummarizationMiddleware — but budget-first
 and deterministic, and every compaction is signed to the ledger.
 """
 
@@ -87,10 +87,10 @@ class ContextManager:
                 return default
 
         params = dict(
-            max_history_chars=_int("ATHENA_CONTEXT_MAX_CHARS", 6000),
-            keep_recent_steps=_int("ATHENA_CONTEXT_KEEP_RECENT", 3),
-            thought_chars=_int("ATHENA_CONTEXT_THOUGHT_CHARS", 500),
-            obs_chars=_int("ATHENA_CONTEXT_OBS_CHARS", 400),
+            max_history_chars=_int("GLAUX_CONTEXT_MAX_CHARS", 6000),
+            keep_recent_steps=_int("GLAUX_CONTEXT_KEEP_RECENT", 3),
+            thought_chars=_int("GLAUX_CONTEXT_THOUGHT_CHARS", 500),
+            obs_chars=_int("GLAUX_CONTEXT_OBS_CHARS", 400),
         )
         params.update(overrides)
         return cls(**params)

@@ -66,6 +66,7 @@ function Banner({ tone, icon: Icon, children }) {
 }
 
 export default function App() {
+  // Settings keep their pre-rename athena-* storage keys, so existing installs keep them.
   const [theme, setTheme] = useState(() => localStorage.getItem('athena-theme') || 'dark')
   const [collapsed, setCollapsed] = useState(() => localStorage.getItem('athena-sidebar') === 'collapsed')
   const [route, setRoute] = useState(readRoute)
@@ -163,8 +164,8 @@ export default function App() {
   // a 401 anywhere drops us back to the sign-in screen
   useEffect(() => {
     const onUnauth = () => setUser(null)
-    window.addEventListener('athena-unauthorized', onUnauth)
-    return () => window.removeEventListener('athena-unauthorized', onUnauth)
+    window.addEventListener('glaux-unauthorized', onUnauth)
+    return () => window.removeEventListener('glaux-unauthorized', onUnauth)
   }, [])
 
   const onAuthed = useCallback((u) => {

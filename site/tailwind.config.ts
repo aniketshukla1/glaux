@@ -1,6 +1,6 @@
 import type { Config } from "tailwindcss";
 
-// Brand tokens shared with the Athena app: rgb triplets in CSS vars so opacity
+// Brand tokens shared with the Glaux app: rgb triplets in CSS vars so opacity
 // modifiers (bg-accent/10) work everywhere.
 const rgb = (v: string) => `rgb(var(${v}) / <alpha-value>)`;
 

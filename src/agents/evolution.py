@@ -1,6 +1,6 @@
 """Self-evolving harness: the runtime improves its own configuration from experience.
 
-Athena already synthesizes tools and heals skills at the *object* level. This is the
+Glaux already synthesizes tools and heals skills at the *object* level. This is the
 *meta* level — the harness tunes its own configuration from episode outcomes — and,
 crucially, it cannot silently degrade: every mutation is gated (only applied when the
 evidence supports it), signed to the ledger (EVOLVE), and reversible.
@@ -23,6 +23,8 @@ import time
 from dataclasses import asdict, dataclass, field, fields
 from pathlib import Path
 
+from paths import home
+
 from . import tier_router
 
 _ORDER = ("fast", "medium", "full")
@@ -31,10 +33,6 @@ _ORDER = ("fast", "medium", "full")
 _MIN_ITERS, _MAX_ITERS = 4, 16
 _BUDGET_MIN_SAMPLES = 4
 _LESSON_MIN_COUNT = 3
-
-
-def _athena_home() -> Path:
-    return Path(os.environ.get("ATHENA_HOME", Path.home() / ".athena"))
 
 
 def _slug(name: str) -> str:
@@ -69,7 +67,7 @@ class Evolver:
     mutation gated, ledger-signed, and reversible."""
 
     def __init__(self, root: str | os.PathLike | None = None, *, max_episodes: int = 1000) -> None:
-        self.root = Path(root or (_athena_home() / "evolution"))
+        self.root = Path(root or (home() / "evolution"))
         self.root.mkdir(parents=True, exist_ok=True)
         self.episodes_path = self.root / "episodes.jsonl"
         self.role_stats_path = self.root / "role_stats.jsonl"

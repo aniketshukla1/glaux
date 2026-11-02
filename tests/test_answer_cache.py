@@ -60,11 +60,11 @@ def test_clear(tmp_path):
 
 
 def test_from_env(monkeypatch, tmp_path):
-    monkeypatch.setenv("ATHENA_HOME", str(tmp_path))
-    monkeypatch.setenv("ATHENA_ANSWER_CACHE", "0")
+    monkeypatch.setenv("GLAUX_HOME", str(tmp_path))
+    monkeypatch.setenv("GLAUX_ANSWER_CACHE", "0")
     assert AnswerCache.from_env().enabled is False
-    monkeypatch.setenv("ATHENA_ANSWER_CACHE", "1")
-    monkeypatch.setenv("ATHENA_CACHE_THRESHOLD", "0.8")
+    monkeypatch.setenv("GLAUX_ANSWER_CACHE", "1")
+    monkeypatch.setenv("GLAUX_CACHE_THRESHOLD", "0.8")
     c = AnswerCache.from_env()
     assert c.enabled is True and c.threshold == 0.8
 

@@ -88,6 +88,6 @@ def test_unknown_secret_fails():
 
 
 def test_env_backend(monkeypatch):
-    monkeypatch.setenv("ATHENA_SECRET_DB_PASSWORD", "hunter2")
+    monkeypatch.setenv("GLAUX_SECRET_DB_PASSWORD", "hunter2")
     broker = Broker(EnvSecretsBackend())
     assert broker.resolve("DB_PASSWORD") == "hunter2"

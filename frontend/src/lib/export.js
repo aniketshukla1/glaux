@@ -1,8 +1,9 @@
-// Export a conversation to Markdown — title, each turn (you → Athena), and the
+// Export a conversation to Markdown — title, each turn (you → Glaux), and the
+import { BRAND } from './brand.js'
 // verified-chain / cost metadata. Pure client-side from the loaded session.
 
 function runToMarkdown(run) {
-  const out = [`## You\n\n${run.directive || ''}`, `\n## Athena\n\n${run.final || '—'}`]
+  const out = [`## You\n\n${run.directive || ''}`, `\n## ${BRAND}\n\n${run.final || '—'}`]
   const c = run.cost || {}
   const bits = []
   if (run.verification?.valid) bits.push('chain verified')
@@ -20,7 +21,7 @@ function runToMarkdown(run) {
 
 export function conversationToMarkdown(session) {
   const runs = session?.runs || []
-  const header = `# ${session?.title || 'Conversation'}\n\n> Exported from Athena · ${new Date().toLocaleString()}\n`
+  const header = `# ${session?.title || 'Conversation'}\n\n> Exported from ${BRAND} · ${new Date().toLocaleString()}\n`
   if (!runs.length) return `${header}\n_(no messages yet)_\n`
   return `${header}\n${runs.map(runToMarkdown).join('\n\n---\n\n')}\n`
 }

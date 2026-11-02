@@ -53,14 +53,14 @@ def _headers(method, path, body=b""):
 
 
 def test_disabled_when_no_secret(monkeypatch):
-    monkeypatch.delenv("ATHENA_API_SECRET", raising=False)
+    monkeypatch.delenv("GLAUX_API_SECRET", raising=False)
     assert client.get("/api/auth").json()["enabled"] is False
     # open: unsigned request works
     assert client.get("/api/ledger").status_code == 200
 
 
 def test_enabled_rejects_unsigned(monkeypatch):
-    monkeypatch.setenv("ATHENA_API_SECRET", SECRET)
+    monkeypatch.setenv("GLAUX_API_SECRET", SECRET)
     assert client.get("/api/auth").json()["enabled"] is True
     assert client.get("/api/ledger").status_code == 401
     # health + auth stay public so a client can bootstrap
@@ -69,7 +69,7 @@ def test_enabled_rejects_unsigned(monkeypatch):
 
 
 def test_enabled_accepts_signed(monkeypatch):
-    monkeypatch.setenv("ATHENA_API_SECRET", SECRET)
+    monkeypatch.setenv("GLAUX_API_SECRET", SECRET)
     assert client.get("/api/ledger", headers=_headers("GET", "/api/ledger")).status_code == 200
     body = b'{"directive":"signed dispatch"}'
     r = client.post(
@@ -81,7 +81,7 @@ def test_enabled_accepts_signed(monkeypatch):
 
 
 def test_enabled_rejects_bad_signature(monkeypatch):
-    monkeypatch.setenv("ATHENA_API_SECRET", SECRET)
+    monkeypatch.setenv("GLAUX_API_SECRET", SECRET)
     r = client.get(
         "/api/ledger",
         headers={auth.HEADER_TS: str(int(time.time())), auth.HEADER_SIG: "deadbeef"},

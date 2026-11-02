@@ -25,7 +25,7 @@ const features = [
   {
     icon: Hammer,
     title: "It builds its own tools",
-    body: "When nothing fits, an agent writes a skill. Athena static-capability-checks it, runs its generated tests in the sandbox, and injects it into the live run. Proven skills get promoted; failing ones get repaired and retried.",
+    body: "When nothing fits, an agent writes a skill. Glaux static-capability-checks it, runs its generated tests in the sandbox, and injects it into the live run. Proven skills get promoted; failing ones get repaired and retried.",
   },
   {
     icon: RefreshCw,
@@ -60,8 +60,8 @@ const comparison: [string, string, string][] = [
 const docLinks = [
   ["Getting started", "Install, first run, first swarm", "/docs/getting-started"],
   ["Architecture", "Swarm, ledger, sandbox, memory", "/docs/architecture"],
-  ["Self-evolving harness", "How Athena improves itself", "/docs/self-evolution"],
-  ["CLI reference", "Every athena command", "/docs/cli"],
+  ["Self-evolving harness", "How Glaux improves itself", "/docs/self-evolution"],
+  ["CLI reference", "Every glaux command", "/docs/cli"],
   ["HTTP API", "The stable endpoint surface", "/docs/api"],
   ["Security model", "Sandbox, jail, ledger, trade-offs", "/docs/security"],
 ];
@@ -95,7 +95,7 @@ export default function Home() {
             that <span className="gradient-text">proves its work</span>
           </h1>
           <p className="mx-auto mt-6 max-w-xl text-lg text-muted">
-            Athena turns a goal into a team of agents that plan, execute in parallel, and verify each
+            Glaux turns a goal into a team of agents that plan, execute in parallel, and verify each
             other — then signs every step onto a tamper-evident ledger. It writes its own tools when
             none exist, and improves itself without being able to get worse.
           </p>
@@ -133,7 +133,7 @@ export default function Home() {
         <div className="overflow-hidden rounded-2xl border border-line/12 shadow-2xl shadow-black/50">
           <Image
             src={asset("/images/demo.gif")}
-            alt="Athena running a task, streaming the swarm, and verifying the signed ledger"
+            alt="Glaux running a task, streaming the swarm, and verifying the signed ledger"
             width={800}
             height={470}
             className="w-full"
@@ -150,7 +150,7 @@ export default function Home() {
           Running in three commands
         </h2>
         <p className="mt-3 max-w-xl text-muted">
-          No API key required — Athena runs fully local on Ollama, or against 30+ hosted providers.
+          No API key required — Glaux runs fully local on Ollama, or against 30+ hosted providers.
         </p>
         <pre className="glass mt-7 overflow-x-auto rounded-xl p-5 text-[13.5px] leading-relaxed">
           <code>
@@ -159,11 +159,11 @@ export default function Home() {
             {"\n"}./install.sh
             {"\n\n"}
             <span className="text-faint"># start the swarm → http://127.0.0.1:8000</span>
-            {"\n"}./venv/bin/athena up
+            {"\n"}./venv/bin/glaux up
             {"\n\n"}
             <span className="text-faint"># or drive it straight from the terminal</span>
-            {"\n"}athena run <span className="text-accent">&quot;research the top vector databases and write a comparison&quot;</span>
-            {"\n"}athena verify   <span className="text-faint"># ✓ chain verified · every step signed</span>
+            {"\n"}glaux run <span className="text-accent">&quot;research the top vector databases and write a comparison&quot;</span>
+            {"\n"}glaux verify   <span className="text-faint"># ✓ chain verified · every step signed</span>
           </code>
         </pre>
       </section>
@@ -171,12 +171,12 @@ export default function Home() {
       {/* Differentiators */}
       <section id="different" className="border-t border-line/10">
         <div className="mx-auto max-w-content px-6 py-24">
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">Why Athena</p>
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">Why Glaux</p>
           <h2 className="mt-3 text-[clamp(26px,3.6vw,34px)] font-semibold tracking-tight">
             What makes it different
           </h2>
           <p className="mt-3 max-w-2xl text-muted">
-            Most frameworks give you orchestration and observability. Athena adds two things they
+            Most frameworks give you orchestration and observability. Glaux adds two things they
             structurally don&apos;t have — provable provenance and genuine self-extension — and makes
             both safe by construction.
           </p>
@@ -201,7 +201,7 @@ export default function Home() {
               <thead>
                 <tr className="text-left text-xs uppercase tracking-wide text-faint">
                   <th className="border-b border-line/12 px-4 py-3 font-semibold" />
-                  <th className="border-b border-line/12 px-4 py-3 font-semibold">Athena</th>
+                  <th className="border-b border-line/12 px-4 py-3 font-semibold">Glaux</th>
                   <th className="border-b border-line/12 px-4 py-3 font-semibold">
                     Typical agent framework
                   </th>
@@ -274,7 +274,7 @@ export default function Home() {
       <section className="border-t border-line/10">
         <div className="mx-auto max-w-content px-6 py-24">
           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">Documentation</p>
-          <h2 className="mt-3 text-[clamp(26px,3.6vw,34px)] font-semibold tracking-tight">Learn Athena</h2>
+          <h2 className="mt-3 text-[clamp(26px,3.6vw,34px)] font-semibold tracking-tight">Learn Glaux</h2>
           <div className="mt-9 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {docLinks.map(([title, sub, href]) => (
               <Link

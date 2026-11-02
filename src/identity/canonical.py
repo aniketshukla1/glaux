@@ -1,6 +1,6 @@
 """Canonical byte serialization for signing.
 
-Every signature in Athena is computed over the canonical bytes of a JSON
+Every signature in Glaux is computed over the canonical bytes of a JSON
 object. Canonical = deterministic key ordering and no insignificant
 whitespace, so the same logical payload always produces identical bytes
 regardless of dict insertion order or platform.

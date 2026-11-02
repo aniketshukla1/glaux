@@ -1,4 +1,4 @@
-"""Athena skill synthesis & curation (Phase 4).
+"""Glaux skill synthesis & curation (Phase 4).
 
 - :func:`static_cap_check` — AST guard that rejects code beyond declared caps.
 - :class:`SkillSynthesizer` — LLM proposes a skill + tests; tests run sandboxed.

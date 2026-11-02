@@ -8,8 +8,8 @@ through the MCP surface so the swarm signs it to the ledger.
 
 Enable by exposing the tools (``register_workspace``). The daemon toggles this at
 runtime via ``STATE.set_workspace_enabled`` (Settings / ``POST /api/fs``); the
-``ATHENA_WORKSPACE`` env var only seeds the initial state. Default location:
-``<ATHENA_HOME>/workspace``.
+``GLAUX_WORKSPACE`` env var only seeds the initial state. Default location:
+``<GLAUX_HOME>/workspace``.
 """
 
 from __future__ import annotations
@@ -20,9 +20,7 @@ import re
 import shutil
 from pathlib import Path
 
-
-def _athena_home() -> Path:
-    return Path(os.environ.get("ATHENA_HOME", Path.home() / ".athena"))
+from paths import home
 
 
 class WorkspaceError(Exception):
@@ -37,7 +35,7 @@ class Workspace:
         max_file_bytes: int = 5 * 1024 * 1024,
         max_total_bytes: int = 200 * 1024 * 1024,
     ) -> None:
-        self.root = Path(root or (_athena_home() / "workspace")).resolve()
+        self.root = Path(root or (home() / "workspace")).resolve()
         self.root.mkdir(parents=True, exist_ok=True)
         self.max_file_bytes = max_file_bytes
         self.max_total_bytes = max_total_bytes

@@ -80,7 +80,7 @@ def main() -> int:
     sync_images()
     slugs = sorted(p.stem for p in DOCS.glob("*.md"))
     for slug in slugs:
-        title = f"{TITLES.get(slug, slug.replace('-', ' ').capitalize())} — Athena docs"
+        title = f"{TITLES.get(slug, slug.replace('-', ' ').capitalize())} — Glaux docs"
         page = PAGE.format(
             slug=slug,
             title=json.dumps(title),

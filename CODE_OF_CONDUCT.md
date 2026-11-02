@@ -2,7 +2,7 @@
 
 ## Our pledge
 
-We want Athena to be a project anyone can contribute to. Everyone participating —
+We want Glaux to be a project anyone can contribute to. Everyone participating —
 maintainers, contributors, and people opening their first issue — is expected to treat
 others with respect.
 

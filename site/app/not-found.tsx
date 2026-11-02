@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { Logo } from "./components/Logo";
 
-export const metadata = { title: "Not found — Athena" };
+export const metadata = { title: "Not found — Glaux" };
 
 export default function NotFound() {
   return (

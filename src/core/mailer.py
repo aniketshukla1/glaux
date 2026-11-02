@@ -1,10 +1,10 @@
 """Outbound email — SMTP when configured, a dev-mode fallback otherwise.
 
 Email verification and password reset both need to deliver a link. When SMTP is
-configured (ATHENA_SMTP_HOST + friends) we send a real message; otherwise — the
+configured (GLAUX_SMTP_HOST + friends) we send a real message; otherwise — the
 common case for a local install — we run in "dev mode": the link is logged and
 handed back to the caller so the UI can surface it directly, so the flow still
-works with zero email setup. Set ATHENA_ENV=production to disable that fallback.
+works with zero email setup. Set GLAUX_ENV=production to disable that fallback.
 """
 
 from __future__ import annotations
@@ -18,11 +18,11 @@ from core.observability import log_json
 
 
 def smtp_configured() -> bool:
-    return bool(os.environ.get("ATHENA_SMTP_HOST"))
+    return bool(os.environ.get("GLAUX_SMTP_HOST"))
 
 
 def is_production() -> bool:
-    return os.environ.get("ATHENA_ENV", "").lower() == "production"
+    return os.environ.get("GLAUX_ENV", "").lower() == "production"
 
 
 def dev_mode() -> bool:
@@ -32,13 +32,13 @@ def dev_mode() -> bool:
 
 
 def send_email(to: str, subject: str, body: str) -> bool:
-    host = os.environ.get("ATHENA_SMTP_HOST")
+    host = os.environ.get("GLAUX_SMTP_HOST")
     if not host:
         return False
-    port = int(os.environ.get("ATHENA_SMTP_PORT", "587"))
-    user = os.environ.get("ATHENA_SMTP_USER")
-    password = os.environ.get("ATHENA_SMTP_PASSWORD")
-    sender = os.environ.get("ATHENA_SMTP_FROM", user or "athena@localhost")
+    port = int(os.environ.get("GLAUX_SMTP_PORT", "587"))
+    user = os.environ.get("GLAUX_SMTP_USER")
+    password = os.environ.get("GLAUX_SMTP_PASSWORD")
+    sender = os.environ.get("GLAUX_SMTP_FROM", user or "glaux@localhost")
     msg = EmailMessage()
     msg["From"] = sender
     msg["To"] = to

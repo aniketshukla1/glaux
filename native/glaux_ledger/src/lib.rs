@@ -1,4 +1,4 @@
-//! athena_ledger — native ledger kernel for Athena.
+//! glaux_ledger — native ledger kernel for Glaux.
 //!
 //! Owns the entire tamper-evident action log: canonicalization, Ed25519 signing,
 //! SHA-256 hashing, chain verification, and JSONL persistence. The Python side

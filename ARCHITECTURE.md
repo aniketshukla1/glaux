@@ -1,6 +1,6 @@
-# Athena Swarm Architecture
+# Glaux Swarm Architecture
 
-Athena is a self-improving multi-agent swarm engineered around three differentiating pillars: **cryptographic agent identity**, **sandboxed skill execution**, and **curated self-improvement**. The Rust vector core, tri-partite memory, ReAct runtime, and React UI are the substrate that makes these pillars usable.
+Glaux is a self-improving multi-agent swarm engineered around three differentiating pillars: **cryptographic agent identity**, **sandboxed skill execution**, and **curated self-improvement**. The Rust vector core, tri-partite memory, ReAct runtime, and React UI are the substrate that makes these pillars usable.
 
 ---
 
@@ -78,7 +78,7 @@ The trust foundation. Every agent is a keypair; every action is a signed block.
 - **Key rotation.** An agent can rotate its keypair while keeping a stable `agent_id`; a signed rotation record links old → new key, and the registry tracks each key's validity window so blocks always verify against the key valid when signed.
 - **Secrets broker.** Skills declare which named secrets they need; the broker injects them as scoped env vars at sandbox launch and scrubs their values from all captured output. Skill code never sees a raw key.
 - **Capability tokens.** Signed grants between agents: `{issuer, subject, capability, expires_at, signature}`. Required for every cross-agent handoff; verified before the receiving agent accepts work.
-- **Signed block ledger (native).** The entire ledger lives in a Rust crate (`native/athena_ledger`, PyO3): block assembly, canonicalization, Ed25519 signing, SHA-256 hashing, chain verification, and JSONL persistence. Each block: `{index, timestamp, agent_id, signing_pubkey, action_type, payload, prev_hash, signature, hash}`. `signature` covers the canonical block content; `prev_hash` chains blocks. Verifying walks the whole chain natively (index, content hash, linkage, signature) — the hot audit path — then layers a rotation-aware registry check in Python. Agents/orchestration stay Python; only this CPU-bound crypto is native (the same boundary as AthenaDB's vector math).
+- **Signed block ledger (native).** The entire ledger lives in a Rust crate (`native/glaux_ledger`, PyO3): block assembly, canonicalization, Ed25519 signing, SHA-256 hashing, chain verification, and JSONL persistence. Each block: `{index, timestamp, agent_id, signing_pubkey, action_type, payload, prev_hash, signature, hash}`. `signature` covers the canonical block content; `prev_hash` chains blocks. Verifying walks the whole chain natively (index, content hash, linkage, signature) — the hot audit path — then layers a rotation-aware registry check in Python. Agents/orchestration stay Python; only this CPU-bound crypto is native (the same boundary as AthenaDB's vector math).
 - **Public Key Registry.** Maps agent_ids to public keys; new keys auto-registered on first observed action and recorded as a registration block.
 - **Optional external anchoring.** Every N blocks the Merkle root is posted to an RFC 3161 timestamp service. This makes the chain tamper-proof against the platform operator, not just against external attackers.
 
@@ -101,7 +101,7 @@ LLM-generated code never executes in the agent process.
 A custom Rust vector database optimized for the swarm's memory access patterns.
 
 > **AthenaDB is a separate project**, developed and released independently
-> (sibling repo `../athenadb`). Athena consumes it as a dependency — the native
+> (sibling repo `../athenadb`). Glaux consumes it as a dependency — the native
 > Python module is built into the venv via `maturin`. The design below is
 > summarized here for context; the DB's own repo is the source of truth.
 
@@ -199,6 +199,6 @@ React + Vite + Tailwind dark monospace dashboard, FastAPI + WebSockets backend.
 ## Out of Scope (for now)
 
 - Multi-tenant isolation, distributed AthenaDB replication.
-- Custom model fine-tuning — Athena uses off-the-shelf Claude.
+- Custom model fine-tuning — Glaux uses off-the-shelf Claude.
 - Computer-use / browser-control skills (revisit after Phase 4).
 - Blockchain consensus protocols — signed actions + optional anchoring are sufficient for a single-org swarm.

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-pytest.importorskip("athena_ledger")
+pytest.importorskip("glaux_ledger")
 pytest.importorskip("fastapi")
 
 from fastapi.testclient import TestClient  # noqa: E402

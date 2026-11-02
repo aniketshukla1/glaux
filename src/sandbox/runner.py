@@ -159,7 +159,7 @@ def run(
     # Backend selection. Default "auto": use the WASM v2 backend (no ambient
     # authority) when a CPython-WASI runtime is available, else transparently
     # fall back to the subprocess sandbox below. Force one with "wasm"/"subprocess".
-    backend = os.environ.get("ATHENA_SANDBOX_BACKEND", "auto").lower()
+    backend = os.environ.get("GLAUX_SANDBOX_BACKEND", "auto").lower()
     if backend in ("wasm", "auto"):
         from .wasm import WasmSandbox
 
@@ -168,8 +168,8 @@ def run(
         if backend == "wasm":
             return SandboxResult(
                 ok=False,
-                error="ATHENA_SANDBOX_BACKEND=wasm but no CPython-WASI runtime "
-                "configured (set ATHENA_PYTHON_WASM); refusing to silently run "
+                error="GLAUX_SANDBOX_BACKEND=wasm but no CPython-WASI runtime "
+                "configured (set GLAUX_PYTHON_WASM); refusing to silently run "
                 "with weaker isolation",
             )
         # backend == "auto": fall through to the subprocess sandbox
@@ -188,7 +188,7 @@ def run(
             return SandboxResult(ok=False, error=str(e))
         secret_values = list(injected.values())
 
-    with tempfile.TemporaryDirectory(prefix="athena-skill-") as scratch:
+    with tempfile.TemporaryDirectory(prefix="glaux-skill-") as scratch:
         jobfile = os.path.join(scratch, "job.json")
         resultfile = os.path.join(scratch, "result.json")
         with open(jobfile, "w") as f:
@@ -207,7 +207,7 @@ def run(
         child_env = {
             "PATH": os.environ.get("PATH", "/usr/bin:/bin"),
             "HOME": scratch,
-            "ATHENA_SANDBOX": "1",
+            "GLAUX_SANDBOX": "1",
         }
         child_env.update(injected)
 

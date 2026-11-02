@@ -1,4 +1,4 @@
-# Contributing to Athena
+# Contributing to Glaux
 
 Thanks for your interest — issues and pull requests are both welcome.
 
@@ -16,7 +16,7 @@ optional — clone it as a sibling directory to enable the memory layers.
 
 ## Ground rules
 
-- **Tests come with the change.** Athena's whole premise is that it can prove what it
+- **Tests come with the change.** Glaux's whole premise is that it can prove what it
   did; a change without a test undermines that. Run the full suite before opening a PR.
 - **Never weaken a safety boundary casually.** The sandbox's zero-ambient-authority
   default, the workspace jail, the capability checks, and the ledger's append-only
@@ -39,7 +39,7 @@ optional — clone it as a sibling directory to enable the memory layers.
 venv/bin/python -m pytest -q                 # full suite
 venv/bin/python -m pytest tests/test_x.py    # one file
 npm --prefix frontend run build              # dashboard
-venv/bin/athena up                           # run the server
+venv/bin/glaux up                           # run the server
 ```
 
 ## Docs and the website
@@ -60,7 +60,7 @@ CI regenerates + rebuilds on deploy too, so a missed run won't ship a stale site
 ## Reporting bugs
 
 Open an issue with what you expected, what happened, and the smallest reproduction you
-can manage. `athena status` output and the relevant slice of `~/.athena/athena.log`
+can manage. `glaux status` output and the relevant slice of `~/.glaux/glaux.log`
 help a lot. Please redact API keys.
 
 ## Security

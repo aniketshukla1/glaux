@@ -35,13 +35,13 @@ jobs:
 
       - name: Build the native ledger kernel
         run: |
-          cd native/athena_ledger
+          cd native/glaux_ledger
           maturin build --release --out dist
           pip install dist/*.whl
 
       - name: Run the test suite
         env:
-          ATHENA_HOME: ${{ runner.temp }}/athena-home
+          GLAUX_HOME: ${{ runner.temp }}/glaux-home
         run: python -m pytest -q
 
   frontend:

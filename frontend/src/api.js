@@ -1,9 +1,9 @@
-// Thin client for the Athena backend (proxied to :8000 in dev via vite.config.js).
+// Thin client for the Glaux backend (proxied to :8000 in dev via vite.config.js).
 //
-// When VITE_ATHENA_API_SECRET is set, every request is HMAC-signed (Web Crypto)
+// When VITE_GLAUX_API_SECRET is set, every request is HMAC-signed (Web Crypto)
 // to match the backend's env-gated auth. Otherwise requests are sent plain.
 
-const SECRET = import.meta.env.VITE_ATHENA_API_SECRET || ''
+const SECRET = import.meta.env.VITE_GLAUX_API_SECRET || import.meta.env.VITE_ATHENA_API_SECRET || ''
 const enc = new TextEncoder()
 
 // --- session token (account auth) ---------------------------------------
@@ -36,7 +36,7 @@ async function authHeaders(method, path, bodyStr) {
   if (!SECRET) return {}
   const ts = Math.floor(Date.now() / 1000).toString()
   const canonical = `${ts}\n${method.toUpperCase()}\n${path}\n${await sha256hex(bodyStr || '')}`
-  return { 'X-Athena-Timestamp': ts, 'X-Athena-Signature': await hmacHex(SECRET, canonical) }
+  return { 'X-Glaux-Timestamp': ts, 'X-Glaux-Signature': await hmacHex(SECRET, canonical) }
 }
 
 async function request(method, url, bodyObj) {
@@ -58,7 +58,7 @@ async function request(method, url, bodyObj) {
     // where 401 is an expected "wrong password" result).
     if (r.status === 401 && !path.startsWith('/api/auth')) {
       clearToken()
-      try { window.dispatchEvent(new CustomEvent('athena-unauthorized')) } catch { /* non-browser */ }
+      try { window.dispatchEvent(new CustomEvent('glaux-unauthorized')) } catch { /* non-browser */ }
     }
     // Prefer the server's explanation (FastAPI `detail`) over a bare status code.
     let detail = `HTTP ${r.status}`

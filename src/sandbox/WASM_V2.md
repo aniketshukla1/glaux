@@ -37,7 +37,7 @@ through WASI. We hand it nothing by default:
 - `WasmSandbox.self_test()` — proves, at runtime, that the guest executes wasm
   with **0 preopened dirs / no network** and that a runaway module **traps on
   fuel exhaustion**. Exercised by `tests/test_sandbox_wasm.py`.
-- Backend dispatch in `runner.py`, selected by `ATHENA_SANDBOX_BACKEND`:
+- Backend dispatch in `runner.py`, selected by `GLAUX_SANDBOX_BACKEND`:
   - unset / `auto` → **default**: use WASM when a CPython-WASI runtime is present,
     else transparently fall back to the subprocess sandbox;
   - `wasm` → require the WASM backend; **refuse to run** if it can't (never
@@ -50,13 +50,13 @@ The runtime + isolation + Python execution are done. The one thing not committed
 to git is the ~25 MB CPython-WASI binary. Install it once:
 
 ```bash
-scripts/fetch_python_wasm.sh    # pinned + checksum-verified -> ~/.athena/python.wasm
+scripts/fetch_python_wasm.sh    # pinned + checksum-verified -> ~/.glaux/python.wasm
 ```
 
 That's it — the backend defaults to `auto`, so with the runtime present every
 skill the eval harness and synthesizer run executes inside the WASM guest via the
 same `sandbox.run(...)` entry point. Override the location with
-`ATHENA_PYTHON_WASM=/path/to/python.wasm` if you keep it elsewhere. `/api/health`
+`GLAUX_PYTHON_WASM=/path/to/python.wasm` if you keep it elsewhere. `/api/health`
 reports `sandbox.active == "wasm"` and the Studio Skills panel shows the badge.
 
 ## Roadmap

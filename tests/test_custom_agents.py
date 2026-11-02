@@ -48,7 +48,7 @@ def test_iterations_clamped(tmp_path):
 
 
 def test_build_merges_named_agent_and_skips_reserved(tmp_path):
-    pytest.importorskip("athena_ledger")
+    pytest.importorskip("glaux_ledger")
     from identity import AgentIdentity
     from llm import ScriptedLLM
 
@@ -67,7 +67,7 @@ def test_build_merges_named_agent_and_skips_reserved(tmp_path):
 
 
 def test_build_skips_agents_without_a_minted_identity(tmp_path):
-    pytest.importorskip("athena_ledger")
+    pytest.importorskip("glaux_ledger")
     from llm import ScriptedLLM
 
     ca = CustomAgents(path=tmp_path / "s.json")

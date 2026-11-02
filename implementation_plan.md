@@ -1,4 +1,4 @@
-# Athena Implementation Plan
+# Glaux Implementation Plan
 
 A self-improving multi-agent swarm built on three pillars that competing frameworks lack:
 
@@ -23,7 +23,7 @@ Decisions made upfront so phases don't re-litigate them.
 | Identity primitive   | Ed25519 keypair per agent; public key = agent_id    | Portable, verifiable, signature-based — turns "ledger" into a real trust system. |
 | Concurrency          | `asyncio` end-to-end; long jobs queued (Phase 5)    | Swarms are inherently async; sync code paints us into a corner.                  |
 | HTTP mode for AthenaDB | Build the Axum server but defer endpoints to Phase 5 | Don't carry dead optionality; only wire it up when a multi-service need is real. |
-| Ledger core          | Native Rust crate `native/athena_ledger` (PyO3); agents stay Python | Hot path is auditing long chains (hashing + signature verification) — native. Agents/orchestration stay Python (runtime skill synthesis, I/O-bound). |
+| Ledger core          | Native Rust crate `native/glaux_ledger` (PyO3); agents stay Python | Hot path is auditing long chains (hashing + signature verification) — native. Agents/orchestration stay Python (runtime skill synthesis, I/O-bound). |
 | LLM access           | All calls behind a single `src/llm/gateway.py` seam | Multi-model routing, fallback, and cost-based selection drop in later without touching agents. |
 | Secrets              | Sandbox-injected via a broker; skill code never sees raw keys | Hardcoded/plaintext credentials are a future incident. Secrets are a capability, not an argument. |
 | Content trust        | Every context string tagged `trusted` / `untrusted` | Retrieved memory + tool/MCP outputs are prompt-injection vectors; the boundary must exist from day one. |
@@ -51,7 +51,7 @@ The two security-critical primitives that everything later depends on. Get these
 
 ### 0.1 Cryptographic Identity (`src/identity/`)
 
-- [x] `keypair.py` — Ed25519 keypair generation via `cryptography` lib. Persist private key to `~/.athena/agents/<agent_id>.key` with `0600` perms.
+- [x] `keypair.py` — Ed25519 keypair generation via `cryptography` lib. Persist private key to `~/.glaux/agents/<agent_id>.key` with `0600` perms.
 - [x] `agent_id` = base58-encoded public key. Stable, portable, unforgeable.
 - [x] `sign(payload: bytes) -> Signature` and `verify(public_key, payload, signature) -> bool` helpers.
 - [x] Capability tokens: `Token{ issuer, subject, capability, expires_at, signature }`. JSON-serializable, signed by issuer. (`tokens.py`, with nonce + subject/capability binding)
@@ -70,7 +70,7 @@ The two security-critical primitives that everything later depends on. Get these
 
 ### 0.3 Kill Switch & Dry-Run (`src/safety.py`)
 
-- [x] Global `SAFETY_MODE` env (`ATHENA_SAFETY_MODE`): `live | dry_run | halted`, with a programmatic override that beats the env var.
+- [x] Global `SAFETY_MODE` env (`GLAUX_SAFETY_MODE`): `live | dry_run | halted`, with a programmatic override that beats the env var.
 - [x] `halted` short-circuits sandbox execution; the runner returns `killed_reason="halted"` rather than execute. (Wires into `CALL_SKILL`/`CALL_AGENT` in Phase 3.)
 - [x] `dry_run` skips sandbox execution and returns a "would run" marker. Critical for debugging self-modification. (`tests/test_safety.py`, 4 passing)
 
@@ -90,7 +90,7 @@ The two security-critical primitives that everything later depends on. Get these
 The vector engine. Built for speed, but with a durability story this time.
 
 > **Now a standalone project.** AthenaDB has been extracted to its own repo
-> (`../athenadb`) and is developed/released independently. Athena depends on it
+> (`../athenadb`) and is developed/released independently. Glaux depends on it
 > as an external package (built into the venv via `maturin develop --release`).
 > Further DB enhancements (ANN index, group-commit WAL, HTTP endpoints) happen
 > in that repo, not here.
@@ -197,7 +197,7 @@ The cognitive layer, now built on signed actions instead of hash-chained payload
 ### 3.4 Cryptographic Swarm Ledger — ✅ COMPLETE
 
 Signed, hash-chained blocks. **The whole ledger core is a native Rust crate
-(`native/athena_ledger`, PyO3)** — block assembly, canonicalization, Ed25519
+(`native/glaux_ledger`, PyO3)** — block assembly, canonicalization, Ed25519
 signing, SHA-256 hashing, chain verification, and JSONL persistence. The hot
 path (auditing a long chain) runs entirely native; `src/core/ledger.py` is a
 thin Python wrapper adding the agent-facing API + rotation-aware checks.
@@ -282,7 +282,7 @@ This is what most "agent platforms" never build. Without it, the skill library d
 - [x] **Roster** endpoint — `GET /api/agents`. Tests: `tests/test_api.py` (11).
 - [x] **WebSocket live streaming** — `/ws` broadcasts each ledger block as it's written (ledger `on_append` hook → thread-safe fan-out via `call_soon_threadsafe`); the feed appends blocks live with a "● live" indicator. Especially visible on slow local models. Tests: `tests/test_ws.py` (3, incl. WS-over-TestClient).
 - [x] REST endpoints for skill list + eval reports (Phase 4).
-- [x] **Auth: HMAC request signing** (`src/core/auth.py`) — env-gated by `ATHENA_API_SECRET`; every `/api/*` request signed with `X-Athena-Timestamp` + `X-Athena-Signature` (HMAC-SHA256 over `ts\nMETHOD\npath\nsha256(body)`), with a replay window and constant-time compare. `/api/health` + `/api/auth` stay public to bootstrap. The shared platform secret is separate from agent keypairs. Frontend signs via Web Crypto (`VITE_ATHENA_API_SECRET`). Tests: `tests/test_auth.py` (8). Verified live: unsigned → 401, signed dashboard works.
+- [x] **Auth: HMAC request signing** (`src/core/auth.py`) — env-gated by `GLAUX_API_SECRET`; every `/api/*` request signed with `X-Glaux-Timestamp` + `X-Glaux-Signature` (HMAC-SHA256 over `ts\nMETHOD\npath\nsha256(body)`), with a replay window and constant-time compare. `/api/health` + `/api/auth` stay public to bootstrap. The shared platform secret is separate from agent keypairs. Frontend signs via Web Crypto (`VITE_GLAUX_API_SECRET`). Tests: `tests/test_auth.py` (8). Verified live: unsigned → 401, signed dashboard works.
 
 ### 5.3 Observability — 🟡 IN PROGRESS
 
@@ -305,9 +305,9 @@ To avoid feature creep, these are out unless a concrete need appears:
 
 - Multi-tenant isolation (single-org platform until proven otherwise).
 - Distributed AthenaDB replication.
-- Fine-tuning custom models — Athena uses off-the-shelf Claude.
+- Fine-tuning custom models — Glaux uses off-the-shelf Claude.
 - Computer-use / browser-control skills (revisit after Phase 4).
-- A blockchain consensus protocol — Athena uses signed actions + optional external anchoring; consensus is not needed for a single-org swarm.
+- A blockchain consensus protocol — Glaux uses signed actions + optional external anchoring; consensus is not needed for a single-org swarm.
 
 ---
 

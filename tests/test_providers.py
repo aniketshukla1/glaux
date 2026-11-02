@@ -67,7 +67,7 @@ def test_openai_compatible_client_roundtrip(stub_server):
     res = c.complete([Message(role="user", content="hello")], system="be terse")
     assert res.text == "echo:gpt-test:hello"
     assert res.model_id == "stub:gpt-test"
-    # OpenAI usage fields mapped onto Athena's input/output token names
+    # OpenAI usage fields mapped onto Glaux's input/output token names
     assert res.usage == {"input_tokens": 11, "output_tokens": 7}
 
 
@@ -161,7 +161,7 @@ def test_hf_runtimes_cover_hosted_and_local():
     assert by_id["vllm"]["local"] is True
     # local runtimes carry a serve command templated on the repo id
     assert "{repo}" in by_id["vllm"]["command"]
-    # each runtime maps to a backend Athena can actually switch to
+    # each runtime maps to a backend Glaux can actually switch to
     backends = set(PROVIDERS) | {"ollama"}
     for r in runtimes:
         assert r["provider"] in backends, r["id"]

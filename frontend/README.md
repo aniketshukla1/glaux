@@ -1,6 +1,6 @@
-# Athena Swarm Console
+# Glaux Swarm Console
 
-Real-time dashboard for the Athena swarm: dispatch directives, watch the signed
+Real-time dashboard for the Glaux swarm: dispatch directives, watch the signed
 ledger build up block by block, and audit the chain.
 
 - **Task Console** — dispatch a directive to the swarm.
@@ -25,7 +25,7 @@ npm run dev      # http://localhost:5173  (proxies /api -> :8000)
 
 Open http://localhost:5173 and dispatch a directive. With no API key the backend
 uses a built-in demo planner so the full signed trace + verification still work;
-set `ANTHROPIC_API_KEY` (and optionally `ATHENA_MODEL`) for real agent reasoning.
+set `ANTHROPIC_API_KEY` (and optionally `GLAUX_MODEL`) for real agent reasoning.
 
 ## API auth (optional)
 
@@ -34,13 +34,13 @@ on both sides:
 
 ```bash
 # backend
-ATHENA_API_SECRET=your-secret PYTHONPATH=src uvicorn core.api:app --port 8000
+GLAUX_API_SECRET=your-secret PYTHONPATH=src uvicorn core.api:app --port 8000
 # frontend (frontend/.env.local, gitignored)
-echo 'VITE_ATHENA_API_SECRET=your-secret' > frontend/.env.local
+echo 'VITE_GLAUX_API_SECRET=your-secret' > frontend/.env.local
 ```
 
-When enabled, every `/api/*` request must carry `X-Athena-Timestamp` +
-`X-Athena-Signature` (HMAC-SHA256 over `ts\nMETHOD\npath\nsha256(body)`);
+When enabled, every `/api/*` request must carry `X-Glaux-Timestamp` +
+`X-Glaux-Signature` (HMAC-SHA256 over `ts\nMETHOD\npath\nsha256(body)`);
 `/api/health` and `/api/auth` stay public so a client can bootstrap. The
 dashboard signs automatically via Web Crypto.
 

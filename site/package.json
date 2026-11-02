@@ -1,8 +1,8 @@
 {
-  "name": "athena-site",
+  "name": "glaux-site",
   "version": "1.0.0",
   "private": true,
-  "description": "Marketing site + documentation for Athena (Next.js App Router).",
+  "description": "Marketing site + documentation for Glaux (Next.js App Router).",
   "scripts": {
     "dev": "next dev",
     "build": "next build",

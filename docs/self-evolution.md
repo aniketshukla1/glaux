@@ -1,6 +1,6 @@
 # The self-evolving harness
 
-Most agent systems improve when *you* tune them. Athena tunes **itself** — and the
+Most agent systems improve when *you* tune them. Glaux tunes **itself** — and the
 design guarantees it cannot silently get worse.
 
 Every self-modification obeys three rules:
@@ -10,9 +10,9 @@ Every self-modification obeys three rules:
 3. **Reversible** — one command undoes it.
 
 ```bash
-athena evolution        # what it has learned
-athena evolve           # run one pass (every operator, each independently gated)
-athena evolution revert # roll back the most recent change
+glaux evolution        # what it has learned
+glaux evolve           # run one pass (every operator, each independently gated)
+glaux evolution revert # roll back the most recent change
 ```
 
 ## What it learns from
@@ -24,7 +24,7 @@ its own outcome (iterations used, whether it hit its cap, the failure signature)
 ## The operators
 
 ### 1. Tier routing
-Athena routes each directive to `fast`, `medium`, or `full`. From an outcome it infers
+Glaux routes each directive to `fast`, `medium`, or `full`. From an outcome it infers
 the tier that *should* have run — a fast/medium run that failed was under-powered; a full
 run one specialist finished cleanly was over-powered. Mis-tiered directives become
 learned exemplars for the router.
@@ -55,19 +55,19 @@ A synthesized skill that has proven itself is **pinned** as a permanent, always-
 tool — so the swarm reuses it instead of re-synthesizing it.
 
 **Gate:** promoted status, ≥5 uses, ≥80% success rate. Reverse with
-`athena evolution unpin <id>`.
+`glaux evolution unpin <id>`.
 
 ### 6. Specialist retirement
 A specialist the router keeps dispatching to that almost always fails is retired from the
 roster. Never retires an unused or new specialist, and never drops the roster below a
-floor. Reverse with `athena evolution unretire <role>`.
+floor. Reverse with `glaux evolution unretire <role>`.
 
 ## Auto-evolve
 
 Off by default. Turn it on to run every operator automatically:
 
 ```bash
-athena evolution auto on --every 20   # after every 20 recorded episodes
+glaux evolution auto on --every 20   # after every 20 recorded episodes
 ```
 
 Each change is still gated and signed, so an automatic pass carries the same guarantees
@@ -75,6 +75,6 @@ as a manual one.
 
 ## Auditing it
 
-Every accepted mutation appears in the ledger and in `athena evolution`, with the metric
+Every accepted mutation appears in the ledger and in `glaux evolution`, with the metric
 before and after. Because the ledger is hash-chained and signed, the record of how your
 agent changed itself is as tamper-evident as the work it did.

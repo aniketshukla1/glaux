@@ -276,7 +276,7 @@ export function AdvancedTab({ health, onRefresh }) {
           <StatRow label="Per-observation clip" value={ctx ? `${ctx.obs_chars} chars` : '—'} />
           <StatRow label="LLM summarizer" value={ctx ? (ctx.summarize ? 'on' : 'off · deterministic') : '—'} />
         </div>
-        <p className="text-faint text-xs mt-2">Tune with the <span className="font-mono">ATHENA_CONTEXT_*</span> environment variables.</p>
+        <p className="text-faint text-xs mt-2">Tune with the <span className="font-mono">GLAUX_CONTEXT_*</span> environment variables.</p>
       </Section>
     </div>
   )
@@ -724,7 +724,7 @@ export default function SettingsPanel({
                     <div className="text-xs text-muted leading-relaxed">
                       {auth?.enabled
                         ? 'HMAC request signing is on. Every request is verified.'
-                        : 'Open, with no request signing. Set ATHENA_API_SECRET to require signed requests.'}
+                        : 'Open, with no request signing. Set GLAUX_API_SECRET to require signed requests.'}
                     </div>
                   </Field>
                 </div>

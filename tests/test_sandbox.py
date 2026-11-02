@@ -90,7 +90,7 @@ def test_network_blocked_by_default():
 
 def test_write_outside_scratch_blocked():
     res = run(
-        "open('/etc/athena_evil.txt', 'w').write('x')",
+        "open('/etc/glaux_evil.txt', 'w').write('x')",
         caps=Capabilities(time_limit_s=5),
     )
     assert not res.ok

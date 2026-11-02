@@ -1,7 +1,7 @@
 [package]
-name = "athena-desktop"
+name = "glaux-desktop"
 version = "0.1.0"
-description = "Athena — self-improving multi-agent swarm"
+description = "Glaux — self-improving multi-agent swarm"
 authors = ["Aniket Shukla"]
 license = ""
 repository = ""
@@ -15,7 +15,7 @@ name = "app_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [[bin]]
-name = "Athena"
+name = "Glaux"
 path = "src/main.rs"
 
 [build-dependencies]

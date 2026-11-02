@@ -21,7 +21,7 @@ from sandbox import Capabilities, run as sandbox_run
 
 from .capcheck import static_cap_check
 
-SYNTH_SYSTEM = """You synthesize a reusable Python skill for the Athena swarm.
+SYNTH_SYSTEM = """You synthesize a reusable Python skill for the Glaux swarm.
 Given a task, respond with a single JSON object in a ```json block:
 {
   "name": "<snake_case_name>",

@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { Check, Loader2, KeyRound, Boxes, Copy, ChevronDown, HardDrive, Square, Zap } from 'lucide-react'
 import { getLlm, setLlm, setFastLlm, clearFastLlm, loadLocalModel, unloadLocalModel } from '../api.js'
+import { BRAND } from '../lib/brand.js'
 
 const KIND_LABELS = {
   cloud: 'Frontier & major',
@@ -230,13 +231,13 @@ export default function LlmControl({ onChange }) {
       {backend !== 'demo' && (
         <>
           <input
-            list="athena-model-suggestions"
+            list="glaux-model-suggestions"
             value={model}
             onChange={(e) => setModel(e.target.value)}
             placeholder={current?.default_model || 'model id'}
             className={inputCls}
           />
-          <datalist id="athena-model-suggestions">
+          <datalist id="glaux-model-suggestions">
             {suggestions.map((m) => (
               <option key={m} value={m} />
             ))}
@@ -347,7 +348,7 @@ export default function LlmControl({ onChange }) {
           {hfOpen && (
             <div className="mt-3 space-y-2.5">
               <p className="text-faint text-xs leading-relaxed">
-                Bring any model from the Hub — fine-tuned, quantized, your own. Athena drives the swarm;
+                Bring any model from the Hub — fine-tuned, quantized, your own. {BRAND} drives the swarm;
                 a runtime serves the model over the OpenAI API.
               </p>
               <input
@@ -404,7 +405,7 @@ export default function LlmControl({ onChange }) {
             <p className="text-faint text-xs leading-relaxed">
               Point at a <code className="text-muted">.gguf</code> / <code className="text-muted">.safetensors</code> /
               <code className="text-muted"> .bin</code> / <code className="text-muted">.pt</code> file (or a model folder).
-              Athena launches the right server and runs the swarm on it — ideal for testing your own or fine-tuned models.
+              {BRAND} launches the right server and runs the swarm on it — ideal for testing your own or fine-tuned models.
             </p>
             <input
               value={lmPath}
@@ -429,7 +430,7 @@ export default function LlmControl({ onChange }) {
               </div>
             )}
             {lmErr && <div className="text-xs whitespace-pre-wrap" style={{ color: 'rgb(var(--bad))' }}>{lmErr}</div>}
-            <p className="text-faint text-xs">Loading large weights can take a while — Athena waits for the server to come up.</p>
+            <p className="text-faint text-xs">Loading large weights can take a while — {BRAND} waits for the server to come up.</p>
           </div>
         )}
       </div>

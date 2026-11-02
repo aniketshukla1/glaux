@@ -63,11 +63,11 @@ export default function Sidebar({
   const [dragOver, setDragOver] = useState(undefined)  // undefined = none, null = ungrouped, id = project
 
   const dropProps = (pid) => ({
-    onDragOver: (e) => { if (!e.dataTransfer.types.includes('text/athena-session')) return; e.preventDefault(); e.dataTransfer.dropEffect = 'move'; if (dragOver !== pid) setDragOver(pid) },
+    onDragOver: (e) => { if (!e.dataTransfer.types.includes('text/glaux-session')) return; e.preventDefault(); e.dataTransfer.dropEffect = 'move'; if (dragOver !== pid) setDragOver(pid) },
     onDragLeave: (e) => { if (!e.currentTarget.contains(e.relatedTarget)) setDragOver((v) => (v === pid ? undefined : v)) },
     onDrop: (e) => {
       e.preventDefault()
-      const sid = e.dataTransfer.getData('text/athena-session')
+      const sid = e.dataTransfer.getData('text/glaux-session')
       if (sid) onMoveSession(sid, pid)
       setDragOver(undefined)
     },

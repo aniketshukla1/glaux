@@ -283,8 +283,8 @@ def key_available(provider_id: str, explicit_key: Optional[str] = None) -> bool:
 
 
 # --- Hugging Face: run any downloaded model -------------------------------
-# Athena orchestrates; the model is served by a runtime that speaks the OpenAI
-# API. These are the ways to take any model off the HF Hub and point Athena at
+# Glaux orchestrates; the model is served by a runtime that speaks the OpenAI
+# API. These are the ways to take any model off the HF Hub and point Glaux at
 # it — a hosted router (no install) or a local server you run yourself. The
 # ``{repo}`` placeholder is the HF repo id (e.g. "Qwen/Qwen2.5-7B-Instruct").
 HF_RUNTIMES: list[dict] = [

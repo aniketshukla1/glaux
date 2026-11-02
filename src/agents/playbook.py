@@ -5,9 +5,9 @@ runs in the sandbox). A playbook is human- or agent-*authored knowledge* — a
 name, a one-line description, and a markdown body of steps/conventions. The swarm
 lists the available playbooks, opens the relevant one, and follows it. This is the
 knowledge-injection pattern deepagents calls "skills"; we call it a playbook to
-avoid colliding with Athena's executable skills.
+avoid colliding with Glaux's executable skills.
 
-Stored as ``<ATHENA_HOME>/playbooks/<slug>.md`` with a small frontmatter block.
+Stored as ``<GLAUX_HOME>/playbooks/<slug>.md`` with a small frontmatter block.
 """
 
 from __future__ import annotations
@@ -16,12 +16,10 @@ import os
 import re
 from pathlib import Path
 
+from paths import home
+
 _FRONTMATTER = re.compile(r"^---\s*\n(.*?)\n---\s*\n?(.*)$", re.DOTALL)
 _MAX_BODY = 100_000
-
-
-def _athena_home() -> Path:
-    return Path(os.environ.get("ATHENA_HOME", Path.home() / ".athena"))
 
 
 class PlaybookError(Exception):
@@ -42,7 +40,7 @@ def _parse(text: str) -> tuple[dict, str]:
 
 class Playbooks:
     def __init__(self, root: str | os.PathLike | None = None) -> None:
-        self.root = Path(root or (_athena_home() / "playbooks")).resolve()
+        self.root = Path(root or (home() / "playbooks")).resolve()
         self.root.mkdir(parents=True, exist_ok=True)
 
     def _slug(self, name: str) -> str:

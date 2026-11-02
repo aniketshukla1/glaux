@@ -1,4 +1,4 @@
-"""Phase 3.4: cryptographic swarm ledger (native athena_ledger core)."""
+"""Phase 3.4: cryptographic swarm ledger (native glaux_ledger core)."""
 
 from __future__ import annotations
 
@@ -6,9 +6,9 @@ import json
 
 import pytest
 
-pytest.importorskip("athena_ledger")
+pytest.importorskip("glaux_ledger")
 
-import athena_ledger  # noqa: E402
+import glaux_ledger  # noqa: E402
 
 from core.ledger import Action, GENESIS_HASH, Ledger  # noqa: E402
 from identity import AgentIdentity, KeyRegistry, verify  # noqa: E402
@@ -21,7 +21,7 @@ from identity.keypair import RotationRecord  # noqa: E402
 
 def test_sha256_matches_known_vector():
     assert (
-        athena_ledger.sha256_hex(b"abc")
+        glaux_ledger.sha256_hex(b"abc")
         == "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
     )
 
@@ -29,7 +29,7 @@ def test_sha256_matches_known_vector():
 def test_native_signature_interoperates_with_python_identity():
     agent = AgentIdentity.generate()
     msg = b"cross-language message"
-    sig = athena_ledger.sign(agent.signing_key_b58(), msg)
+    sig = glaux_ledger.sign(agent.signing_key_b58(), msg)
     # signature produced in Rust verifies under Python `cryptography`
     assert verify(agent.public_key_b58, msg, sig)
 
@@ -105,7 +105,7 @@ def test_detects_signature_tampering(tmp_path):
 
     def mutate(blocks):
         # syntactically valid signature, but over the wrong content/key
-        blocks[0]["signature"] = athena_ledger.sign(other.signing_key_b58(), b"wrong")
+        blocks[0]["signature"] = glaux_ledger.sign(other.signing_key_b58(), b"wrong")
         return blocks
 
     _rewrite_lines(path, mutate)

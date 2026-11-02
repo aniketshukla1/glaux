@@ -1,5 +1,6 @@
 import React, { useState } from 'react'
 import { Plus, Pencil, Trash2, Check, X, Loader2 } from 'lucide-react'
+import { BRAND } from '../lib/brand.js'
 
 const SUGGESTED = ['🧠', '🏴‍☠️', '👩‍🏫', '🧑‍💻', '🔬', '✍️', '📊', '⚖️', '🎯', '🩺']
 
@@ -45,7 +46,7 @@ export default function Personas({ personas = [], onCreate, onUpdate, onDelete }
 
   return (
     <div className="space-y-2.5">
-      <p className="text-faint text-xs">Reusable system prompts. Apply one to a chat from the header to give Athena a custom personality or expertise.</p>
+      <p className="text-faint text-xs">Reusable system prompts. Apply one to a chat from the header to give {BRAND} a custom personality or expertise.</p>
 
       {personas.map((p) =>
         editing === p.id ? (

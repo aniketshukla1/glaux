@@ -264,7 +264,7 @@ class DemoLLM:
     ) -> LLMResponse:
         sys = (system or "").lower()
         goal = messages[-1].content if messages else ""
-        if "router for the athena swarm" in sys:
+        if "router for the glaux swarm" in sys:
             text = _router_plan(goal)
         elif "you review whether" in sys:
             task = _first_field(goal, "TASK")
@@ -280,7 +280,7 @@ class DemoLLM:
                 text = _ACCEPT
         elif "synthesize a reusable python skill" in sys:
             text = _demo_skill(_first_field(goal, "TASK"))
-        elif "lead of the athena swarm" in sys:
+        elif "lead of the glaux swarm" in sys:
             # Final integration pass — return plain prose, not a JSON action.
             directive = _first_field(goal, "ORIGINAL REQUEST")
             text = (

@@ -8,7 +8,7 @@ import sys
 
 import pytest
 
-pytest.importorskip("athena_ledger")
+pytest.importorskip("glaux_ledger")
 
 import safety  # noqa: E402
 from agents import (  # noqa: E402

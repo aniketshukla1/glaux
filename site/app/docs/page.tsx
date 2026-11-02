@@ -1,13 +1,13 @@
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 
-export const metadata = { title: "Documentation — Athena" };
+export const metadata = { title: "Documentation — Glaux" };
 
 const DOCS: [string, string, string][] = [
   ["Getting started", "Install, first run, and your first swarm.", "/docs/getting-started"],
   ["Architecture", "The swarm, the ledger, the sandbox, and memory.", "/docs/architecture"],
-  ["Self-evolving harness", "How Athena improves its own configuration — safely.", "/docs/self-evolution"],
-  ["CLI reference", "Every athena command.", "/docs/cli"],
+  ["Self-evolving harness", "How Glaux improves its own configuration — safely.", "/docs/self-evolution"],
+  ["CLI reference", "Every glaux command.", "/docs/cli"],
   ["HTTP API", "The stable endpoint surface.", "/docs/api"],
   ["Configuration", "Models, environment variables, and capabilities.", "/docs/configuration"],
   ["Security model", "The sandbox, the jail, the ledger, and the trade-offs.", "/docs/security"],
@@ -17,7 +17,7 @@ export default function DocsIndex() {
   return (
     <div className="not-prose">
       <h1 className="text-4xl font-semibold tracking-tight text-fg">Documentation</h1>
-      <p className="mt-3 text-muted">Everything you need to run, drive, and understand Athena.</p>
+      <p className="mt-3 text-muted">Everything you need to run, drive, and understand Glaux.</p>
       <div className="mt-8 grid gap-3 sm:grid-cols-2">
         {DOCS.map(([title, sub, href]) => (
           <Link

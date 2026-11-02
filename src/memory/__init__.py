@@ -1,4 +1,4 @@
-"""Athena tri-partite memory.
+"""Glaux tri-partite memory.
 
 Public API:
 - :class:`MemoryManager` — owns AthenaDB + embedder + the three layers

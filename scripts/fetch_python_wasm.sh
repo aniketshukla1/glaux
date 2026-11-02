@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Install the CPython-WASI runtime that enables the WASM skill sandbox (v2).
 #
-# Downloads a pinned, checksum-verified python.wasm into <ATHENA_HOME>/python.wasm
-# (default ~/.athena). Once present, sandbox execution runs skills inside a
+# Downloads a pinned, checksum-verified python.wasm into <GLAUX_HOME>/python.wasm
+# (default ~/.glaux). Once present, sandbox execution runs skills inside a
 # WebAssembly guest with no ambient authority — no env var needed (the backend
 # defaults to "auto" and picks it up). See src/sandbox/WASM_V2.md.
 #
@@ -14,10 +14,15 @@ TAG="3.12.0%2B20231211-040d5a6"
 URL="https://github.com/vmware-labs/webassembly-language-runtimes/releases/download/python/${TAG}/python-${VERSION}.wasm"
 SHA256="e5dc5a398b07b54ea8fdb503bf68fb583d533f10ec3f930963e02b9505f7a763"
 
-ATHENA_HOME="${ATHENA_HOME:-$HOME/.athena}"
-DEST="$ATHENA_HOME/python.wasm"
+# Same rule as src/paths.py: GLAUX_HOME (or the pre-rename ATHENA_HOME), else
+# ~/.glaux, or ~/.athena when an install from before the rename lives there.
+GLAUX_HOME="${GLAUX_HOME:-${ATHENA_HOME:-}}"
+if [ -z "$GLAUX_HOME" ]; then
+  if [ -d "$HOME/.athena" ] && [ ! -e "$HOME/.glaux" ]; then GLAUX_HOME="$HOME/.athena"; else GLAUX_HOME="$HOME/.glaux"; fi
+fi
+DEST="$GLAUX_HOME/python.wasm"
 
-mkdir -p "$ATHENA_HOME"
+mkdir -p "$GLAUX_HOME"
 
 if [ -f "$DEST" ] && command -v shasum >/dev/null 2>&1 \
    && [ "$(shasum -a 256 "$DEST" | awk '{print $1}')" = "$SHA256" ]; then

@@ -1,4 +1,4 @@
-"""Athena agents and swarm."""
+"""Glaux agents and swarm."""
 
 from .base import AgentResult, BaseAgent, HandoffRejected
 from .budget import Budget, BudgetTracker

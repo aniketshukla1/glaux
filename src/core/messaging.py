@@ -1,9 +1,9 @@
 """Messaging gateways — config catalog + per-instance storage.
 
-A registry of chat platforms Athena can run on (Telegram, Discord, Slack, …),
+A registry of chat platforms Glaux can run on (Telegram, Discord, Slack, …),
 each described by a small schema the UI renders into a config form. This module
 owns the *configuration* layer: the platform catalog, the per-instance settings
-(persisted to ``~/.athena/messaging.json``), and a derived status per platform.
+(persisted to ``~/.glaux/messaging.json``), and a derived status per platform.
 The live bot runtimes (long-poll / webhook loops that route messages into the
 swarm) are wired on top of this in a follow-up; until then a configured gateway
 reports ``ready`` rather than ``running``.
@@ -27,7 +27,7 @@ def _f(key, label, hint="", required=False, recommended=False, secret=False, pla
 
 # Platform catalog — drives the UI. Order = display order.
 CATALOG = [
-    {"id": "telegram", "label": "Telegram", "blurb": "Run Athena from Telegram DMs, groups, and topics.",
+    {"id": "telegram", "label": "Telegram", "blurb": "Run Glaux from Telegram DMs, groups, and topics.",
      "guide": "https://core.telegram.org/bots#how-do-i-create-a-bot", "fields": [
         _f("bot_token", "Bot token", "Create a bot with @BotFather, then paste the token it gives you.", required=True, secret=True),
         _f("allowed_ids", "Allowed user IDs", "Comma-separated numeric IDs from @userinfobot. Without this, anyone can DM your bot.", recommended=True),
@@ -53,7 +53,7 @@ CATALOG = [
     {"id": "matrix", "label": "Matrix", "blurb": "Open, federated chat (Element, etc.).",
      "guide": "https://matrix.org/", "fields": [
         _f("homeserver", "Homeserver", "https://matrix.org", required=True),
-        _f("user_id", "Bot user ID", "@athena:matrix.org", required=True),
+        _f("user_id", "Bot user ID", "@glaux:matrix.org", required=True),
         _f("access_token", "Access token", "", required=True, secret=True),
      ]},
     {"id": "whatsapp", "label": "WhatsApp", "blurb": "WhatsApp Cloud API (Meta).",
@@ -67,7 +67,7 @@ CATALOG = [
         _f("service_url", "signal-cli REST URL", "http://localhost:8080", required=True),
         _f("number", "Bot phone number", "+15551234567", required=True),
      ]},
-    {"id": "email", "label": "Email", "blurb": "Talk to Athena over email (IMAP in, SMTP out).",
+    {"id": "email", "label": "Email", "blurb": "Talk to Glaux over email (IMAP in, SMTP out).",
      "guide": "", "fields": [
         _f("imap_host", "IMAP host", "imap.gmail.com", required=True),
         _f("smtp_host", "SMTP host", "smtp.gmail.com", required=True),
@@ -75,7 +75,7 @@ CATALOG = [
         _f("password", "Password / app password", "", required=True, secret=True),
         _f("allowed_senders", "Allowed senders", "Comma-separated email addresses.", recommended=True),
      ]},
-    {"id": "sms_twilio", "label": "SMS (Twilio)", "blurb": "Text Athena over SMS via Twilio.",
+    {"id": "sms_twilio", "label": "SMS (Twilio)", "blurb": "Text Glaux over SMS via Twilio.",
      "guide": "https://www.twilio.com/docs/sms", "fields": [
         _f("account_sid", "Account SID", "", required=True),
         _f("auth_token", "Auth token", "", required=True, secret=True),

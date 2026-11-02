@@ -28,7 +28,7 @@ def test_export_is_independently_verifiable(tmp_path):
     client.post("/api/task", json={"directive": "build a thing and summarize it"})
     ndjson = client.get("/api/ledger/export").text
     assert ndjson.strip(), "export should contain the signed chain"
-    f = tmp_path / "athena-ledger.jsonl"
+    f = tmp_path / "glaux-ledger.jsonl"
     f.write_text(ndjson)
     # the standalone verifier path: re-load + verify with no running server
     assert Ledger.load(str(f)).verify().valid

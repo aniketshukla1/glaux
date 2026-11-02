@@ -1,34 +1,34 @@
-"""The ``athena`` command line — install once, then drive the swarm from anywhere.
+"""The ``glaux`` command line — install once, then drive the swarm from anywhere.
 
 Server:
-  athena up        start the server (serves the UI + API) as a background daemon
-  athena down      ·  restart  ·  rebuild  (rebuild the UI, then restart)
-  athena status    is it running? which model, safety, how many signed blocks
-  athena serve     run in the foreground   ·   athena open   open the dashboard
+  glaux up        start the server (serves the UI + API) as a background daemon
+  glaux down      ·  restart  ·  rebuild  (rebuild the UI, then restart)
+  glaux status    is it running? which model, safety, how many signed blocks
+  glaux serve     run in the foreground   ·   glaux open   open the dashboard
 
 Drive the agent:
-  athena run "..." dispatch a directive — streams the run live (--json for scripts)
-  athena chat      interactive terminal chat (one conversation, Ctrl-C stops a run)
-  athena search    search the web via the agent's tools
-  athena remember  store a fact   ·   athena memory <layer> [query]   browse it
+  glaux run "..." dispatch a directive — streams the run live (--json for scripts)
+  glaux chat      interactive terminal chat (one conversation, Ctrl-C stops a run)
+  glaux search    search the web via the agent's tools
+  glaux remember  store a fact   ·   glaux memory <layer> [query]   browse it
 
 Inspect:
-  athena sessions · agents · skills · recipes · personas · metrics · verify · eval
-  athena models [--set ollama:qwen2.5:7b-instruct]   show / switch the LLM
+  glaux sessions · agents · skills · recipes · personas · metrics · verify · eval
+  glaux models [--set ollama:qwen2.5:7b-instruct]   show / switch the LLM
 
 Configure (parity with the app's Settings):
-  athena safety [live|dry-run|halted]   ·   athena approval [auto|gated]
-  athena workspace [on|off]             jailed file tools (edit_file, glob, grep…)
-  athena playbooks [list|add|rm|on|off] ·   athena subagents [list|add|rm]
-  athena skills [synth "…"|approve <id>|reject <id>]   synthesize / gate skills
-  athena evolution [status|evolve|revert|auto on|unpin <id>|unretire <role>]
-  athena personas [list|add|rm]         ·   athena recipes [list|add|rm]
-  athena cache [status|on|off|clear]    semantic answer cache (skip repeat runs)
+  glaux safety [live|dry-run|halted]   ·   glaux approval [auto|gated]
+  glaux workspace [on|off]             jailed file tools (edit_file, glob, grep…)
+  glaux playbooks [list|add|rm|on|off] ·   glaux subagents [list|add|rm]
+  glaux skills [synth "…"|approve <id>|reject <id>]   synthesize / gate skills
+  glaux evolution [status|evolve|revert|auto on|unpin <id>|unretire <role>]
+  glaux personas [list|add|rm]         ·   glaux recipes [list|add|rm]
+  glaux cache [status|on|off|clear]    semantic answer cache (skip repeat runs)
 
 Account / admin:
-  athena login · logout · whoami   ·   athena messaging   (gateways, admin)
+  glaux login · logout · whoami   ·   glaux messaging   (gateways, admin)
 
-Stdlib-only so ``athena --help`` / ``status`` / ``run`` work without importing
+Stdlib-only so ``glaux --help`` / ``status`` / ``run`` work without importing
 the heavy backend; ``up``/``serve`` shell out to uvicorn. Live runs stream over
 Server-Sent Events, rendered with nothing but urllib.
 """
@@ -47,6 +47,8 @@ import urllib.parse
 import urllib.request
 from pathlib import Path
 
+from paths import home
+
 SRC_DIR = Path(__file__).resolve().parent
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8000
@@ -55,15 +57,15 @@ DEFAULT_PORT = 8000
 # --- paths / pid ----------------------------------------------------------
 
 def home_dir() -> Path:
-    return Path(os.environ.get("ATHENA_HOME", Path.home() / ".athena"))
+    return home()
 
 
 def pid_file() -> Path:
-    return home_dir() / "athena.pid"
+    return home_dir() / "glaux.pid"
 
 
 def log_file() -> Path:
-    return home_dir() / "athena.log"
+    return home_dir() / "glaux.log"
 
 
 def write_pid(pid: int) -> None:
@@ -187,14 +189,14 @@ def _api(base_url: str, method: str, path: str, payload: dict | None = None):
         return _req_json(method, url, payload)
     except urllib.error.HTTPError as e:
         if e.code == 401:
-            _err("Not signed in. Run:  athena login")
+            _err("Not signed in. Run:  glaux login")
         elif e.code == 403:
             _err("Admin sign-in required for this.")
         else:
             _err(_detail(e))
         return None
     except urllib.error.URLError:
-        _err(f"Couldn't reach Athena at {base_url}.  Start it with:  athena up")
+        _err(f"Couldn't reach Glaux at {base_url}.  Start it with:  glaux up")
         return None
 
 
@@ -272,12 +274,12 @@ def _render_stream(base_url: str, directive: str, session_id: str | None = None)
         resp = _open_stream(base_url, {"directive": directive, "session_id": session_id})
     except urllib.error.HTTPError as e:
         if e.code == 401:
-            _err("Not signed in. Run:  athena login")
+            _err("Not signed in. Run:  glaux login")
         else:
             _err(_detail(e))
         return None
     except urllib.error.URLError:
-        _err(f"Couldn't reach Athena at {base_url}.  Start it with:  athena up")
+        _err(f"Couldn't reach Glaux at {base_url}.  Start it with:  glaux up")
         return None
 
     result = None
@@ -404,7 +406,7 @@ def _start_daemon(host: str, port: int, *, open_browser: bool = False) -> int:
     )
     write_pid(proc.pid)
     if _wait_healthy(base_url):
-        print(f"Athena is up at {base_url}  (pid {proc.pid}, logs: {log_file()})")
+        print(f"Glaux is up at {base_url}  (pid {proc.pid}, logs: {log_file()})")
         if open_browser:
             import webbrowser
 
@@ -439,11 +441,11 @@ def cmd_up(args) -> int:
     base_url = f"http://{args.host}:{args.port}"
     existing = read_pid()
     if process_alive(existing):
-        print(f"Athena is already running (pid {existing}) at {base_url}")
+        print(f"Glaux is already running (pid {existing}) at {base_url}")
         return 0
 
     if args.foreground:
-        print(f"Serving Athena at {base_url}  (Ctrl-C to stop)")
+        print(f"Serving Glaux at {base_url}  (Ctrl-C to stop)")
         import subprocess
 
         return subprocess.call(_uvicorn_cmd(args.host, args.port), env=_env_with_src())
@@ -477,7 +479,7 @@ def cmd_rebuild(args) -> int:
 def cmd_down(_args) -> int:
     pid = read_pid()
     if not process_alive(pid):
-        print("Athena is not running.")
+        print("Glaux is not running.")
         pid_file().unlink(missing_ok=True)
         return 0
     try:
@@ -490,7 +492,7 @@ def cmd_down(_args) -> int:
             break
         time.sleep(0.2)
     pid_file().unlink(missing_ok=True)
-    print(f"Stopped Athena (pid {pid}).")
+    print(f"Stopped Glaux (pid {pid}).")
     return 0
 
 
@@ -498,7 +500,7 @@ def cmd_status(args) -> int:
     base_url = f"http://{args.host}:{args.port}"
     pid = read_pid()
     if not process_alive(pid):
-        print("Athena is not running.  Start it with:  athena up")
+        print("Glaux is not running.  Start it with:  glaux up")
         return 1
     try:
         h = _get_json(f"{base_url}/api/health")
@@ -506,7 +508,7 @@ def cmd_status(args) -> int:
         print(f"Running (pid {pid}) but the API didn't respond at {base_url}: {e}", file=sys.stderr)
         return 1
     ws, pb, sa, ev = h.get("workspace", {}), h.get("playbooks", {}), h.get("subagents", {}), h.get("evolution", {})
-    print(f"Athena is up at {base_url}  (pid {pid})")
+    print(f"Glaux is up at {base_url}  (pid {pid})")
     print(f"  model:    {h.get('llm')}  ({h.get('backend')})")
     print(f"  safety:   {h.get('safety')}   approval: {h.get('approval')}")
     print(f"  ledger:   {h.get('blocks')} signed blocks")
@@ -545,9 +547,9 @@ def cmd_run(args) -> int:
     base_url = args.url or f"http://{args.host}:{args.port}"
     directive = " ".join(args.directive).strip()
     if not directive and not sys.stdin.isatty():
-        directive = sys.stdin.read().strip()  # allow piping: echo "..." | athena run
+        directive = sys.stdin.read().strip()  # allow piping: echo "..." | glaux run
     if not directive:
-        print("Give a directive, e.g.  athena run \"summarize the news\"", file=sys.stderr)
+        print("Give a directive, e.g.  glaux run \"summarize the news\"", file=sys.stderr)
         return 2
 
     # Scripting paths use the plain blocking endpoint; interactive use streams live.
@@ -556,10 +558,10 @@ def cmd_run(args) -> int:
             payload = _post_json(f"{base_url}/api/task", {"directive": directive})
         except urllib.error.HTTPError as e:
             if e.code == 401:
-                return _err("Not signed in. Run:  athena login")
+                return _err("Not signed in. Run:  glaux login")
             return _err(_detail(e))
         except urllib.error.URLError:
-            return _err(f"Couldn't reach Athena at {base_url}.  Start it with:  athena up")
+            return _err(f"Couldn't reach Glaux at {base_url}.  Start it with:  glaux up")
         if getattr(args, "json", False):
             print(json.dumps(payload, indent=2))
         else:
@@ -586,7 +588,7 @@ def cmd_login(args) -> int:
         print(_detail(e), file=sys.stderr)
         return 1
     except urllib.error.URLError:
-        print(f"Couldn't reach Athena at {base_url}.  Start it with:  athena up", file=sys.stderr)
+        print(f"Couldn't reach Glaux at {base_url}.  Start it with:  glaux up", file=sys.stderr)
         return 1
     write_token(out["token"])
     user = out.get("user", {})
@@ -603,15 +605,15 @@ def cmd_logout(_args) -> int:
 def cmd_whoami(args) -> int:
     base_url = f"http://{args.host}:{args.port}"
     if not read_token():
-        print("Not signed in. Run:  athena login")
+        print("Not signed in. Run:  glaux login")
         return 1
     try:
         me = _get_json(f"{base_url}/api/auth/me").get("user", {})
     except urllib.error.HTTPError as e:
-        print("Session expired. Run:  athena login" if e.code == 401 else _detail(e), file=sys.stderr)
+        print("Session expired. Run:  glaux login" if e.code == 401 else _detail(e), file=sys.stderr)
         return 1
     except urllib.error.URLError:
-        print("Couldn't reach Athena.  Start it with:  athena up", file=sys.stderr)
+        print("Couldn't reach Glaux.  Start it with:  glaux up", file=sys.stderr)
         return 1
     print(f"{me.get('name')} <{me.get('email')}>" + ("  (admin)" if me.get("is_admin") else ""))
     return 0
@@ -625,7 +627,7 @@ def cmd_chat(args) -> int:
         session_id = _get_json(f"{base_url}/api/workspace").get("active_id")
     except Exception:  # noqa: BLE001
         pass
-    print(style("Athena chat", "bold") + style("  —  type a task, or 'exit' to quit. Ctrl-C stops a run.\n", "dim"))
+    print(style("Glaux chat", "bold") + style("  —  type a task, or 'exit' to quit. Ctrl-C stops a run.\n", "dim"))
     while True:
         try:
             directive = input(style("you ▸ ", "magenta", "bold")).strip()
@@ -647,10 +649,10 @@ def cmd_messaging(args) -> int:
     try:
         data = _get_json(f"{base_url}/api/messaging")
     except urllib.error.HTTPError as e:
-        print("Admin sign-in required. Run:  athena login" if e.code in (401, 403) else _detail(e), file=sys.stderr)
+        print("Admin sign-in required. Run:  glaux login" if e.code in (401, 403) else _detail(e), file=sys.stderr)
         return 1
     except urllib.error.URLError:
-        print("Couldn't reach Athena.  Start it with:  athena up", file=sys.stderr)
+        print("Couldn't reach Glaux.  Start it with:  glaux up", file=sys.stderr)
         return 1
     if args.action == "list" or not args.platform:
         mark = {"ready": "●", "needs_setup": "◐", "disabled": "○"}
@@ -660,7 +662,7 @@ def cmd_messaging(args) -> int:
         return 0
     pid = args.platform
     if pid not in {p["id"] for p in data["platforms"]}:
-        print(f"Unknown platform {pid!r}. Run:  athena messaging list", file=sys.stderr)
+        print(f"Unknown platform {pid!r}. Run:  glaux messaging list", file=sys.stderr)
         return 1
     config = {}
     for kv in (args.set or []):
@@ -693,7 +695,7 @@ def cmd_desktop(args) -> int:
         print(f"Desktop app not found (expected {src_tauri}).", file=sys.stderr)
         return 1
     mode = "build" if args.build else "dev"
-    print(f"Launching the Athena desktop app  (cargo tauri {mode})…")
+    print(f"Launching the Glaux desktop app  (cargo tauri {mode})…")
     try:
         return subprocess.call(["cargo", "tauri", mode], cwd=str(src_tauri))
     except FileNotFoundError:
@@ -740,7 +742,7 @@ def cmd_skills(args) -> int:
     if action == "synth":
         task = " ".join(rest).strip()
         if not task:
-            return _err('Usage:  athena skills synth "reverse a string"')
+            return _err('Usage:  glaux skills synth "reverse a string"')
         print(style("Synthesizing…", "dim"))
         out = _api(base_url, "POST", "/api/skills/synthesize", {"task": task})
         if out is None:
@@ -752,7 +754,7 @@ def cmd_skills(args) -> int:
         return _err("✗ " + (out.get("reason") or "synthesis failed"))
     if action in ("approve", "reject"):
         if not rest:
-            return _err(f"Usage:  athena skills {action} <skill_id>")
+            return _err(f"Usage:  glaux skills {action} <skill_id>")
         out = _api(base_url, "POST", f"/api/skills/{rest[0]}/{action}")
         if out is None:
             return 1
@@ -841,7 +843,7 @@ def cmd_playbooks(args) -> int:
         return 0
     if act == "add":
         if not args.name:
-            return _err('Usage:  athena playbooks add <name> --body "..."  [--desc "..."]')
+            return _err('Usage:  glaux playbooks add <name> --body "..."  [--desc "..."]')
         body = args.body
         if body is None and not sys.stdin.isatty():
             body = sys.stdin.read()
@@ -852,7 +854,7 @@ def cmd_playbooks(args) -> int:
         return 0
     if act == "rm":
         if not args.name:
-            return _err("Usage:  athena playbooks rm <slug>")
+            return _err("Usage:  glaux playbooks rm <slug>")
         if _api(base_url, "DELETE", f"/api/playbooks/{urllib.parse.quote(args.name)}") is None:
             return 1
         print(style("✓ removed ", "green") + args.name)
@@ -864,7 +866,7 @@ def cmd_playbooks(args) -> int:
     for p in data.get("playbooks", []):
         print("  " + style(p.get("name", "?"), "bold") + style(f"   {p.get('slug', '')}", "gray") + (style(f"   {p['description']}", "dim") if p.get("description") else ""))
     if not data.get("playbooks"):
-        print(style('  none yet — add with:  athena playbooks add <name> --body "..."', "dim"))
+        print(style('  none yet — add with:  glaux playbooks add <name> --body "..."', "dim"))
     return 0
 
 
@@ -873,7 +875,7 @@ def cmd_subagents(args) -> int:
     act = args.action
     if act == "add":
         if not args.name or not args.prompt:
-            return _err('Usage:  athena subagents add <name> --prompt "..."  [--desc "..."] [--iters N]')
+            return _err('Usage:  glaux subagents add <name> --prompt "..."  [--desc "..."] [--iters N]')
         out = _api(base_url, "POST", "/api/subagents",
                    {"name": args.name, "description": args.desc or "", "prompt": args.prompt, "iterations": args.iters})
         if out is None:
@@ -882,7 +884,7 @@ def cmd_subagents(args) -> int:
         return 0
     if act == "rm":
         if not args.name:
-            return _err("Usage:  athena subagents rm <slug>")
+            return _err("Usage:  glaux subagents rm <slug>")
         if _api(base_url, "DELETE", f"/api/subagents/{urllib.parse.quote(args.name)}") is None:
             return 1
         print(style("✓ removed ", "green") + args.name)
@@ -928,7 +930,7 @@ def cmd_evolution(args) -> int:
         return 0
     if act in ("unpin", "unretire"):
         if not args.value:
-            return _err(f"Usage:  athena evolution {act} <{'skill_id' if act == 'unpin' else 'role'}>")
+            return _err(f"Usage:  glaux evolution {act} <{'skill_id' if act == 'unpin' else 'role'}>")
         out = _api(base_url, "POST", f"/api/evolution/{act}/{urllib.parse.quote(args.value)}")
         if out is None:
             return 1
@@ -985,7 +987,7 @@ def cmd_personas(args) -> int:
     act = getattr(args, "action", "list") or "list"
     if act == "add":
         if not args.name or not args.prompt:
-            return _err('Usage:  athena personas add <name> --prompt "..."  [--emoji 🧠]')
+            return _err('Usage:  glaux personas add <name> --prompt "..."  [--emoji 🧠]')
         out = _api(base_url, "POST", "/api/personas",
                    {"name": args.name, "instructions": args.prompt, "emoji": args.emoji})
         if out is None:
@@ -995,7 +997,7 @@ def cmd_personas(args) -> int:
         return 0
     if act == "rm":
         if not args.name:
-            return _err("Usage:  athena personas rm <id>")
+            return _err("Usage:  glaux personas rm <id>")
         if _api(base_url, "DELETE", f"/api/personas/{urllib.parse.quote(args.name)}") is None:
             return 1
         print(style("✓ removed ", "green") + args.name)
@@ -1005,7 +1007,7 @@ def cmd_personas(args) -> int:
         return 1
     personas = ws.get("personas", [])
     if not personas:
-        print(style('No personas yet. Add one:  athena personas add <name> --prompt "..."', "dim"))
+        print(style('No personas yet. Add one:  glaux personas add <name> --prompt "..."', "dim"))
         return 0
     for p in personas:
         emoji = (p.get("emoji", "") + " ") if p.get("emoji") else ""
@@ -1038,7 +1040,7 @@ def cmd_remember(args) -> int:
     base_url = f"http://{args.host}:{args.port}"
     text = " ".join(args.text).strip()
     if not text:
-        return _err("Give something to remember, e.g.  athena remember \"the API base is /v2\"")
+        return _err("Give something to remember, e.g.  glaux remember \"the API base is /v2\"")
     out = _api(base_url, "POST", f"/api/memory/{args.layer}", {"text": text})
     if out is None:
         return 1
@@ -1050,7 +1052,7 @@ def cmd_search(args) -> int:
     base_url = f"http://{args.host}:{args.port}"
     query = " ".join(args.query).strip()
     if not query:
-        return _err("Give a search query, e.g.  athena search \"ed25519 vs rsa\"")
+        return _err("Give a search query, e.g.  glaux search \"ed25519 vs rsa\"")
     out = _api(base_url, "POST", "/api/mcp/call", {"tool": "web_search", "args": {"query": query, "limit": args.limit}})
     if out is None:
         return 1
@@ -1148,7 +1150,7 @@ def cmd_metrics(args) -> int:
 
 def cmd_models(args) -> int:
     base_url = f"http://{args.host}:{args.port}"
-    if args.set:  # switch model: athena models --set ollama:qwen2.5:7b-instruct  (or  backend model)
+    if args.set:  # switch model: glaux models --set ollama:qwen2.5:7b-instruct  (or  backend model)
         backend, _, model = args.set.partition(":")
         payload = {"backend": backend.strip()}
         if model.strip():
@@ -1189,7 +1191,7 @@ def cmd_recipes(args) -> int:
     act = getattr(args, "action", "list") or "list"
     if act == "add":
         if not args.name or not args.prompt:
-            return _err('Usage:  athena recipes add <name> --prompt "..."  [--desc "..."] [--emoji 📋]')
+            return _err('Usage:  glaux recipes add <name> --prompt "..."  [--desc "..."] [--emoji 📋]')
         out = _api(base_url, "POST", "/api/recipes",
                    {"name": args.name, "prompt": args.prompt, "description": args.desc or "", "emoji": args.emoji})
         if out is None:
@@ -1199,7 +1201,7 @@ def cmd_recipes(args) -> int:
         return 0
     if act == "rm":
         if not args.name:
-            return _err("Usage:  athena recipes rm <id>")
+            return _err("Usage:  glaux recipes rm <id>")
         if _api(base_url, "DELETE", f"/api/recipes/{urllib.parse.quote(args.name)}") is None:
             return 1
         print(style("✓ removed ", "green") + args.name)
@@ -1209,7 +1211,7 @@ def cmd_recipes(args) -> int:
         return 1
     recipes = ws.get("recipes", [])
     if not recipes:
-        print(style('No recipes yet. Add one:  athena recipes add <name> --prompt "..."', "dim"))
+        print(style('No recipes yet. Add one:  glaux recipes add <name> --prompt "..."', "dim"))
         return 0
     for r in recipes:
         head = ((r.get("emoji", "") + " ") if r.get("emoji") else "") + style(r.get("name", "?"), "bold")
@@ -1222,24 +1224,24 @@ def cmd_recipes(args) -> int:
 FALLBACK_VERSION = "1.0.0"  # used when running from a source checkout (not installed)
 
 
-def athena_version() -> str:
+def glaux_version() -> str:
     try:
         from importlib.metadata import version
 
-        return version("athena-agent")
+        return version("glaux-agent")
     except Exception:  # noqa: BLE001 - source checkout / metadata unavailable
         return FALLBACK_VERSION
 
 
 def cmd_version(_args) -> int:
-    print(f"athena {athena_version()}")
+    print(f"glaux {glaux_version()}")
     return 0
 
 
 # --- parser ---------------------------------------------------------------
 
 def build_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(prog="athena", description="Athena — self-improving multi-agent swarm.")
+    p = argparse.ArgumentParser(prog="glaux", description="Glaux — self-improving multi-agent swarm.")
     p.add_argument("--host", default=DEFAULT_HOST, help=f"server host (default {DEFAULT_HOST})")
     p.add_argument("--port", type=int, default=DEFAULT_PORT, help=f"server port (default {DEFAULT_PORT})")
     sub = p.add_subparsers(dest="command", required=True)
@@ -1260,7 +1262,7 @@ def build_parser() -> argparse.ArgumentParser:
     rebuild.add_argument("--open", action="store_true", help="open the dashboard once it's up")
     rebuild.set_defaults(func=cmd_rebuild)
 
-    sub.add_parser("status", help="show whether Athena is running").set_defaults(func=cmd_status)
+    sub.add_parser("status", help="show whether Glaux is running").set_defaults(func=cmd_status)
     sub.add_parser("serve", help="run in the foreground (alias for `up -f`)").set_defaults(
         func=lambda a: cmd_up(argparse.Namespace(**{**vars(a), "foreground": True, "open": False}))
     )

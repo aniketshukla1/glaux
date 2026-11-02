@@ -17,7 +17,7 @@ signals, so they behave identically on macOS and Linux.
 Status: the runtime, the zero-authority WASI configuration, and the
 resource-limit enforcement are complete and self-tested (:meth:`WasmSandbox.self_test`).
 Executing *Python* skills additionally needs a CPython-WASI build
-(``python.wasm``); point ``ATHENA_PYTHON_WASM`` at one to enable
+(``python.wasm``); point ``GLAUX_PYTHON_WASM`` at one to enable
 :meth:`WasmSandbox.run`. Until then the dispatcher falls back to the subprocess
 backend. See ``WASM_V2.md``.
 """
@@ -31,9 +31,11 @@ import threading
 from pathlib import Path
 from typing import Optional
 
+from paths import home
+
 from .capabilities import Capabilities, SandboxResult
 
-PYTHON_WASM_ENV = "ATHENA_PYTHON_WASM"
+PYTHON_WASM_ENV = "GLAUX_PYTHON_WASM"
 
 # Wall-clock is the primary limit (the epoch timer, matching the subprocess
 # backend). Fuel is a deterministic backstop sized well above the observed
@@ -163,14 +165,13 @@ class WasmSandbox:
 
     @staticmethod
     def python_wasm_path() -> Optional[str]:
-        """The CPython-WASI runtime to use: an explicit ATHENA_PYTHON_WASM path,
-        else the default drop-in location <ATHENA_HOME>/python.wasm (what
+        """The CPython-WASI runtime to use: an explicit GLAUX_PYTHON_WASM path,
+        else the default drop-in location <GLAUX_HOME>/python.wasm (what
         scripts/fetch_python_wasm.sh installs). None if neither exists."""
         p = os.environ.get(PYTHON_WASM_ENV)
         if p and os.path.isfile(p):
             return p
-        home = os.environ.get("ATHENA_HOME") or os.path.join(os.path.expanduser("~"), ".athena")
-        default = os.path.join(home, "python.wasm")
+        default = str(home() / "python.wasm")
         return default if os.path.isfile(default) else None
 
     @classmethod
@@ -234,8 +235,8 @@ class WasmSandbox:
         wt = _wt()
         import time
 
-        with tempfile.TemporaryDirectory(prefix="athena-wasm-") as job_dir, \
-                tempfile.TemporaryDirectory(prefix="athena-wasm-out-") as out_dir:
+        with tempfile.TemporaryDirectory(prefix="glaux-wasm-") as job_dir, \
+                tempfile.TemporaryDirectory(prefix="glaux-wasm-out-") as out_dir:
             (Path(job_dir) / "job.json").write_text(
                 json.dumps({"code": code, "entrypoint": entrypoint, "inputs": inputs})
             )

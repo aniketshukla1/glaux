@@ -41,7 +41,7 @@ def test_identical_text_is_self_similar():
 
 def test_add_and_retrieve_fact(tmp_path):
     mm = MemoryManager(tmp_path / "db")
-    mm.semantic.add_fact("Athena uses Ed25519 for agent identity")
+    mm.semantic.add_fact("Glaux uses Ed25519 for agent identity")
     hits = mm.semantic.search("what signing scheme do agents use", k=3)
     assert hits
     assert "Ed25519" in hits[0].text

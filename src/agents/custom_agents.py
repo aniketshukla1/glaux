@@ -1,13 +1,13 @@
 """User-defined sub-agents: custom specialists the router can dispatch to.
 
-Athena ships a fixed roster of specialists (see :mod:`agents.specialists`). This
+Glaux ships a fixed roster of specialists (see :mod:`agents.specialists`). This
 lets a user define *their own* — a name, a one-line description the router reads to
 decide when to use it, a system prompt, and a ReAct iteration budget — persisted as
 JSON and merged into the roster when the swarm is built. deepagents lets you pass
-custom subagents; this is Athena's equivalent, kept auditable: each custom agent
+custom subagents; this is Glaux's equivalent, kept auditable: each custom agent
 gets a persisted cryptographic identity and signs the ledger like any specialist.
 
-Stored as ``<ATHENA_HOME>/subagents.json``.
+Stored as ``<GLAUX_HOME>/subagents.json``.
 """
 
 from __future__ import annotations
@@ -17,12 +17,10 @@ import os
 import re
 from pathlib import Path
 
+from paths import home
+
 _MAX_PROMPT = 8000
 _MAX_ITERS = 20
-
-
-def _athena_home() -> Path:
-    return Path(os.environ.get("ATHENA_HOME", Path.home() / ".athena"))
 
 
 class CustomAgentError(Exception):
@@ -31,7 +29,7 @@ class CustomAgentError(Exception):
 
 class CustomAgents:
     def __init__(self, path: str | os.PathLike | None = None) -> None:
-        self.path = Path(path or (_athena_home() / "subagents.json"))
+        self.path = Path(path or (home() / "subagents.json"))
         self._agents = self._load()
 
     def _load(self) -> dict:

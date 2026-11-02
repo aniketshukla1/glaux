@@ -32,18 +32,26 @@ export function createRecognizer({ onResult, onError, onEnd, lang = 'en-US' } = 
 }
 
 // Always-listening wake-word listener. Runs a *continuous* recognizer that scans
-// finalized speech for a wake phrase ("Hey Athena …"). If the wake word is
+// finalized speech for a wake phrase ("Hey Glaux …"). If the wake word is
 // followed by a command in the same breath, it fires onCommand immediately;
 // otherwise it arms and the next utterance becomes the command. Continuous
 // recognizers time out on their own, so onend auto-restarts until stop().
-const DEFAULT_WAKE = ['hey athena', 'hi athena', 'okay athena', 'ok athena', 'hey athene', 'athena']
+// Speech recognisers don't know the word "Glaux", so also accept what they hear
+// instead, but only after a greeting, so everyday speech can't set it off.
+// The athena phrases are from before the rename.
+const GREETINGS = ['hey', 'hi', 'ok', 'okay']
+const HEARD_AS = ['glaux', 'glocks', 'glock', 'glox', 'gloss']
+const DEFAULT_WAKE = [
+  ...GREETINGS.flatMap((g) => HEARD_AS.map((n) => `${g} ${n}`)), 'glaux',
+  'hey athena', 'hi athena', 'okay athena', 'ok athena', 'hey athene', 'athena',
+]
 
 export function createWakeListener({ wakeWords = DEFAULT_WAKE, onWake, onCommand, onStatus, onError, lang = 'en-US' } = {}) {
   if (!recognitionSupported()) return null
   let rec = null, running = false, stopped = true, armed = false, restartT = null
 
   // Detect the wake phrase case-insensitively but return the *original-cased*
-  // remainder, so "Hey Athena, compare Redis and Memcached" dispatches with
+  // remainder, so "Hey Glaux, compare Redis and Memcached" dispatches with
   // proper nouns intact (not a flattened lowercase string).
   const matchWake = (s) => {
     const text = s || ''

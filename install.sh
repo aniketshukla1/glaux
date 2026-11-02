@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# One-command setup for Athena.
+# One-command setup for Glaux.
 #
 #   ./install.sh
 #
 # Creates a virtualenv, builds the native ledger kernel (and AthenaDB if the
-# sibling repo is present), installs the package + the `athena` command, and
-# builds the dashboard. When it finishes:  ./venv/bin/athena up
+# sibling repo is present), installs the package + the `glaux` command, and
+# builds the dashboard. When it finishes:  ./venv/bin/glaux up
 set -euo pipefail
 
 cd "$(dirname "$0")"
@@ -26,7 +26,7 @@ AthenaDB is required, and was not found next to this repo.
 
   expected at:  $PARENT/athenadb
 
-Athena's memory layers and skill library are built on it. Clone it beside this
+Glaux's memory layers and skill library are built on it. Clone it beside this
 repo and run this script again:
 
   git clone https://github.com/athena-swarm/athenadb $PARENT/athenadb
@@ -55,14 +55,16 @@ pip install --quiet --upgrade pip maturin
 pip install --quiet -r requirements.txt
 
 # --- native modules (maturin) --------------------------------------------
-say "Building native ledger kernel (athena_ledger)"
-( cd native/athena_ledger && VIRTUAL_ENV="$VENV" maturin develop --release )
+# maturin refuses to run when a conda env is active alongside the venv
+# ("Both VIRTUAL_ENV and CONDA_PREFIX are set"), so drop conda for these builds.
+say "Building native ledger kernel (glaux_ledger)"
+( cd native/glaux_ledger && env -u CONDA_PREFIX VIRTUAL_ENV="$VENV" maturin develop --release )
 
 say "Building AthenaDB (sibling repo)"
-( cd "$ATHENADB" && VIRTUAL_ENV="$VENV" maturin develop --release )
+( cd "$ATHENADB" && env -u CONDA_PREFIX VIRTUAL_ENV="$VENV" maturin develop --release )
 
-# --- the athena CLI -------------------------------------------------------
-say "Installing the 'athena' command"
+# --- the glaux CLI -------------------------------------------------------
+say "Installing the 'glaux' command"
 pip install --quiet -e .
 
 # --- dashboard ------------------------------------------------------------
@@ -93,10 +95,10 @@ fi
 cat <<EOF
 
 $(say "Done.")
-  Start Athena:   $VENV/bin/athena up
+  Start Glaux:   $VENV/bin/glaux up
   Then open:      http://127.0.0.1:8000
-  Run a task:     $VENV/bin/athena run "summarize how transformers work"
-  Stop it:        $VENV/bin/athena down
+  Run a task:     $VENV/bin/glaux run "summarize how transformers work"
+  Stop it:        $VENV/bin/glaux down
 
   (activate the venv with 'source venv/bin/activate' to drop the path prefix)
 EOF

@@ -13,9 +13,9 @@ get an acknowledgement within a few days, and credit in the fix unless you'd rat
 
 The latest released `1.x` line receives security fixes.
 
-## What Athena defends
+## What Glaux defends
 
-Athena runs model-generated code, so isolation is a core feature rather than an
+Glaux runs model-generated code, so isolation is a core feature rather than an
 afterthought. Findings in any of these are in scope and treated seriously:
 
 - **Sandbox escape** — synthesized skills run in a WebAssembly guest with no ambient
@@ -37,7 +37,7 @@ These are documented design decisions, not vulnerabilities:
 
 - **The workspace is opt-in and grants real file access** inside its jail. Enabling it
   means agents can create and modify files there — that is its purpose.
-- **MCP servers you connect run with the authority you give them.** Athena cannot
+- **MCP servers you connect run with the authority you give them.** Glaux cannot
   sandbox a third-party tool server.
 - **The semantic answer cache is opt-in** and returns a prior answer for a
   near-identical request; it cannot account for conversation context. It is off by
@@ -47,6 +47,6 @@ These are documented design decisions, not vulnerabilities:
 
 ## Handling secrets
 
-Athena never commits credentials. API keys live in your environment or the local
-config under `ATHENA_HOME` (default `~/.athena`), which is git-ignored. If you find a
+Glaux never commits credentials. API keys live in your environment or the local
+config under `GLAUX_HOME` (default `~/.glaux`), which is git-ignored. If you find a
 path where a key is logged, echoed, or written into the ledger, please report it.

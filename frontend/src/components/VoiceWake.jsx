@@ -2,9 +2,10 @@ import React, { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Mic, X, Volume2, VolumeX, Loader2 } from 'lucide-react'
 import { createWakeListener, recognitionSupported, ttsSupported, speak, stopSpeaking } from '../lib/speech.js'
+import { BRAND } from '../lib/brand.js'
 
 // Hands-free mode. Lives at the app root so it survives view changes. While
-// enabled it continuously listens for "Hey Athena …" and dispatches whatever
+// enabled it continuously listens for "Hey Glaux …" and dispatches whatever
 // follows. It goes quiet while a task runs (and while reading a reply aloud) so
 // it never hears itself, then resumes. A floating pill makes the state obvious —
 // always-listening should never be invisible.
@@ -59,7 +60,7 @@ export default function VoiceWake({ enabled, running, result, onDispatch, onDisa
     : running ? 'Working on it…'
     : speaking ? 'Speaking…'
     : status === 'armed' ? 'Listening… say your task'
-    : 'Listening for “Hey Athena”'
+    : `Listening for “Hey ${BRAND}”`
   const busy = running || speaking
   const armed = status === 'armed'
 

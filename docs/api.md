@@ -1,10 +1,10 @@
 # HTTP API
 
 The server exposes a JSON API on `http://127.0.0.1:8000` by default. This surface —
-together with the `athena` CLI — is what Athena's [semantic version](https://semver.org/)
+together with the `glaux` CLI — is what Glaux's [semantic version](https://semver.org/)
 promise covers.
 
-Set `ATHENA_API_SECRET` to require signed requests. Most endpoints require an
+Set `GLAUX_API_SECRET` to require signed requests. Most endpoints require an
 authenticated session; `/api/health` is public.
 
 ## Running tasks

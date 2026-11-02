@@ -1,4 +1,4 @@
-"""Athena cryptographic identity layer.
+"""Glaux cryptographic identity layer.
 
 Public API:
 - :class:`AgentIdentity` — keypair, signing, rotation, persistence

@@ -24,10 +24,12 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import (
     Ed25519PublicKey,
 )
 
+from paths import home
+
 from .canonical import canonical_bytes
 
 DEFAULT_NAMESPACE = "default"
-AGENT_HOME = Path(os.environ.get("ATHENA_HOME", str(Path.home() / ".athena"))) / "agents"
+AGENT_HOME = home() / "agents"
 
 _RAW_PUB = (serialization.Encoding.Raw, serialization.PublicFormat.Raw)
 _RAW_PRIV = (

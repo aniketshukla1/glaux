@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Independently verify an exported Athena ledger.
+"""Independently verify an exported Glaux ledger.
 
-    python scripts/verify_ledger.py <athena-ledger.jsonl>
+    python scripts/verify_ledger.py <glaux-ledger.jsonl>
 
 Re-checks every block's Ed25519 signature and the SHA-256 hash chain using the
-open `athena_ledger` verifier — no running server, and no trust in the Athena
+open `glaux_ledger` verifier — no running server, and no trust in the Glaux
 app required. This is the point of the signed ledger: a proof anyone can check.
 
 Exit code 0 = valid, 1 = tampered/invalid, 2 = usage error.

@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""Adversarial stress harness — push athena-agent to the edge and log every break.
+"""Adversarial stress harness — push glaux-agent to the edge and log every break.
 
 Fires edge-case, adversarial, and concurrent loads at a running daemon's /api/task
 and checks that: nothing 500s uncaught, nothing hangs, the signed ledger stays valid
 after the barrage, and the daemon is still healthy. Prints a report of every anomaly.
 
 Usage:
-    ATHENA_TOKEN=<bearer> ./venv/bin/python scripts/stress_test.py [--host URL] [--keep-backend]
+    GLAUX_TOKEN=<bearer> ./venv/bin/python scripts/stress_test.py [--host URL] [--keep-backend]
 
 By default it switches the daemon to the offline demo backend (instant) so the run
 exercises the machinery hard without waiting on a real model, then restores it.
@@ -24,7 +24,7 @@ import urllib.request
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 HOST = "http://127.0.0.1:8000"
-TOKEN = os.environ.get("ATHENA_TOKEN", "")
+TOKEN = os.environ.get("GLAUX_TOKEN", "")
 
 
 def _req(method: str, path: str, body: dict | None = None, timeout: float = 60.0):
@@ -121,7 +121,7 @@ def main() -> int:
     HOST = args.host
 
     if not TOKEN:
-        print("warn: ATHENA_TOKEN not set — requests may 401", file=sys.stderr)
+        print("warn: GLAUX_TOKEN not set — requests may 401", file=sys.stderr)
 
     prev = None
     if not args.keep_backend:

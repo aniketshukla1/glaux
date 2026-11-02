@@ -28,7 +28,7 @@ from .mcp import LocalMCPClient
 # web tools record every page they read / surface into it (it propagates into
 # the worker thread the swarm runs in via contextvars). The result then carries
 # real citations — sources are never fabricated, only what was actually visited.
-_sources: contextvars.ContextVar = contextvars.ContextVar("athena_web_sources", default=None)
+_sources: contextvars.ContextVar = contextvars.ContextVar("glaux_web_sources", default=None)
 
 
 def begin_source_capture() -> list:
@@ -55,7 +55,7 @@ def _record_source(url: str, title: str = "") -> None:
     if len(bucket) < 50:
         bucket.append({"url": url, "title": title or ""})
 
-USER_AGENT = "Mozilla/5.0 (compatible; AthenaAgent/1.0; +https://athena.local)"
+USER_AGENT = "Mozilla/5.0 (compatible; GlauxAgent/1.0; +https://glaux.local)"
 _MAX_BYTES = 2_000_000   # don't read unbounded pages into memory
 _MAX_TEXT = 12_000       # cap the readable text handed back to the model
 _TIMEOUT = 15.0
@@ -202,13 +202,13 @@ def configure_search(provider: str = "", keys: dict | None = None) -> None:
 
 
 def _key_for(provider: str) -> str:
-    return (_search_cfg["keys"].get(provider) or os.environ.get(f"ATHENA_{provider.upper()}_API_KEY") or "").strip()
+    return (_search_cfg["keys"].get(provider) or os.environ.get(f"GLAUX_{provider.upper()}_API_KEY") or "").strip()
 
 
 def resolve_provider() -> tuple[str, str]:
     """Pick the active (provider, key): the pinned provider if it has a key,
     else the best keyed provider, else keyless DuckDuckGo."""
-    pinned = _search_cfg["provider"] or os.environ.get("ATHENA_SEARCH_PROVIDER", "").strip().lower()
+    pinned = _search_cfg["provider"] or os.environ.get("GLAUX_SEARCH_PROVIDER", "").strip().lower()
     if pinned == "duckduckgo":
         return "duckduckgo", ""
     if pinned in SEARCH_PROVIDERS:
@@ -294,7 +294,7 @@ def search_status() -> dict:
     provider, _key = resolve_provider()
     return {
         "active": provider,
-        "pinned": _search_cfg["provider"] or os.environ.get("ATHENA_SEARCH_PROVIDER", "").strip().lower() or "",
+        "pinned": _search_cfg["provider"] or os.environ.get("GLAUX_SEARCH_PROVIDER", "").strip().lower() or "",
         "keyed": {p: bool(_key_for(p)) for p in SEARCH_PROVIDERS if SEARCH_PROVIDERS[p]["needs_key"]},
         "providers": {p: {"label": m["label"], "needs_key": m["needs_key"], "hint": m["hint"]} for p, m in SEARCH_PROVIDERS.items()},
     }
@@ -328,8 +328,8 @@ def web_search(query: str, limit: int = 5) -> dict:
 
 
 def default_browser_client() -> LocalMCPClient:
-    """A LocalMCPClient exposing Athena's built-in web tools (server 'athena-web')."""
-    c = LocalMCPClient(server_name="athena-web")
+    """A LocalMCPClient exposing Glaux's built-in web tools (server 'glaux-web')."""
+    c = LocalMCPClient(server_name="glaux-web")
     c.register(
         "web_search",
         "Search the live web for a query. Returns a list of result titles, URLs and snippets.",

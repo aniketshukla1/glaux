@@ -1,6 +1,6 @@
 # Security model
 
-Athena executes model-written code, so isolation is a core feature rather than an
+Glaux executes model-written code, so isolation is a core feature rather than an
 afterthought. This page describes what the system defends and what it deliberately does
 not. To *report* a vulnerability, see
 [SECURITY.md](https://github.com/athena-swarm/athena/blob/main/SECURITY.md).
@@ -37,12 +37,12 @@ Every action is signed by the acting agent and hash-chained. Undetected tamperin
 breaking the chain. This is what makes "prove it" more than a slogan: you can demonstrate
 what the system did, including how it modified itself.
 
-`athena verify --file <path>` re-checks a chain straight off disk — no running server,
+`glaux verify --file <path>` re-checks a chain straight off disk — no running server,
 and no trust in the app that wrote it. Try to forge it and see:
 
 ```bash
-sed -i.bak '2s/"agent_id":"[^"]*"/"agent_id":"mallory"/' ~/.athena/ledger.jsonl
-athena verify --file ~/.athena/ledger.jsonl
+sed -i.bak '2s/"agent_id":"[^"]*"/"agent_id":"mallory"/' ~/.glaux/ledger.jsonl
+glaux verify --file ~/.glaux/ledger.jsonl
 #  ✗ CHAIN INVALID at block 1 — block hash mismatch
 ```
 
@@ -56,9 +56,9 @@ content is correct. A wrong answer stays wrong; it just becomes non-repudiable a
 impossible to quietly revise after the fact.
 
 ### 6. Human-in-the-loop controls
-- `athena approval gated` — a human approves each synthesized skill before it can run.
-- `athena safety dry-run` — execute reasoning, skip side effects.
-- `athena safety halted` — stop all execution.
+- `glaux approval gated` — a human approves each synthesized skill before it can run.
+- `glaux safety dry-run` — execute reasoning, skip side effects.
+- `glaux safety halted` — stop all execution.
 - Self-modification is gated, signed, and reversible by design.
 
 ## Deliberate trade-offs
@@ -67,7 +67,7 @@ These are design decisions, not gaps:
 
 - **The workspace grants real file access** inside its jail when you enable it. That is
   its purpose; the boundary is the jail, not the absence of access.
-- **MCP servers you connect run with the authority you give them.** Athena cannot sandbox
+- **MCP servers you connect run with the authority you give them.** Glaux cannot sandbox
   a third-party tool server — treat connecting one like installing a plugin.
 - **The semantic answer cache cannot see conversation context**, so it is off by default
   and its similarity threshold is deliberately strict. Time-sensitive directives are
@@ -78,14 +78,14 @@ These are design decisions, not gaps:
 
 ## Handling secrets
 
-API keys live in your environment or under `ATHENA_HOME` (git-ignored) and are never
+API keys live in your environment or under `GLAUX_HOME` (git-ignored) and are never
 written to the ledger or logs. Skill arguments are truncated before being signed, so a
 large payload can't bloat — or leak through — a block. A secrets broker mediates skill
 access to credentials rather than handing them to guest code.
 
-## Operating Athena safely
+## Operating Glaux safely
 
 - Start with capabilities off; enable only what a workload needs.
 - Use `approval gated` when running untrusted or high-stakes directives.
-- Keep `ATHENA_API_SECRET` set if the server is reachable beyond localhost.
-- Run `athena verify` as part of any audit.
+- Keep `GLAUX_API_SECRET` set if the server is reachable beyond localhost.
+- Run `glaux verify` as part of any audit.

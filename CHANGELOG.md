@@ -1,14 +1,15 @@
 # Changelog
 
-All notable changes to Athena are documented here. This project follows
+All notable changes to Glaux are documented here. This project follows
 [Semantic Versioning](https://semver.org/).
 
-The stable public surface is the **`athena` CLI** and the **HTTP API**. Internal Python
+The stable public surface is the **`glaux` CLI** and the **HTTP API**. Internal Python
 modules (`agents.*`, `core.*`, …) may change within a minor release.
 
 ## [1.0.0] — first public release
 
-The initial open-source release.
+The initial open-source release. Glaux was developed as Athena: the `athena` command,
+`ATHENA_*` variables and an existing `~/.athena` directory all keep working.
 
 ### Swarm
 - Router plans a specialist team per directive; steps execute in parallel across a
@@ -19,11 +20,11 @@ The initial open-source release.
 
 ### Trust
 - Every reasoning step, tool call, and self-modification is Ed25519-signed by the acting
-  agent and appended to a hash-chained ledger; `athena verify` validates the chain.
+  agent and appended to a hash-chained ledger; `glaux verify` validates the chain.
 - Per-agent cryptographic identities with capability tokens for cross-agent handoff.
 
 ### Skills
-- Runtime tool synthesis: when nothing fits, Athena writes a skill, static
+- Runtime tool synthesis: when nothing fits, Glaux writes a skill, static
   capability-checks it, runs its generated tests in the sandbox, and uses it in the
   same run.
 - Self-healing: a skill that fails with a logic error is repaired, re-tested, retried.
@@ -53,6 +54,6 @@ The initial open-source release.
 - 30+ model providers, plus fully local operation via Ollama.
 
 ### Interfaces
-- Web dashboard, a full-parity `athena` CLI, a desktop app, and messaging gateways.
+- Web dashboard, a full-parity `glaux` CLI, a desktop app, and messaging gateways.
 
 [1.0.0]: https://github.com/athena-swarm/athena/releases/tag/v1.0.0

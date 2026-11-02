@@ -287,7 +287,7 @@ class _FakeMem:
 
 
 def test_retrieve_skills_always_includes_pinned(tmp_path):
-    pytest.importorskip("athena_ledger")
+    pytest.importorskip("glaux_ledger")
     from agents import BaseAgent
     from identity import AgentIdentity
     from llm import ScriptedLLM
@@ -300,7 +300,7 @@ def test_retrieve_skills_always_includes_pinned(tmp_path):
 
 
 def test_evolution_is_signed_to_the_ledger(tmp_path):
-    pytest.importorskip("athena_ledger")
+    pytest.importorskip("glaux_ledger")
     from core.ledger import Ledger
     from identity import AgentIdentity
 

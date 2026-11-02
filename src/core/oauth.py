@@ -3,8 +3,8 @@
 Providers (Google, GitHub) are enabled per-deployment by setting their client
 credentials in the environment:
 
-    ATHENA_OAUTH_GOOGLE_CLIENT_ID / _CLIENT_SECRET
-    ATHENA_OAUTH_GITHUB_CLIENT_ID / _CLIENT_SECRET
+    GLAUX_OAUTH_GOOGLE_CLIENT_ID / _CLIENT_SECRET
+    GLAUX_OAUTH_GITHUB_CLIENT_ID / _CLIENT_SECRET
 
 A provider with no credentials is simply hidden — the rest of auth works without
 it. The API builds the authorize URL, the provider redirects back to our
@@ -45,11 +45,11 @@ class OAuthError(Exception):
 
 
 def client_id(provider: str) -> Optional[str]:
-    return os.environ.get(f"ATHENA_OAUTH_{provider.upper()}_CLIENT_ID")
+    return os.environ.get(f"GLAUX_OAUTH_{provider.upper()}_CLIENT_ID")
 
 
 def client_secret(provider: str) -> Optional[str]:
-    return os.environ.get(f"ATHENA_OAUTH_{provider.upper()}_CLIENT_SECRET")
+    return os.environ.get(f"GLAUX_OAUTH_{provider.upper()}_CLIENT_SECRET")
 
 
 def is_configured(provider: str) -> bool:
@@ -88,7 +88,7 @@ def _post_form(url: str, data: dict) -> dict:
 def _get_json(url: str, access_token: str):
     req = urllib.request.Request(
         url,
-        headers={"Authorization": f"Bearer {access_token}", "Accept": "application/json", "User-Agent": "Athena"},
+        headers={"Authorization": f"Bearer {access_token}", "Accept": "application/json", "User-Agent": "Glaux"},
     )
     with urllib.request.urlopen(req, timeout=15) as r:
         return json.loads(r.read().decode())

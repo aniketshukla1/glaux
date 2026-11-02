@@ -107,8 +107,8 @@ def test_legacy_singular_observation_is_read():
 
 
 def test_from_env_reads_overrides(monkeypatch):
-    monkeypatch.setenv("ATHENA_CONTEXT_MAX_CHARS", "1234")
-    monkeypatch.setenv("ATHENA_CONTEXT_KEEP_RECENT", "5")
+    monkeypatch.setenv("GLAUX_CONTEXT_MAX_CHARS", "1234")
+    monkeypatch.setenv("GLAUX_CONTEXT_KEEP_RECENT", "5")
     cm = ContextManager.from_env()
     assert cm.max_history_chars == 1234 and cm.keep_recent_steps == 5
 
@@ -151,7 +151,7 @@ def _finish(r):
 
 
 def test_base_agent_compacts_long_history_and_signs_it():
-    pytest.importorskip("athena_ledger")
+    pytest.importorskip("glaux_ledger")
     from agents import BaseAgent
     from core.ledger import Ledger
     from identity import AgentIdentity

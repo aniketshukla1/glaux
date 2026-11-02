@@ -1,6 +1,6 @@
 # Architecture
 
-Athena turns a goal into a **swarm** and signs everything it does.
+Glaux turns a goal into a **swarm** and signs everything it does.
 
 ```
 directive
@@ -34,7 +34,7 @@ back for another attempt. A **lead** integrates the results into an answer to th
 *original* directive.
 
 The built-in roster (researcher, web, scientist, analyst, coder, engineer, tester,
-writer) is data-driven — and you can add your own with `athena subagents add`, which the
+writer) is data-driven — and you can add your own with `glaux subagents add`, which the
 router will dispatch to like any other.
 
 ## The ledger
@@ -45,16 +45,16 @@ and appended as a block whose hash chains to the previous one. Change any block 
 verification fails:
 
 ```bash
-athena verify   # ✓ chain verified · N signed blocks
+glaux verify   # ✓ chain verified · N signed blocks
 ```
 
-The kernel is a native Rust crate (`native/athena_ledger`) for speed, and appends are
+The kernel is a native Rust crate (`native/glaux_ledger`) for speed, and appends are
 thread-safe so parallel specialists can write concurrently.
 
 ## Skills and the sandbox
 
 A **skill** is executable Python the swarm can call. When nothing fits, an agent emits
-`create_skill`; Athena synthesizes the code, runs a **static capability check** (rejecting
+`create_skill`; Glaux synthesizes the code, runs a **static capability check** (rejecting
 code that reaches for authority it wasn't granted), executes the auto-generated tests
 **inside the sandbox**, and only then injects it into the live run.
 
@@ -88,7 +88,7 @@ guards against traversal, absolute paths, and symlinks. Tools: `write_file`, `re
 ## Interfaces
 
 One FastAPI server exposes the HTTP API, streams runs over Server-Sent Events, and serves
-the React dashboard. The `athena` CLI is a stdlib-only client over the same API, and
+the React dashboard. The `glaux` CLI is a stdlib-only client over the same API, and
 there's a native desktop app and messaging gateways.
 
 See also: [security model](security.md) · [self-evolving harness](self-evolution.md) ·

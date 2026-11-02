@@ -5,6 +5,7 @@ import {
 } from '../api.js'
 import ConstellationSphere from './ConstellationSphere.jsx'
 import SwarmField from './SwarmField.jsx'
+import { BRAND } from '../lib/brand.js'
 
 function Input({ icon: Icon, value, onChange, type = 'text', ...props }) {
   return (
@@ -83,7 +84,7 @@ export default function AuthScreen({ firstRun, onAuthed, oauthProviders = [], in
 
   const heading = {
     login: 'Welcome back',
-    signup: firstRun ? 'Create your Athena account' : 'Create an account',
+    signup: firstRun ? `Create your ${BRAND} account` : 'Create an account',
     forgot: 'Reset your password',
     reset: 'Choose a new password',
   }[mode]

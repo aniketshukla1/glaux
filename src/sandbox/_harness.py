@@ -1,4 +1,4 @@
-"""In-sandbox execution harness (stdlib only, no Athena imports).
+"""In-sandbox execution harness (stdlib only, no Glaux imports).
 
 Runs in the isolated child process. Reads a job file describing the skill
 code, entrypoint, inputs, and capability guards; installs Python-level guards
@@ -7,7 +7,7 @@ code, entrypoint, inputs, and capability guards; installs Python-level guards
 This is *defense in depth*, not a hard security boundary on its own — it is
 combined with process isolation, a minimal environment, resource limits, and
 a parent-side memory/timeout watcher. The v2 backend (``wasm.py``, opt-in via
-``ATHENA_SANDBOX_BACKEND``) replaces this with a WASM runtime that has no
+``GLAUX_SANDBOX_BACKEND``) replaces this with a WASM runtime that has no
 syscalls by default; see ``WASM_V2.md``.
 """
 

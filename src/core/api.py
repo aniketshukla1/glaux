@@ -1,4 +1,4 @@
-"""FastAPI backend for the Athena swarm dashboard.
+"""FastAPI backend for the Glaux swarm dashboard.
 
 Surfaces the backend subsystems built so far:
 - **Swarm + ledger** — dispatch a directive, inspect the signed chain.
@@ -49,9 +49,10 @@ OAUTH_STATE_TTL = 10 * 60      # CSRF state for the OAuth round-trip
 
 def _signup_policy() -> str:
     # open | invite | closed (after the first/bootstrap account exists)
-    val = os.environ.get("ATHENA_SIGNUP", "open").lower()
+    val = os.environ.get("GLAUX_SIGNUP", "open").lower()
     return val if val in ("open", "invite", "closed") else "open"
 
+from paths import home
 import safety
 from agents import (
     Budget,
@@ -89,48 +90,44 @@ MEMORY_LAYERS = ("semantic", "episodic", "procedural")
 BENCH_DIR = Path(__file__).resolve().parents[2] / "bench"
 
 
-def _athena_home() -> Path:
-    return Path(os.environ.get("ATHENA_HOME", Path.home() / ".athena"))
-
-
 def _mcp_config_path() -> Path:
-    return _athena_home() / "mcp_servers.json"
+    return home() / "mcp_servers.json"
 
 
 def _schedules_path() -> Path:
-    return _athena_home() / "schedules.json"
+    return home() / "schedules.json"
 
 
 def _workspace_path() -> Path:
-    return _athena_home() / "workspace.json"
+    return home() / "workspace.json"
 
 
 def _llm_config_path() -> Path:
-    return _athena_home() / "llm.json"
+    return home() / "llm.json"
 
 
 def _users_path() -> Path:
-    return _athena_home() / "users.json"
+    return home() / "users.json"
 
 
 def _messaging_config_path() -> Path:
-    return _athena_home() / "messaging.json"
+    return home() / "messaging.json"
 
 
 def _search_config_path() -> Path:
-    return _athena_home() / "search.json"
+    return home() / "search.json"
 
 
 def _metrics_path() -> Path:
-    return _athena_home() / "metrics.json"
+    return home() / "metrics.json"
 
 
 def _ledger_path() -> Path:
-    return _athena_home() / "ledger.jsonl"
+    return home() / "ledger.jsonl"
 
 
 def _identities_path() -> Path:
-    return _athena_home() / "identities.json"
+    return home() / "identities.json"
 
 
 def _load_identities() -> Optional[dict]:
@@ -181,7 +178,7 @@ def _save_identities(identities: dict) -> None:
 
 
 def _eval_runs_path() -> Path:
-    return _athena_home() / "eval_runs.json"
+    return home() / "eval_runs.json"
 
 
 def _load_eval_runs() -> list:
@@ -239,17 +236,17 @@ def _save_search_config(cfg: dict) -> None:
 
 
 def _user_workspace_path(uid: str) -> Path:
-    return _athena_home() / "users" / uid / "workspace.json"
+    return home() / "users" / uid / "workspace.json"
 
 
 def _auth_secret() -> str:
     """A stable server-side secret for signing session tokens, generated once and
     persisted (0600). Distinct from the agents' Ed25519 keys and the HMAC API
-    secret. ATHENA_AUTH_SECRET overrides it (e.g. to share across replicas)."""
-    override = os.environ.get("ATHENA_AUTH_SECRET")
+    secret. GLAUX_AUTH_SECRET overrides it (e.g. to share across replicas)."""
+    override = os.environ.get("GLAUX_AUTH_SECRET")
     if override:
         return override
-    path = _athena_home() / "auth_secret"
+    path = home() / "auth_secret"
     try:
         existing = path.read_text().strip()
         if existing:
@@ -258,7 +255,7 @@ def _auth_secret() -> str:
         pass
     secret = secrets.token_hex(32)
     try:
-        _athena_home().mkdir(parents=True, exist_ok=True)
+        home().mkdir(parents=True, exist_ok=True)
         path.write_text(secret)
         os.chmod(path, 0o600)
     except OSError:
@@ -268,7 +265,7 @@ def _auth_secret() -> str:
 
 # Set per-request by UserAuthMiddleware; read by STATE.sessions to pick the
 # signed-in user's private workspace. None => the shared/default workspace.
-_current_user_id: ContextVar[Optional[str]] = ContextVar("athena_current_user", default=None)
+_current_user_id: ContextVar[Optional[str]] = ContextVar("glaux_current_user", default=None)
 
 
 def _load_persisted_llm_config() -> Optional[dict]:
@@ -296,7 +293,7 @@ def _persist_llm_config(config: dict) -> None:
     if config.get("backend") == "localmodel":
         return
     try:
-        _athena_home().mkdir(parents=True, exist_ok=True)
+        home().mkdir(parents=True, exist_ok=True)
         payload = {"backend": config.get("backend"), "model": config.get("model"),
                    "base_url": config.get("base_url")}
         _llm_config_path().write_text(json.dumps(payload, indent=2))
@@ -305,7 +302,7 @@ def _persist_llm_config(config: dict) -> None:
 
 
 def _fast_llm_config_path() -> Path:
-    return _athena_home() / "llm_fast.json"
+    return home() / "llm_fast.json"
 
 
 def _load_persisted_fast_llm_config() -> Optional[dict]:
@@ -323,7 +320,7 @@ def _load_persisted_fast_llm_config() -> Optional[dict]:
 
 def _persist_fast_llm_config(config: Optional[dict]) -> None:
     try:
-        _athena_home().mkdir(parents=True, exist_ok=True)
+        home().mkdir(parents=True, exist_ok=True)
         if not config:
             _fast_llm_config_path().unlink(missing_ok=True)
             return
@@ -336,7 +333,7 @@ def _persist_fast_llm_config(config: Optional[dict]) -> None:
 
 def _default_llm_config() -> dict:
     # An explicit env override wins; otherwise restore the last UI choice; else default.
-    backend = os.environ.get("ATHENA_LLM")
+    backend = os.environ.get("GLAUX_LLM")
     if backend is None:
         persisted = _load_persisted_llm_config()
         if persisted is not None:
@@ -344,9 +341,9 @@ def _default_llm_config() -> dict:
         backend = "anthropic" if os.environ.get("ANTHROPIC_API_KEY") else "demo"
     return {
         "backend": backend,
-        "model": os.environ.get("ATHENA_MODEL"),
+        "model": os.environ.get("GLAUX_MODEL"),
         "api_key": None,
-        "base_url": os.environ.get("ATHENA_BASE_URL"),
+        "base_url": os.environ.get("GLAUX_BASE_URL"),
     }
 
 
@@ -427,12 +424,12 @@ class _State:
     def __init__(self) -> None:
         # Durable memory + skill library: learned skills must accumulate across
         # restarts for self-improvement to compound (not a throwaway temp dir).
-        self.memory_dir = str(_athena_home() / "memory")
+        self.memory_dir = str(home() / "memory")
         try:
             os.makedirs(self.memory_dir, exist_ok=True)
             self.memory = MemoryManager(self.memory_dir)
         except Exception:  # noqa: BLE001 - corrupt store → fall back to a fresh one
-            self.memory_dir = tempfile.mkdtemp(prefix="athena-mem-")
+            self.memory_dir = tempfile.mkdtemp(prefix="glaux-mem-")
             self.memory = MemoryManager(self.memory_dir)
         self.skills = SkillLibrary(self.memory.procedural)
         self.mcp = MCPRegistry(
@@ -445,14 +442,14 @@ class _State:
         # toggleable at runtime via /api/fs.
         self.workspace = Workspace()
         self.workspace_enabled = False
-        self.set_workspace_enabled(bool(os.environ.get("ATHENA_WORKSPACE")))
+        self.set_workspace_enabled(bool(os.environ.get("GLAUX_WORKSPACE")))
         # Long-horizon context management: shared budget config for the swarm so a
-        # long run keeps the prompt bounded (tunable via ATHENA_CONTEXT_* env vars).
+        # long run keeps the prompt bounded (tunable via GLAUX_CONTEXT_* env vars).
         self.context = ContextManager.from_env()
         # Playbooks (opt-in): authored markdown instructions the swarm can consult.
         self.playbooks = Playbooks()
         self.playbooks_enabled = False
-        self.set_playbooks_enabled(bool(os.environ.get("ATHENA_PLAYBOOKS")))
+        self.set_playbooks_enabled(bool(os.environ.get("GLAUX_PLAYBOOKS")))
         # User-defined sub-agents: custom specialists merged into the router's roster.
         self.custom_agents = CustomAgents()
         # Self-evolving harness: learns better tier routing from task outcomes, gated
@@ -740,7 +737,7 @@ async def _lifespan(_app):
         pass
 
 
-app = FastAPI(title="Athena Swarm API", version="0.2.0", lifespan=_lifespan)
+app = FastAPI(title="Glaux Swarm API", version="0.2.0", lifespan=_lifespan)
 
 # Public /api endpoints (no user token / HMAC needed): liveness + the auth
 # endpoints themselves, so a client can bootstrap and sign in.
@@ -792,7 +789,7 @@ class UserAuthMiddleware:
 
 
 class HMACAuthMiddleware(BaseHTTPMiddleware):
-    """Enforce HMAC request signing on /api/* when ATHENA_API_SECRET is set."""
+    """Enforce HMAC request signing on /api/* when GLAUX_API_SECRET is set."""
 
     async def dispatch(self, request, call_next):
         secret = auth.current_secret()
@@ -862,8 +859,8 @@ def _auth_payload(user) -> dict:
 
 def _app_base_url(request: Request) -> str:
     """The public origin for building links (verify / reset / oauth callback).
-    ATHENA_PUBLIC_URL overrides it for deployments behind a proxy."""
-    override = os.environ.get("ATHENA_PUBLIC_URL")
+    GLAUX_PUBLIC_URL overrides it for deployments behind a proxy."""
+    override = os.environ.get("GLAUX_PUBLIC_URL")
     if override:
         return override.rstrip("/")
     return str(request.base_url).rstrip("/")
@@ -872,7 +869,7 @@ def _app_base_url(request: Request) -> str:
 def _send_verification(user, base_url: str) -> Optional[str]:
     token = users.issue_action_token(STATE.auth_secret, user.id, "verify", ttl=VERIFY_TTL)
     res = mailer.deliver_link(
-        user.email, "Verify your Athena email",
+        user.email, "Verify your Glaux email",
         "Confirm your email to finish setting up your account:",
         f"{base_url}/?verify={urllib.parse.quote(token)}",
     )
@@ -1025,7 +1022,7 @@ def auth_forgot(req: ForgotRequest, request: Request) -> dict:
     if user is not None and user.password_hash:
         token = users.issue_action_token(STATE.auth_secret, user.id, "reset", ttl=RESET_TTL)
         res = mailer.deliver_link(
-            user.email, "Reset your Athena password",
+            user.email, "Reset your Glaux password",
             "Use this link to choose a new password:",
             f"{_app_base_url(request)}/?reset={urllib.parse.quote(token)}",
         )
@@ -1337,7 +1334,7 @@ def _sandbox_status() -> dict:
     available (no-ambient-authority isolation)."""
     from sandbox import WasmSandbox
 
-    backend = os.environ.get("ATHENA_SANDBOX_BACKEND", "auto").lower()
+    backend = os.environ.get("GLAUX_SANDBOX_BACKEND", "auto").lower()
     wasm_runtime = WasmSandbox.runtime_available()
     wasm_python = WasmSandbox.python_available()
     if backend in ("wasm", "auto") and wasm_python:
@@ -1854,7 +1851,7 @@ def export_ledger() -> PlainTextResponse:
     return PlainTextResponse(
         body,
         media_type="application/x-ndjson",
-        headers={"Content-Disposition": 'attachment; filename="athena-ledger.jsonl"'},
+        headers={"Content-Disposition": 'attachment; filename="glaux-ledger.jsonl"'},
     )
 
 
@@ -1995,7 +1992,7 @@ def get_llm() -> dict:
         "providers": provider_catalog(),
         # ways to run any Hugging Face model (hosted router or a local server)
         "hf_runtimes": hf_runtimes(),
-        # local model file server (.gguf / .safetensors / .bin / .pt) managed by Athena
+        # local model file server (.gguf / .safetensors / .bin / .pt) managed by Glaux
         "local_model": STATE.local_model.status(),
     }
 
@@ -2455,7 +2452,7 @@ def eval_runs() -> dict:
 
 # --- serve the built dashboard -------------------------------------------
 # When the frontend has been built (`npm run build` -> frontend/dist), serve it
-# from the same origin so `athena up` gives the user one URL for UI + API.
+# from the same origin so `glaux up` gives the user one URL for UI + API.
 # Mounted last so /api/*, /ws and /metrics keep precedence over the catch-all.
 
 

@@ -136,10 +136,10 @@ class AnthropicClient:
         }
         if system:
             # Cache the (stable) system prompt across calls. Default is Anthropic's
-            # 5-minute ephemeral cache; ATHENA_ANTHROPIC_CACHE_TTL=1h opts into the
+            # 5-minute ephemeral cache; GLAUX_ANTHROPIC_CACHE_TTL=1h opts into the
             # extended 1-hour cache (keeps the prefix warm across sparse sessions).
             cache_control: dict = {"type": "ephemeral"}
-            ttl = os.environ.get("ATHENA_ANTHROPIC_CACHE_TTL", "").strip().lower()
+            ttl = os.environ.get("GLAUX_ANTHROPIC_CACHE_TTL", "").strip().lower()
             if ttl in ("1h", "1hr", "3600s"):
                 cache_control["ttl"] = "1h"
                 kwargs["extra_headers"] = {"anthropic-beta": "extended-cache-ttl-2025-04-11"}

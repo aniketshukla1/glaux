@@ -15,7 +15,7 @@ function SandboxBadge({ sandbox }) {
   const title = wasm
     ? 'Skills run in a WebAssembly guest with no ambient authority (no syscalls by default).'
     : sandbox.wasm_runtime
-      ? 'Hardened child-process sandbox. WASM v2 backend is available — set ATHENA_SANDBOX_BACKEND=auto + ATHENA_PYTHON_WASM to enable.'
+      ? 'Hardened child-process sandbox. WASM v2 backend is available — set GLAUX_SANDBOX_BACKEND=auto + GLAUX_PYTHON_WASM to enable.'
       : 'Hardened child-process sandbox (network/filesystem/process guards + resource limits).'
   return (
     <span

@@ -18,7 +18,7 @@ from llm.gateway import LLMClient, Message
 from .budget import BudgetTracker, charge_for_response
 from .protocol import extract_json
 
-ROUTER_SYSTEM = """You are the router for the Athena swarm. You assemble a team of
+ROUTER_SYSTEM = """You are the router for the Glaux swarm. You assemble a team of
 specialists to complete the user's directive, and you assign each step to the role
 best equipped for it.
 

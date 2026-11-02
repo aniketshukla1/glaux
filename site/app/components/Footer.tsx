@@ -6,7 +6,7 @@ export function Footer() {
     <footer className="border-t border-line/10 py-12">
       <div className="mx-auto flex max-w-content flex-wrap items-center gap-x-6 gap-y-3 px-6 text-sm text-faint">
         <span className="flex items-center gap-2 text-muted">
-          <Logo size={22} /> Athena
+          <Logo size={22} /> Glaux
         </span>
         <span>1.0.0 · Apache-2.0</span>
         <nav className="ml-auto flex gap-5">

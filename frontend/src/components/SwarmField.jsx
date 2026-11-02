@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from 'react'
 
-// A full-bleed ambient background that tells Athena's story: a living swarm of faint
+// A full-bleed ambient background that tells Glaux's story: a living swarm of faint
 // nodes that drift and connect, with "signals" gliding along edges (agents handing
 // off work — the destination node flashes when one arrives) and rare "seals" (a block
 // being signed to the ledger). Pure canvas, no deps. Theme-aware (reads --accent /

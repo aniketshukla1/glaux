@@ -7,7 +7,7 @@ fastapi>=0.110
 uvicorn[standard]>=0.29
 httpx>=0.27  # also used by FastAPI's TestClient
 
-# WASM skill sandbox v2 (opt-in via ATHENA_SANDBOX_BACKEND=wasm|auto). Optional:
+# WASM skill sandbox v2 (opt-in via GLAUX_SANDBOX_BACKEND=wasm|auto). Optional:
 # without it the default subprocess sandbox is used. See src/sandbox/WASM_V2.md.
 wasmtime>=45.0
 
@@ -15,10 +15,10 @@ wasmtime>=45.0
 #
 # AthenaDB (the vector "brain") is a SEPARATE project at ../athenadb. Build it
 # into this venv from the sibling repo:
-#   cd ../athenadb && VIRTUAL_ENV=../athena-agent/venv maturin develop --release
+#   cd ../athenadb && VIRTUAL_ENV=../glaux-agent/venv maturin develop --release
 #
-# athena_ledger is an IN-REPO native kernel (the whole signed/hash-chained ledger
+# glaux_ledger is an IN-REPO native kernel (the whole signed/hash-chained ledger
 # lives in Rust). Build it into this venv:
-#   cd native/athena_ledger && VIRTUAL_ENV=../../venv maturin develop --release
+#   cd native/glaux_ledger && VIRTUAL_ENV=../../venv maturin develop --release
 #
-# Once published, pin both here (e.g. athenadb>=0.1, athena_ledger>=0.1).
+# Once published, pin both here (e.g. athenadb>=0.1, glaux_ledger>=0.1).

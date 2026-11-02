@@ -2,7 +2,7 @@
 
 The Python-skill execution path needs a CPython-WASI build (``python.wasm``),
 which isn't bundled, so those cases are covered by the self-test/dispatch
-behavior here; when ``ATHENA_PYTHON_WASM`` is configured the same ``run`` path
+behavior here; when ``GLAUX_PYTHON_WASM`` is configured the same ``run`` path
 executes real skills inside the guest.
 """
 
@@ -37,18 +37,18 @@ def test_self_test_proves_isolation_and_fuel_trap():
 
 
 def test_python_unavailable_without_a_configured_runtime(monkeypatch):
-    monkeypatch.delenv("ATHENA_PYTHON_WASM", raising=False)
+    monkeypatch.delenv("GLAUX_PYTHON_WASM", raising=False)
     assert WasmSandbox.python_available() is False
     res = WasmSandbox().run("def main():\n    return 1\n", entrypoint="main")
     assert not res.ok
-    assert "ATHENA_PYTHON_WASM" in (res.error or "")
+    assert "GLAUX_PYTHON_WASM" in (res.error or "")
 
 
 def test_auto_backend_falls_back_to_subprocess(monkeypatch):
     # With no python.wasm available, "auto" must transparently run the skill on
     # the subprocess backend rather than failing.
-    monkeypatch.delenv("ATHENA_PYTHON_WASM", raising=False)
-    monkeypatch.setenv("ATHENA_SANDBOX_BACKEND", "auto")
+    monkeypatch.delenv("GLAUX_PYTHON_WASM", raising=False)
+    monkeypatch.setenv("GLAUX_SANDBOX_BACKEND", "auto")
     res = run(
         "def main(x):\n    return x * 2\n",
         caps=Capabilities(time_limit_s=5),
@@ -61,8 +61,8 @@ def test_auto_backend_falls_back_to_subprocess(monkeypatch):
 
 def test_strict_wasm_refuses_rather_than_weakening_isolation(monkeypatch):
     # "wasm" must NOT silently downgrade to the weaker subprocess sandbox.
-    monkeypatch.delenv("ATHENA_PYTHON_WASM", raising=False)
-    monkeypatch.setenv("ATHENA_SANDBOX_BACKEND", "wasm")
+    monkeypatch.delenv("GLAUX_PYTHON_WASM", raising=False)
+    monkeypatch.setenv("GLAUX_SANDBOX_BACKEND", "wasm")
     res = run("def main():\n    return 1\n", caps=Capabilities(time_limit_s=5), entrypoint="main")
     assert not res.ok
     assert "wasm" in (res.error or "").lower()
@@ -70,7 +70,7 @@ def test_strict_wasm_refuses_rather_than_weakening_isolation(monkeypatch):
 
 requires_python_wasm = pytest.mark.skipif(
     not WasmSandbox.python_available(),
-    reason="no CPython-WASI runtime (run scripts/fetch_python_wasm.sh or set ATHENA_PYTHON_WASM)",
+    reason="no CPython-WASI runtime (run scripts/fetch_python_wasm.sh or set GLAUX_PYTHON_WASM)",
 )
 
 
@@ -117,8 +117,8 @@ def test_wasm_wall_clock_timeout():
 def test_default_backend_runs_skill(monkeypatch):
     # No env set -> default "auto". With no CPython-WASI runtime in the test env
     # it transparently falls back to the subprocess sandbox; the skill still runs.
-    monkeypatch.delenv("ATHENA_SANDBOX_BACKEND", raising=False)
-    monkeypatch.delenv("ATHENA_PYTHON_WASM", raising=False)
+    monkeypatch.delenv("GLAUX_SANDBOX_BACKEND", raising=False)
+    monkeypatch.delenv("GLAUX_PYTHON_WASM", raising=False)
     res = run(
         "def main():\n    return 'ok'\n",
         caps=Capabilities(time_limit_s=5),

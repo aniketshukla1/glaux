@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Render a deterministic terminal-demo GIF (no screen recorder needed).
 
-Types `athena run "..."`, streams the swarm's signed steps and the answer, verifies
+Types `glaux run "..."`, streams the swarm's signed steps and the answer, verifies
 the chain, then *forges one result and verifies again* — because a chain that only
 ever prints ✓ proves nothing. The ✗ naming the exact broken block is the demo.
 
@@ -59,7 +59,7 @@ def line(*spans: Span, typed: bool = False, gap: int = 6) -> Line:
 
 
 SCRIPT: list[Line] = [
-    line(("$ ", DIM), ("athena run ", FG),
+    line(("$ ", DIM), ("glaux run ", FG),
          ('"compare Postgres and MongoDB for a multi-tenant SaaS"', TEAL), typed=True, gap=10),
     line(("  ◆ ", TEAL), ("router      ", TEAL), ("planning the team", DIM)),
     line(("  ◆ ", TEAL), ("analyst     ", INDIGO), ("weighing the trade-offs", DIM)),
@@ -69,16 +69,16 @@ SCRIPT: list[Line] = [
     line(("  Postgres is the safer default: row-level security gives", MUTED), typed=True, gap=1),
     line(("  per-tenant isolation in one database, and JSONB covers", MUTED), typed=True, gap=1),
     line(("  the flexible-schema cases Mongo is usually chosen for.", MUTED), typed=True, gap=10),
-    line(("$ ", DIM), ("athena verify --file .athena/ledger.jsonl", FG), typed=True, gap=6),
+    line(("$ ", DIM), ("glaux verify --file .glaux/ledger.jsonl", FG), typed=True, gap=6),
     line(("  ✓ chain verified", GREEN), ("   ·   14 signed blocks", DIM), gap=16),
     # the part that makes the ✓ mean something: forge one block, verify again.
     # keep this identical to the README's tamper demo — both must reproduce exactly.
-    line(("$ ", DIM), ("sed -i.bak '2s/\"agent_id\":\"[^\"]*\"/\"agent_id\":\"mallory\"/' ledger.jsonl", FG),
+    line(("$ ", DIM), ("sed -i.bak '2s/\"agent_id\":\"[^\"]*\"/\"agent_id\":\"mallory\"/' .glaux/ledger.jsonl", FG),
          typed=True, gap=2),
     line(("  # claim someone else took the second action", AMBER), gap=10),
-    line(("$ ", DIM), ("athena verify --file .athena/ledger.jsonl", FG), typed=True, gap=6),
+    line(("$ ", DIM), ("glaux verify --file .glaux/ledger.jsonl", FG), typed=True, gap=6),
     line(("  ✗ CHAIN INVALID", RED), (" at block 1", FG), (" — block hash mismatch", DIM), gap=4),
-    line(("  14 blocks read from .athena/ledger.jsonl", DIM), gap=34),
+    line(("  14 blocks read from .glaux/ledger.jsonl", DIM), gap=34),
 ]
 
 
@@ -136,7 +136,7 @@ def render(visible: list[list[Span]]) -> Image.Image:
     d.rectangle([6 * s, 30 * s, (W - 6) * s, 42 * s], fill=BAR)
     for i, c in enumerate([(255, 95, 86), (255, 189, 46), (39, 201, 63)]):
         d.ellipse([(24 + i * 20) * s, 18 * s, (24 + i * 20 + 11) * s, 29 * s], fill=c)
-    d.text(((W / 2 - 42) * s, 15 * s), "athena — swarm", font=FONT_SM, fill=DIM)
+    d.text(((W / 2 - 42) * s, 15 * s), "glaux — swarm", font=FONT_SM, fill=DIM)
 
     y = 60 * s
     lh = 30 * s

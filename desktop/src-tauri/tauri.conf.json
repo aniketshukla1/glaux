@@ -1,15 +1,15 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Athena",
+  "productName": "Glaux",
   "version": "0.1.0",
-  "identifier": "ai.athena.desktop",
+  "identifier": "ai.glaux.desktop",
   "build": {
     "frontendDist": "../shell"
   },
   "app": {
     "windows": [
       {
-        "title": "Athena",
+        "title": "Glaux",
         "width": 1200,
         "height": 820,
         "minWidth": 900,

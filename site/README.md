@@ -1,4 +1,4 @@
-# Athena website
+# Glaux website
 
 The marketing landing page and documentation, as a **Next.js 14 (App Router)** app with
 Tailwind. It's a static export (`output: "export"`), so it deploys to Vercel, Netlify, or
@@ -31,7 +31,7 @@ date; re-run the Python step after editing anything in `docs/`.
   is auto-detected; no extra config.
 - **Netlify**: uses `netlify.toml` at the repo root (base `site`, publish `site/out`).
 - **GitHub Pages**: `.github/workflows/pages.yml` builds with
-  `NEXT_PUBLIC_BASE_PATH=/athena` and publishes `site/out`.
+  `NEXT_PUBLIC_BASE_PATH=/glaux` and publishes `site/out`.
 
 A custom domain or Vercel wants `basePath` at root (the default). A GitHub Pages *project*
-site is served under `/athena`, so the workflow sets `NEXT_PUBLIC_BASE_PATH` accordingly.
+site is served under `/glaux`, so the workflow sets `NEXT_PUBLIC_BASE_PATH` accordingly.

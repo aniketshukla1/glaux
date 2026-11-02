@@ -132,7 +132,7 @@ def default_local_client() -> LocalMCPClient:
     runtime by the app via State.set_workspace_enabled()."""
     from .skills import register_skills
 
-    client = LocalMCPClient(server_name="athena-builtin")
+    client = LocalMCPClient(server_name="glaux-builtin")
     register_skills(client)
     client.register(
         "calc", "Evaluate a safe arithmetic expression (numbers and + - * / % ** only).", calc,
@@ -144,7 +144,7 @@ def default_local_client() -> LocalMCPClient:
 # --- real MCP servers (JSON-RPC 2.0) -------------------------------------
 
 PROTOCOL_VERSION = "2024-11-05"
-_CLIENT_INFO = {"name": "athena", "version": "0.1.0"}
+_CLIENT_INFO = {"name": "glaux", "version": "0.1.0"}
 
 
 class _RpcError(Exception):
@@ -189,7 +189,7 @@ class MCPServerConfig:
 
 def _tool_result_to_obs(result: dict) -> dict:
     """Collapse an MCP ``tools/call`` result into the {ok, result|error} shape
-    the rest of Athena uses (matching :class:`LocalMCPClient`)."""
+    the rest of Glaux uses (matching :class:`LocalMCPClient`)."""
     is_error = bool(result.get("isError"))
     structured = result.get("structuredContent")
     texts: list[str] = []

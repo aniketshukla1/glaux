@@ -1,11 +1,11 @@
 [package]
-name = "athena_ledger"
+name = "glaux_ledger"
 version = "0.1.0"
 edition = "2021"
-description = "Native ledger kernel for Athena: signed, hash-chained, tamper-evident action log (Ed25519 + SHA-256), canonicalization, and persistence."
+description = "Native ledger kernel for Glaux: signed, hash-chained, tamper-evident action log (Ed25519 + SHA-256), canonicalization, and persistence."
 
 [lib]
-name = "athena_ledger"
+name = "glaux_ledger"
 crate-type = ["cdylib", "rlib"]
 
 [features]
@@ -26,3 +26,6 @@ tempfile = "3"
 [profile.release]
 lto = true
 codegen-units = 1
+# Cargo strips release builds by default, and on recent macOS the stripped dylib
+# fails to load ("mis-aligned LINKEDIT string pool"). Keep the symbols.
+strip = false

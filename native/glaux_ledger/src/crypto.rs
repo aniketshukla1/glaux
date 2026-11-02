@@ -90,9 +90,9 @@ mod tests {
 
     #[test]
     fn sha256_is_stable_and_hex() {
-        let h = sha256_hex(b"athena");
+        let h = sha256_hex(b"glaux");
         assert_eq!(h.len(), 64);
-        assert_eq!(h, sha256_hex(b"athena"));
+        assert_eq!(h, sha256_hex(b"glaux"));
         assert_ne!(h, sha256_hex(b"athenb"));
     }
 

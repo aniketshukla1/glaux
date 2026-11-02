@@ -4,10 +4,10 @@ The dashboard (and any client) authenticates with a shared platform secret that
 is *separate* from the agents' Ed25519 keypairs: agent identity proves "which
 agent did this" on the ledger; this proves "this caller may use the API".
 
-Each request carries an `X-Athena-Timestamp` and an `X-Athena-Signature` =
+Each request carries an `X-Glaux-Timestamp` and an `X-Glaux-Signature` =
 HMAC-SHA256(secret, "{ts}\\n{METHOD}\\n{path}\\n{sha256(body)}"). The server
 re-derives it, constant-time compares, and rejects stale timestamps (replay
-window). Auth is enforced only when `ATHENA_API_SECRET` is set — otherwise the
+window). Auth is enforced only when `GLAUX_API_SECRET` is set — otherwise the
 API is open (convenient for local/offline dev).
 """
 
@@ -19,13 +19,13 @@ import os
 import time
 from typing import Optional
 
-HEADER_TS = "x-athena-timestamp"
-HEADER_SIG = "x-athena-signature"
+HEADER_TS = "x-glaux-timestamp"
+HEADER_SIG = "x-glaux-signature"
 WINDOW_SECONDS = 300
 
 
 def current_secret() -> Optional[str]:
-    return os.environ.get("ATHENA_API_SECRET") or None
+    return os.environ.get("GLAUX_API_SECRET") or None
 
 
 def _canonical(method: str, path: str, timestamp: str, body: bytes) -> bytes:

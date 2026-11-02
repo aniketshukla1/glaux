@@ -23,7 +23,7 @@ from agents.web import (
 @pytest.fixture(autouse=True)
 def _reset_search(monkeypatch):
     # Each test starts with no pinned provider and no env keys.
-    for v in ("ATHENA_SEARCH_PROVIDER", "ATHENA_BRAVE_API_KEY", "ATHENA_TAVILY_API_KEY", "ATHENA_SERPER_API_KEY"):
+    for v in ("GLAUX_SEARCH_PROVIDER", "GLAUX_BRAVE_API_KEY", "GLAUX_TAVILY_API_KEY", "GLAUX_SERPER_API_KEY"):
         monkeypatch.delenv(v, raising=False)
     configure_search("", {})
     yield
@@ -169,7 +169,7 @@ def test_resolve_provider_auto_picks_keyed_provider():
 
 
 def test_resolve_provider_env_key(monkeypatch):
-    monkeypatch.setenv("ATHENA_SERPER_API_KEY", "sk-env")
+    monkeypatch.setenv("GLAUX_SERPER_API_KEY", "sk-env")
     assert resolve_provider() == ("serper", "sk-env")
 
 

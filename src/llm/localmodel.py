@@ -1,13 +1,13 @@
 """Run a model straight from a local file on disk.
 
-For builders and fine-tuners: point Athena at a weights file
+For builders and fine-tuners: point Glaux at a weights file
 (``.gguf`` / ``.safetensors`` / ``.bin`` / ``.pt``) or a model directory and it
 launches the right local inference server — llama.cpp for GGUF, vLLM for
 Hugging Face weights — waits for it to come up, and runs the whole swarm on it
-over the OpenAI API. Athena owns the server process lifecycle (start / status /
+over the OpenAI API. Glaux owns the server process lifecycle (start / status /
 stop), so all the user provides is a path.
 
-The model itself runs in that server; Athena talks to it with the same
+The model itself runs in that server; Glaux talks to it with the same
 :class:`~llm.providers.OpenAICompatibleClient` as every other backend.
 """
 

@@ -1,4 +1,4 @@
-//! PyO3 bindings: `import athena_ledger`.
+//! PyO3 bindings: `import glaux_ledger`.
 //!
 //! Exposes the `Ledger` class (the whole ledger lives in Rust) plus the
 //! low-level primitives (`sha256_hex`, `sign`, `verify`, `verify_chain`).
@@ -150,7 +150,7 @@ impl PyLedger {
 }
 
 #[pymodule]
-fn athena_ledger(m: &Bound<'_, PyModule>) -> PyResult<()> {
+fn glaux_ledger(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(sha256_hex, m)?)?;
     m.add_function(wrap_pyfunction!(sign, m)?)?;
     m.add_function(wrap_pyfunction!(verify, m)?)?;

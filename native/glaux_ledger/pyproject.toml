@@ -1,0 +1,13 @@
+[build-system]
+requires = ["maturin>=1.7,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "glaux_ledger"
+version = "0.1.0"
+description = "Native ledger kernel for Glaux (signed hash-chained action log: Ed25519, SHA-256, canonicalization, persistence)."
+requires-python = ">=3.9"
+
+[tool.maturin]
+features = ["python"]
+module-name = "glaux_ledger"

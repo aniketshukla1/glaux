@@ -1,7 +1,7 @@
 import React, { useEffect, useRef } from 'react'
 import GlauxMark from './GlauxMark.jsx'
 
-// Athena's owl, alive — the logo at the centre, breathing, wrapped in a slowly
+// The Glaux mark, alive — the logo at the centre, breathing, wrapped in a slowly
 // rotating constellation of swarm nodes (brand gradient, depth-shaded, pulsing).
 // Pure canvas (no deps), theme-aware (reads --accent / --accent2).
 

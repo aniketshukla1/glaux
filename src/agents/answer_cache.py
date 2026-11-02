@@ -2,14 +2,14 @@
 
 The single biggest inference-cost lever on repeated work — a cache hit returns in
 sub-millisecond with zero LLM calls, instead of a full multi-agent run. It reuses
-Athena's local feature-hashing embedder (``tier_router._embed`` / ``_cosine``), so a
+Glaux's local feature-hashing embedder (``tier_router._embed`` / ``_cosine``), so a
 lookup is itself model-free, and every hit is signed to the ledger — a cached answer
 is as auditable as a fresh one.
 
 Safety: the threshold is strict (near-identical directives only, so a false hit can't
 return the wrong answer), and time-sensitive directives ("latest", "current price",
 "today's…") are never cached or served, so freshness-critical asks always run live.
-Tunable via ``ATHENA_ANSWER_CACHE`` / ``ATHENA_CACHE_THRESHOLD`` / ``ATHENA_CACHE_MAX``.
+Tunable via ``GLAUX_ANSWER_CACHE`` / ``GLAUX_CACHE_THRESHOLD`` / ``GLAUX_CACHE_MAX``.
 """
 
 from __future__ import annotations
@@ -20,6 +20,8 @@ import time
 from pathlib import Path
 from typing import Optional
 
+from paths import home
+
 from .tier_router import _cosine, _embed
 
 _VOLATILE = (
@@ -29,10 +31,6 @@ _VOLATILE = (
 )
 
 
-def _athena_home() -> Path:
-    return Path(os.environ.get("ATHENA_HOME", Path.home() / ".athena"))
-
-
 def _is_volatile(directive: str) -> bool:
     d = (directive or "").lower()
     return any(w in d for w in _VOLATILE)
@@ -40,7 +38,7 @@ def _is_volatile(directive: str) -> bool:
 
 class AnswerCache:
     def __init__(self, path=None, *, threshold: float = 0.92, max_entries: int = 500, enabled: bool = True) -> None:
-        self.path = Path(path or (_athena_home() / "answer_cache.jsonl"))
+        self.path = Path(path or (home() / "answer_cache.jsonl"))
         self.threshold = float(threshold)
         self.max_entries = int(max_entries)
         self.enabled = bool(enabled)
@@ -58,12 +56,12 @@ class AnswerCache:
                 return cast(default)
 
         # Opt-in: a semantic cache can't see conversation context, so correctness wins
-        # by default. Enable per workload via ATHENA_ANSWER_CACHE=1, the /api/cache
-        # toggle, or `athena cache on`.
-        enabled = os.environ.get("ATHENA_ANSWER_CACHE", "0").lower() in ("1", "true", "yes", "on")
+        # by default. Enable per workload via GLAUX_ANSWER_CACHE=1, the /api/cache
+        # toggle, or `glaux cache on`.
+        enabled = os.environ.get("GLAUX_ANSWER_CACHE", "0").lower() in ("1", "true", "yes", "on")
         return cls(
-            threshold=_num("ATHENA_CACHE_THRESHOLD", 0.92, float),
-            max_entries=_num("ATHENA_CACHE_MAX", 500, int),
+            threshold=_num("GLAUX_CACHE_THRESHOLD", 0.92, float),
+            max_entries=_num("GLAUX_CACHE_MAX", 500, int),
             enabled=enabled,
         )
 

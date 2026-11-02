@@ -226,7 +226,7 @@ export default function McpPanel({ user }) {
     <section className="space-y-4">
       <p className="text-faint text-xs">{tools.length} tools available · {servers.length} connected server{servers.length === 1 ? '' : 's'}</p>
 
-      {tools.some((t) => t.server === 'athena-web') && <SearchEngine user={user} />}
+      {tools.some((t) => t.server === 'glaux-web') && <SearchEngine user={user} />}
 
       <AddServerForm onAdded={refresh} />
 

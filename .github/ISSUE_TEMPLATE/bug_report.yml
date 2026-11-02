@@ -22,8 +22,8 @@ body:
       label: How can we reproduce it?
       description: The smallest set of steps or the directive you ran.
       placeholder: |
-        1. athena up
-        2. athena run "…"
+        1. glaux up
+        2. glaux run "…"
         3. …
     validations:
       required: true
@@ -31,7 +31,7 @@ body:
   - type: textarea
     id: status
     attributes:
-      label: "`athena status` output"
+      label: "`glaux status` output"
       description: Model, safety mode, ledger size, capabilities. Redact anything sensitive.
       render: shell
 
@@ -39,15 +39,15 @@ body:
     id: logs
     attributes:
       label: Relevant logs
-      description: The useful slice of `~/.athena/athena.log`.
+      description: The useful slice of `~/.glaux/glaux.log`.
       render: shell
 
   - type: input
     id: version
     attributes:
       label: Version
-      description: Output of `athena version`
-      placeholder: athena 1.0.0
+      description: Output of `glaux version`
+      placeholder: glaux 1.0.0
     validations:
       required: true
 

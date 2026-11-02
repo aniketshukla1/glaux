@@ -9,11 +9,11 @@ export function Header() {
     <header className="sticky top-0 z-40 border-b border-line/10 bg-bg/80 backdrop-blur-md">
       <div className="mx-auto flex max-w-content items-center gap-2 px-6 py-3.5">
         <Link href="/" className="flex items-center gap-2 font-semibold text-fg">
-          <Logo size={26} /> Athena
+          <Logo size={26} /> Glaux
         </Link>
         <nav className="ml-auto flex items-center gap-4 text-sm text-muted sm:gap-6">
           <Link href="/#different" className="hidden transition hover:text-fg sm:inline">
-            Why Athena
+            Why Glaux
           </Link>
           <Link href="/docs/getting-started" className="transition hover:text-fg">
             Docs

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-pytest.importorskip("athena_ledger")
+pytest.importorskip("glaux_ledger")
 pytest.importorskip("fastapi")
 
 from fastapi.testclient import TestClient  # noqa: E402
@@ -320,7 +320,7 @@ def test_oauth_providers_hidden_when_unconfigured():
 
 
 def test_signup_policy_invite_only(monkeypatch):
-    monkeypatch.setenv("ATHENA_SIGNUP", "invite")
+    monkeypatch.setenv("GLAUX_SIGNUP", "invite")
     a = _signup(email="admin@x.com")  # bootstrap is always allowed
     # a second open signup is now blocked …
     assert client.post("/api/auth/signup", json={"email": "x@x.com", "password": "password123"}).status_code == 403
@@ -385,7 +385,7 @@ def test_halted_dispatch_short_circuits_specialists():
 
 def test_memory_add_list_search():
     add = client.post(
-        "/api/memory/semantic", json={"text": "Athena signs every action with Ed25519"}
+        "/api/memory/semantic", json={"text": "Glaux signs every action with Ed25519"}
     ).json()
     assert add["count"] == 1
 
@@ -553,7 +553,7 @@ def test_mcp_server_add_list_call_remove(tmp_path):
     import sys
 
     fake = pathlib.Path(__file__).parent / "fixtures" / "fake_mcp_server.py"
-    # keep persistence off the user's real ~/.athena during the test
+    # keep persistence off the user's real ~/.glaux during the test
     original = STATE.mcp.config_path
     STATE.mcp.config_path = tmp_path / "mcp.json"
     try:
@@ -682,7 +682,7 @@ def test_local_model_load_serves_and_unloads(tmp_path, monkeypatch):
 
 
 def test_schedule_add_list_run_remove(tmp_path):
-    # keep persistence off the user's real ~/.athena during the test
+    # keep persistence off the user's real ~/.glaux during the test
     original = STATE.scheduler.store_path
     STATE.scheduler.store_path = tmp_path / "sched.json"
     STATE.scheduler.jobs.clear()
@@ -786,7 +786,7 @@ def test_project_instructions_shape_the_run():
 
 def test_serves_dashboard_when_built():
     """When frontend/dist exists, the backend serves the UI at / on the same
-    origin — so `athena up` is one URL. API routes keep precedence."""
+    origin — so `glaux up` is one URL. API routes keep precedence."""
     from core.api import _frontend_dist
 
     if not _frontend_dist().is_dir():

@@ -6,7 +6,7 @@ import json
 
 import pytest
 
-pytest.importorskip("athena_ledger")
+pytest.importorskip("glaux_ledger")
 
 import safety  # noqa: E402
 from agents import (  # noqa: E402
@@ -173,7 +173,7 @@ def test_demo_llm_streams_in_chunks():
     from llm.gateway import Message
     chunks = []
     DemoLLM().stream([Message(role="user", content="ORIGINAL REQUEST: compare A and B")],
-                     system="you are the lead of the athena swarm", on_delta=chunks.append)
+                     system="you are the lead of the glaux swarm", on_delta=chunks.append)
     assert len(chunks) > 1  # typed out word by word
     assert "".join(chunks).startswith("(demo)")
 

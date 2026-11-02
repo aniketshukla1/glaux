@@ -1,6 +1,6 @@
 """Cryptographic swarm ledger — thin Python ergonomics over a native core.
 
-The entire tamper-evident log lives in the Rust `athena_ledger` crate: block
+The entire tamper-evident log lives in the Rust `glaux_ledger` crate: block
 assembly, canonicalization, Ed25519 signing, SHA-256 hashing, chain
 verification, and JSONL persistence. This module only:
 
@@ -20,7 +20,7 @@ import threading
 from dataclasses import dataclass
 from typing import Optional
 
-import athena_ledger
+import glaux_ledger
 
 from identity import KeyRegistry
 from identity.keypair import AgentIdentity
@@ -61,11 +61,11 @@ class LedgerVerification:
 class Ledger:
     def __init__(
         self,
-        _native: Optional["athena_ledger.Ledger"] = None,
+        _native: Optional["glaux_ledger.Ledger"] = None,
         *,
         on_append=None,
     ) -> None:
-        self._led = _native if _native is not None else athena_ledger.Ledger()
+        self._led = _native if _native is not None else glaux_ledger.Ledger()
         # optional callback(block_dict) fired after each append (e.g. live streaming)
         self.on_append = on_append
         # Serialize appends: the swarm runs independent plan branches concurrently,
@@ -148,4 +148,4 @@ class Ledger:
 
     @classmethod
     def load(cls, path) -> "Ledger":
-        return cls(_native=athena_ledger.Ledger.load(str(path)))
+        return cls(_native=glaux_ledger.Ledger.load(str(path)))

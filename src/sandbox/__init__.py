@@ -1,4 +1,4 @@
-"""Athena skill sandbox: isolated execution of LLM-generated code.
+"""Glaux skill sandbox: isolated execution of LLM-generated code.
 
 Public API:
 - :func:`run` — execute code under declared :class:`Capabilities`

@@ -1,4 +1,4 @@
-"""The `athena` CLI — arg parsing, pid/daemon helpers, result formatting."""
+"""The `glaux` CLI — arg parsing, pid/daemon helpers, result formatting."""
 
 from __future__ import annotations
 
@@ -212,7 +212,7 @@ def test_api_delete_routes_through_req_json(monkeypatch):
 
 
 def test_token_roundtrip_and_auth_header(tmp_path, monkeypatch):
-    monkeypatch.setenv("ATHENA_HOME", str(tmp_path))
+    monkeypatch.setenv("GLAUX_HOME", str(tmp_path))
     assert cli.read_token() is None and cli._auth_headers() == {}
     cli.write_token("tok123")
     assert cli.read_token() == "tok123"
@@ -222,7 +222,7 @@ def test_token_roundtrip_and_auth_header(tmp_path, monkeypatch):
 
 
 def test_pid_roundtrip_and_liveness(tmp_path, monkeypatch):
-    monkeypatch.setenv("ATHENA_HOME", str(tmp_path))
+    monkeypatch.setenv("GLAUX_HOME", str(tmp_path))
     assert cli.read_pid() is None
     cli.write_pid(os.getpid())
     assert cli.read_pid() == os.getpid()
@@ -261,7 +261,7 @@ def test_format_run_result_failure_and_tamper():
 
 
 def test_status_when_not_running(tmp_path, monkeypatch, capsys):
-    monkeypatch.setenv("ATHENA_HOME", str(tmp_path))
+    monkeypatch.setenv("GLAUX_HOME", str(tmp_path))
     rc = cli.cmd_status(cli.build_parser().parse_args(["status"]))
     assert rc == 1
     assert "not running" in capsys.readouterr().out.lower()
@@ -293,7 +293,7 @@ def test_run_no_stream_uses_blocking_endpoint(monkeypatch, capsys):
     assert "couldn't reach" in capsys.readouterr().err.lower()
 
 
-# --- offline ledger verification (`athena verify --file`) -----------------
+# --- offline ledger verification (`glaux verify --file`) -----------------
 #
 # The point of signing the chain is that anyone can re-check it without the
 # app that wrote it, so these exercise the no-server path end to end.
@@ -366,7 +366,7 @@ def test_verify_file_missing_or_empty_is_never_a_pass(tmp_path, capsys):
 
 def test_verify_falls_back_to_disk_when_no_server(tmp_path, monkeypatch, capsys):
     _signed_ledger(tmp_path / "ledger.jsonl")
-    monkeypatch.setenv("ATHENA_HOME", str(tmp_path))
+    monkeypatch.setenv("GLAUX_HOME", str(tmp_path))
     monkeypatch.setattr(cli, "_port_in_use", lambda h, p: False)
     # would raise if it tried the network instead of reading the chain on disk
     monkeypatch.setattr(cli, "_api", lambda *a, **k: pytest.fail("should not call the API"))

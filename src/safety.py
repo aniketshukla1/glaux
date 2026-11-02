@@ -7,7 +7,7 @@
                 (sandbox runs are short-circuited and logged as "would run").
 - ``halted``  — short-circuit everything; the kill switch.
 
-The mode is read from the ``ATHENA_SAFETY_MODE`` env var, or set
+The mode is read from the ``GLAUX_SAFETY_MODE`` env var, or set
 programmatically via :func:`set_mode` (which takes precedence).
 """
 
@@ -17,7 +17,7 @@ import os
 from enum import Enum
 from typing import Optional
 
-_ENV_VAR = "ATHENA_SAFETY_MODE"
+_ENV_VAR = "GLAUX_SAFETY_MODE"
 
 
 class SafetyMode(str, Enum):
