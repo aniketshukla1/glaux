@@ -4,7 +4,7 @@
 
 - **Python 3.10+**
 - **A Rust toolchain** — the ledger kernel and vector store are native crates built during install ([rustup.rs](https://rustup.rs))
-- **[AthenaDB](https://github.com/athena-swarm/athenadb)**, cloned as a sibling directory —
+- **[AthenaDB](https://github.com/glauxlabs/athenadb)**, cloned as a sibling directory —
   the memory layers and the skill library are built on it, so the server does not start
   without it. `install.sh` checks for it before doing any work.
 - **Node.js 18+** — to build the dashboard. Ubuntu's default `nodejs` package is older
@@ -17,8 +17,8 @@
 Clone both repos side by side, then install from `glaux`:
 
 ```bash
-git clone https://github.com/athena-swarm/athenadb
-git clone https://github.com/athena-swarm/athena && cd athena
+git clone https://github.com/glauxlabs/athenadb
+git clone https://github.com/glauxlabs/glaux && cd glaux
 ./install.sh
 ```
 

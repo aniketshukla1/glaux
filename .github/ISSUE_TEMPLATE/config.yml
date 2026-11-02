@@ -1,8 +1,8 @@
 blank_issues_enabled: true
 contact_links:
   - name: Report a security vulnerability
-    url: https://github.com/athena-swarm/athena/security/advisories/new
+    url: https://github.com/glauxlabs/glaux/security/advisories/new
     about: Please report vulnerabilities privately — never in a public issue.
   - name: Documentation
-    url: https://github.com/athena-swarm/athena/tree/main/docs
+    url: https://github.com/glauxlabs/glaux/tree/main/docs
     about: Getting started, architecture, CLI, API, and the security model.

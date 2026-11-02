@@ -13,11 +13,11 @@ export function Footer() {
           <Link href="/docs/getting-started" className="transition hover:text-fg">
             Docs
           </Link>
-          <a href="https://github.com/athena-swarm/athena" className="transition hover:text-fg" target="_blank" rel="noreferrer">
+          <a href="https://github.com/glauxlabs/glaux" className="transition hover:text-fg" target="_blank" rel="noreferrer">
             GitHub
           </a>
           <a
-            href="https://github.com/athena-swarm/athena/blob/main/SECURITY.md"
+            href="https://github.com/glauxlabs/glaux/blob/main/SECURITY.md"
             className="transition hover:text-fg"
             target="_blank"
             rel="noreferrer"

@@ -1,6 +1,6 @@
 import type { MetadataRoute } from "next";
 
-const SITE = process.env.NEXT_PUBLIC_SITE_URL || "https://athena-swarm.github.io/athena";
+const SITE = process.env.NEXT_PUBLIC_SITE_URL || "https://glauxlabs.github.io/glaux";
 
 const PATHS = [
   "",
