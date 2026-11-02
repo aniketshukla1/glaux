@@ -2,11 +2,12 @@
 
 import json
 import os
+import time
 
 from fastapi.testclient import TestClient
 
 from core.api import ROLES, _identities_path, _load_identities, _save_identities, app
-from core.ledger import Ledger
+from core.ledger import Action, Ledger
 from identity.keypair import AgentIdentity
 
 client = TestClient(app)
@@ -64,3 +65,26 @@ def test_export_is_byte_identical_to_the_kernel():
     assert len(lines) == len(STATE.ledger)
     for i, line in enumerate(lines):
         assert line == STATE.ledger.block_json(i), f"block {i} was re-serialized on export"
+
+
+def test_a_burst_of_blocks_reaches_disk_after_the_save_window(monkeypatch):
+    """Blocks appended inside the throttle window reach disk without another append.
+
+    The API writes the chain at most once per window. A burst used to leave every
+    block after its first in memory until the next append or a clean shutdown, so a
+    server killed after a short run lost that run's blocks.
+    """
+    from core.api import STATE, _ledger_path
+
+    monkeypatch.setattr(STATE, "_ledger_save_interval", 0.5)
+    STATE.flush_ledger()  # known start: a write just happened and none is pending
+    router = STATE.identities["router"]
+    for i in range(12):
+        STATE.ledger.append(router, Action.THINK, {"step": i})
+    # still throttled: the burst is not written block by block
+    assert len(Ledger.load(_ledger_path())) < len(STATE.ledger)
+
+    time.sleep(1.5)  # well past the window
+    on_disk = Ledger.load(_ledger_path())
+    assert len(on_disk) == len(STATE.ledger)
+    assert on_disk.verify().valid

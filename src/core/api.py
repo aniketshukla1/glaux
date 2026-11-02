@@ -488,6 +488,9 @@ class _State:
         self.fast_llm_config = _load_persisted_fast_llm_config()
         self.fast_llm = _make_llm(self.fast_llm_config) if self.fast_llm_config else None
         self._ledger_last_save = 0.0
+        self._ledger_save_interval = 3.0  # seconds between throttled durable writes
+        self._ledger_save_lock = threading.RLock()
+        self._ledger_save_timer: Optional[threading.Timer] = None  # pending trailing write
         self._init_signed_state()
 
     def aux_llm(self):
@@ -553,11 +556,29 @@ class _State:
 
     def _on_ledger_append(self, block: dict) -> None:
         WS.publish({"type": "block", "block": block})  # live stream
-        now = time.monotonic()
-        if now - self._ledger_last_save > 3.0:  # throttled durable write
-            self._ledger_last_save = now
+        with self._ledger_save_lock:
+            if self._ledger_save_timer is not None:
+                return  # a trailing write is already due and will include this block
+            wait = self._ledger_save_interval - (time.monotonic() - self._ledger_last_save)
+            if wait < 0:
+                self.flush_ledger()  # throttled durable write
+            else:
+                # Trailing write, so the last block of a burst reaches disk within the
+                # window, not only on the next append or a clean shutdown. The path is
+                # bound now so a late write can't land in a repointed GLAUX_HOME (tests).
+                self._ledger_save_timer = threading.Timer(wait, self.flush_ledger, (_ledger_path(),))
+                self._ledger_save_timer.daemon = True
+                self._ledger_save_timer.start()
+
+    def flush_ledger(self, path: Optional[Path] = None) -> None:
+        """Write the chain to disk now, in place of any pending trailing write."""
+        with self._ledger_save_lock:  # re-entrant: _on_ledger_append holds it when calling this
+            if self._ledger_save_timer is not None:
+                self._ledger_save_timer.cancel()  # a no-op when this call is that timer firing
+                self._ledger_save_timer = None
+            self._ledger_last_save = time.monotonic()
             try:
-                self.ledger.save(_ledger_path())
+                self.ledger.save(path or _ledger_path())
             except Exception:  # noqa: BLE001
                 pass
 
@@ -583,13 +604,11 @@ class _State:
         """Explicitly wipe the chain and mint fresh identities (also on disk)."""
         self.identities = {role: AgentIdentity.generate() for role in ROLES}
         _save_identities(self.identities)
-        self.ledger = Ledger()
-        self.ledger.on_append = self._on_ledger_append
-        self._ledger_last_save = 0.0
-        try:
-            self.ledger.save(_ledger_path())
-        except Exception:  # noqa: BLE001
-            pass
+        with self._ledger_save_lock:  # a trailing write must not save the old chain over this
+            self.ledger = Ledger()
+            self.ledger.on_append = self._on_ledger_append
+            self.flush_ledger()
+            self._ledger_last_save = 0.0  # the first new block is written straight away
         self.llm = _make_llm(self.llm_config)
 
     @property
@@ -731,10 +750,7 @@ async def _lifespan(_app):
     STATE.mcp.close_all()
     STATE.local_model.stop()
     METRICS.save()  # flush the latest counters on a clean shutdown
-    try:
-        STATE.ledger.save(_ledger_path())  # persist the full signed chain
-    except Exception:  # noqa: BLE001
-        pass
+    STATE.flush_ledger()  # persist the full signed chain; cancels a pending trailing write
 
 
 app = FastAPI(title="Glaux Swarm API", version="0.2.0", lifespan=_lifespan)
