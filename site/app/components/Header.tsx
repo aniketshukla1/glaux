@@ -2,7 +2,7 @@ import Link from "next/link";
 import { Github } from "lucide-react";
 import { Logo } from "./Logo";
 
-const REPO = "https://github.com/glauxlabs/glaux";
+const REPO = "https://github.com/aniketshukla1/glaux";
 
 export function Header() {
   return (

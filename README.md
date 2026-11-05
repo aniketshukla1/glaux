@@ -5,14 +5,14 @@
 Every reasoning step, tool call, and self-modification is signed onto a tamper-evident,
 hash-chained ledger — so you can *verify* what your agents did, not just read a trace.
 
-[![CI](https://github.com/glauxlabs/glaux/actions/workflows/ci.yml/badge.svg)](https://github.com/glauxlabs/glaux/actions/workflows/ci.yml)
+[![CI](https://github.com/aniketshukla1/glaux/actions/workflows/ci.yml/badge.svg)](https://github.com/aniketshukla1/glaux/actions/workflows/ci.yml)
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue)
 ![Tests](https://img.shields.io/badge/tests-464%20passing-brightgreen)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
 
 `multi-agent swarm` · `signed ledger` · `runtime tool synthesis` · `self-improving` · `WASM sandbox` · `local-first`
 
-**[glauxlabs.github.io/glaux](https://glauxlabs.github.io/glaux/)** · [Documentation](https://glauxlabs.github.io/glaux/docs/)
+**[aniketshukla1.github.io/glaux](https://aniketshukla1.github.io/glaux/)** · [Documentation](https://aniketshukla1.github.io/glaux/docs/)
 
 <img src="docs/images/demo.gif" alt="Glaux running a task, then catching a forged block in the signed ledger" width="760" />
 
@@ -29,8 +29,8 @@ sandbox-tests it, and uses it in the same run. It runs fully **local-first** on 
 or against 30+ hosted providers.
 
 ```bash
-git clone https://github.com/glauxlabs/athenadb        # the vector store, cloned alongside
-git clone https://github.com/glauxlabs/glaux && cd glaux
+git clone https://github.com/aniketshukla1/athenadb        # the vector store, cloned alongside
+git clone https://github.com/aniketshukla1/glaux && cd glaux
 ./install.sh                 # venv + native kernels + dashboard
 ./venv/bin/glaux up         # → http://127.0.0.1:8000
 ```
@@ -134,13 +134,13 @@ tool servers, browser and computer control, and a desktop app and messaging gate
 
 ## Documentation
 
-[Getting started](https://glauxlabs.github.io/glaux/docs/getting-started/) ·
-[Architecture](https://glauxlabs.github.io/glaux/docs/architecture/) ·
-[Self-evolving harness](https://glauxlabs.github.io/glaux/docs/self-evolution/) ·
-[CLI](https://glauxlabs.github.io/glaux/docs/cli/) ·
-[HTTP API](https://glauxlabs.github.io/glaux/docs/api/) ·
-[Configuration](https://glauxlabs.github.io/glaux/docs/configuration/) ·
-[Security model](https://glauxlabs.github.io/glaux/docs/security/)
+[Getting started](https://aniketshukla1.github.io/glaux/docs/getting-started/) ·
+[Architecture](https://aniketshukla1.github.io/glaux/docs/architecture/) ·
+[Self-evolving harness](https://aniketshukla1.github.io/glaux/docs/self-evolution/) ·
+[CLI](https://aniketshukla1.github.io/glaux/docs/cli/) ·
+[HTTP API](https://aniketshukla1.github.io/glaux/docs/api/) ·
+[Configuration](https://aniketshukla1.github.io/glaux/docs/configuration/) ·
+[Security model](https://aniketshukla1.github.io/glaux/docs/security/)
 
 ## Development
 
@@ -151,7 +151,7 @@ scripts/clean_install_test.sh         # install on a pristine container, end to 
 ```
 
 **Requires** Python 3.10+, a Rust toolchain (the ledger kernel and vector store are native
-crates), and [AthenaDB](https://github.com/glauxlabs/athenadb) cloned as a sibling
+crates), and [AthenaDB](https://github.com/aniketshukla1/athenadb) cloned as a sibling
 directory — the memory layers and skill library are built on it. **Node.js 18+** is needed
 only for the dashboard; Ubuntu's default `nodejs` package is older than that, and the API
 and CLI work fine without it.

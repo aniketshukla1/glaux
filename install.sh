@@ -29,7 +29,7 @@ AthenaDB is required, and was not found next to this repo.
 Glaux's memory layers and skill library are built on it. Clone it beside this
 repo and run this script again:
 
-  git clone https://github.com/glauxlabs/athenadb $PARENT/athenadb
+  git clone https://github.com/aniketshukla1/athenadb $PARENT/athenadb
   ./install.sh
 
 MSG

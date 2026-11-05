@@ -14,7 +14,7 @@ import { SwarmField } from "./components/SwarmField";
 import { Logo } from "./components/Logo";
 import { asset } from "./config";
 
-const REPO = "https://github.com/glauxlabs/glaux";
+const REPO = "https://github.com/aniketshukla1/glaux";
 
 const features = [
   {
@@ -155,7 +155,7 @@ export default function Home() {
         <pre className="glass mt-7 overflow-x-auto rounded-xl p-5 text-[13.5px] leading-relaxed">
           <code>
             <span className="text-faint"># clone, build the native ledger kernel + dashboard</span>
-            {"\n"}git clone https://github.com/glauxlabs/glaux && <span className="text-accent">cd</span> glaux
+            {"\n"}git clone https://github.com/aniketshukla1/glaux && <span className="text-accent">cd</span> glaux
             {"\n"}./install.sh
             {"\n\n"}
             <span className="text-faint"># start the swarm → http://127.0.0.1:8000</span>

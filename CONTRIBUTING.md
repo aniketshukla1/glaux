@@ -5,13 +5,13 @@ Thanks for your interest — issues and pull requests are both welcome.
 ## Getting set up
 
 ```bash
-git clone https://github.com/glauxlabs/glaux && cd glaux
+git clone https://github.com/aniketshukla1/glaux && cd glaux
 ./install.sh                       # venv, native ledger kernel, dashboard
 venv/bin/python -m pytest -q       # should be all green
 ```
 
 You need Python 3.10+, a Rust toolchain (the ledger kernel is a native crate), and
-Node.js for the dashboard. [AthenaDB](https://github.com/glauxlabs/athenadb) is
+Node.js for the dashboard. [AthenaDB](https://github.com/aniketshukla1/athenadb) is
 optional — clone it as a sibling directory to enable the memory layers.
 
 ## Ground rules

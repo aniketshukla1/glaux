@@ -56,4 +56,4 @@ The initial open-source release. Glaux was developed as Athena: the `athena` com
 ### Interfaces
 - Web dashboard, a full-parity `glaux` CLI, a desktop app, and messaging gateways.
 
-[1.0.0]: https://github.com/glauxlabs/glaux/releases/tag/v1.0.0
+[1.0.0]: https://github.com/aniketshukla1/glaux/releases/tag/v1.0.0

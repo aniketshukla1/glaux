@@ -28,7 +28,7 @@ someone is representing the project publicly.
 ## Reporting
 
 Report unacceptable behaviour privately to the maintainers via
-[GitHub's private reporting](https://github.com/glauxlabs/glaux/security/advisories/new)
+[GitHub's private reporting](https://github.com/aniketshukla1/glaux/security/advisories/new)
 or by contacting the repository owner directly through their GitHub profile. Reports
 are handled confidentially.
 

@@ -41,7 +41,7 @@ jobs:
         env:
           # GitHub Pages serves a project site under /<repo>; a custom domain does not.
           NEXT_PUBLIC_BASE_PATH: /glaux
-          NEXT_PUBLIC_SITE_URL: https://glauxlabs.github.io/glaux
+          NEXT_PUBLIC_SITE_URL: https://aniketshukla1.github.io/glaux
         run: |
           npm ci
           npm run build
