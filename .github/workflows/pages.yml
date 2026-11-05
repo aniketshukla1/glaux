@@ -3,6 +3,7 @@ name: Deploy site
 on:
   push:
     branches: [main, master]
+    # A repo's first push doesn't start this workflow; a later push under these paths does.
     paths: ["site/**", "docs/**", "scripts/build_site_docs.py", ".github/workflows/pages.yml"]
   workflow_dispatch:
 
