@@ -39,6 +39,13 @@ jobs:
           maturin build --release --out dist
           pip install dist/*.whl
 
+      - name: Build AthenaDB (the vector store, a separate repo)
+        run: |
+          git clone --depth 1 https://github.com/aniketshukla1/athenadb "$RUNNER_TEMP/athenadb"
+          cd "$RUNNER_TEMP/athenadb"
+          maturin build --release --out dist
+          pip install dist/*.whl
+
       - name: Run the test suite
         env:
           GLAUX_HOME: ${{ runner.temp }}/glaux-home
