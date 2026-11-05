@@ -236,8 +236,8 @@ export default function Home() {
             </h2>
             <p className="mt-4 text-muted">
               The harness learns from task outcomes: better routing, per-specialist budgets, prompt
-              lessons, distilled playbooks, and promoting proven tools. Above, it has lifted its own
-              routing accuracy to 95% over 71 episodes.
+              lessons, distilled playbooks, and promoting proven tools. In the demo run shown here,
+              it lifted its own routing accuracy from 31% to 51% over 61 episodes.
             </p>
             <ul className="mt-5 space-y-2.5 text-sm text-muted">
               {[
@@ -261,9 +261,9 @@ export default function Home() {
           <div className="overflow-hidden rounded-2xl border border-line/12 shadow-xl shadow-black/30">
             <Image
               src={asset("/images/evolution.png")}
-              alt="The self-evolving harness"
-              width={2400}
-              height={2000}
+              alt="The self-improvement tab: routing accuracy, learned budgets, and a signed evolution log"
+              width={2560}
+              height={1970}
               className="w-full"
             />
           </div>

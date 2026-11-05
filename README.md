@@ -7,7 +7,7 @@ hash-chained ledger — so you can *verify* what your agents did, not just read 
 
 [![CI](https://github.com/aniketshukla1/glaux/actions/workflows/ci.yml/badge.svg)](https://github.com/aniketshukla1/glaux/actions/workflows/ci.yml)
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue)
-![Tests](https://img.shields.io/badge/tests-464%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-469%20passing-brightgreen)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
 
 `multi-agent swarm` · `signed ledger` · `runtime tool synthesis` · `self-improving` · `WASM sandbox` · `local-first`
@@ -36,7 +36,9 @@ git clone https://github.com/aniketshukla1/glaux && cd glaux
 ```
 
 <div align="center">
-<img src="docs/images/console.png" alt="The Glaux swarm console" width="860" />
+<img src="docs/images/console.png" alt="The Glaux console: describe a goal, and a swarm of agents plans it, does it, and signs every step" width="860" />
+<br />
+<sub>Screenshots are from the built-in demo mode: no model connected, answers simulated, signatures real.</sub>
 </div>
 
 ---
@@ -55,6 +57,12 @@ git clone https://github.com/aniketshukla1/glaux && cd glaux
 
 Every action is Ed25519-signed by the agent that took it and appended to a hash-chained
 ledger. Tracing tells you what a system *claims* it did; a signed chain lets you prove it.
+The console's **Proof** page shows the chain: every block, who signed it, and the command
+to check it offline.
+
+<div align="center">
+<img src="docs/images/proof.png" alt="The Proof page: chain verified, every block with its signer and hash, and the command to check it offline" width="860" />
+</div>
 
 **Don't take our word for it — break it yourself.** Re-attribute one action to a different
 agent and the chain names the exact block you touched:
@@ -96,7 +104,7 @@ replay accuracy over recorded episodes, **signed** to the ledger as `EVOLVE_HARN
 ship.
 
 <div align="center">
-<img src="docs/images/evolution.png" alt="The self-evolving harness: routing accuracy, promoted tools, and a signed evolution log" width="760" />
+<img src="docs/images/evolution.png" alt="The self-improvement tab: routing accuracy, learned budgets, and a signed evolution log" width="860" />
 </div>
 
 ### 4. It doesn't pay the full stack tax on every question
@@ -146,7 +154,7 @@ tool servers, browser and computer control, and a desktop app and messaging gate
 
 ```bash
 ./install.sh
-venv/bin/python -m pytest -q          # 464 tests
+venv/bin/python -m pytest -q          # 469 tests
 scripts/clean_install_test.sh         # install on a pristine container, end to end
 ```
 
