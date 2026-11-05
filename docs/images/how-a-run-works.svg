@@ -1,0 +1,118 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 460" width="960" height="460" role="img" aria-labelledby="t d" font-family="-apple-system,'Segoe UI',Helvetica,Arial,sans-serif">
+  <title id="t">How a Glaux run works</title>
+  <desc id="d">A goal goes to a router, which plans a team of specialists. They work in parallel across a dependency graph, writing and sandbox-testing new tools when none fit. A reflector verifies the result and a lead synthesizes the answer. Every step is signed by the agent that took it and chained onto a tamper-evident ledger.</desc>
+  <style>
+    .box { fill: #111620; stroke: #252d3d; }
+    .title { fill: #e2e8f0; font-size: 15px; font-weight: 600; }
+    .sub { fill: #94a3b8; font-size: 12.5px; }
+    .label { fill: #64748b; font-size: 11.5px; letter-spacing: .06em; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .flow { fill: none; stroke: #2dd4bf; stroke-width: 1.6; opacity: .5; }
+    .sign { fill: none; stroke: #818cf8; stroke-width: 1.2; stroke-dasharray: 2 5; opacity: .6; }
+    .block { fill: #161b31; stroke: #818cf8; stroke-opacity: .55; }
+    .blocktext { fill: #c7d2fe; font-size: 11.5px; }
+    .link { stroke: #818cf8; stroke-width: 1.6; opacity: .55; }
+    @media (prefers-reduced-motion: reduce) { .dot { display: none; } }
+  </style>
+  <defs>
+    <filter id="glow" x="-200%" y="-200%" width="500%" height="500%"><feGaussianBlur stdDeviation="3.5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+  </defs>
+
+  <rect width="960" height="460" rx="16" fill="#0b0e14" stroke="#1c2230"/>
+
+  <!-- flows sit under the boxes, so moving dots pass behind the text -->
+  <path class="flow" d="M132 108 L168 108"/>
+  <path class="flow" d="M298 108 C 322 108, 322 66, 346 66"/>
+  <path class="flow" d="M298 108 L346 108"/>
+  <path class="flow" d="M298 108 C 322 108, 322 150, 346 150"/>
+  <path class="flow" d="M520 66 C 552 66, 552 108, 584 108"/>
+  <path class="flow" d="M520 108 L584 108"/>
+  <path class="flow" d="M520 150 C 552 150, 552 108, 584 108"/>
+  <path class="flow" d="M714 108 L752 108"/>
+  <path class="flow" d="M433 176 L433 204" stroke-dasharray="3 4"/>
+
+  <path class="sign" d="M233 150 L233 318"/>
+  <path class="sign" d="M433 262 L433 318"/>
+  <path class="sign" d="M649 150 L649 318"/>
+  <path class="sign" d="M836 150 L836 318"/>
+
+  <g class="dot" filter="url(#glow)">
+    <circle r="4.5" fill="#2dd4bf" opacity="0">
+      <animate attributeName="opacity" values="0;1;1;0;0" keyTimes="0;.02;.44;.46;1" dur="10s" repeatCount="indefinite"/>
+      <animateMotion path="M60 108 L233 108 C 322 108, 322 66, 433 66 C 552 66, 552 108, 649 108 L900 108" keyPoints="0;1;1" keyTimes="0;.46;1" calcMode="linear" dur="10s" repeatCount="indefinite"/>
+    </circle>
+    <circle r="4.5" fill="#2dd4bf" opacity="0">
+      <animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0;.12;.14;.28;.3;1" dur="10s" repeatCount="indefinite"/>
+      <animateMotion path="M233 108 L433 108 L649 108" keyPoints="0;0;1;1" keyTimes="0;.12;.3;1" calcMode="linear" dur="10s" repeatCount="indefinite"/>
+    </circle>
+    <circle r="4.5" fill="#2dd4bf" opacity="0">
+      <animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0;.12;.14;.28;.3;1" dur="10s" repeatCount="indefinite"/>
+      <animateMotion path="M233 108 C 322 108, 322 150, 433 150 C 552 150, 552 108, 649 108" keyPoints="0;0;1;1" keyTimes="0;.12;.3;1" calcMode="linear" dur="10s" repeatCount="indefinite"/>
+    </circle>
+  </g>
+
+  <!-- the run -->
+  <text class="label" x="28" y="44">GOAL</text>
+  <rect class="box" x="28" y="66" width="104" height="84" rx="11"/>
+  <text class="title" x="44" y="102">Your goal</text>
+  <text class="sub" x="44" y="124">in plain words</text>
+
+  <text class="label" x="168" y="44">ROUTER</text>
+  <rect class="box" x="168" y="66" width="130" height="84" rx="11"/>
+  <text class="title" x="184" y="102">Plans a team</text>
+  <text class="sub" x="184" y="124">as a signed graph</text>
+
+  <text class="label" x="346" y="28">SPECIALISTS, IN PARALLEL</text>
+  <rect class="box" x="346" y="40" width="174" height="38" rx="9"/>
+  <text class="title" x="362" y="64" style="font-size:14px">Researcher</text>
+  <rect class="box" x="346" y="89" width="174" height="38" rx="9"/>
+  <text class="title" x="362" y="113" style="font-size:14px">Coder</text>
+  <rect class="box" x="346" y="138" width="174" height="38" rx="9"/>
+  <text class="title" x="362" y="162" style="font-size:14px">Tester</text>
+
+  <text class="label" x="584" y="44">REFLECTOR</text>
+  <rect class="box" x="584" y="66" width="130" height="84" rx="11"/>
+  <text class="title" x="600" y="102">Verifies</text>
+  <text class="sub" x="600" y="124">the result</text>
+
+  <text class="label" x="752" y="44">LEAD</text>
+  <rect class="box" x="752" y="66" width="180" height="84" rx="11"/>
+  <text class="title" x="768" y="102">Synthesizes</text>
+  <text class="sub" x="768" y="124">the answer</text>
+
+  <!-- tool synthesis -->
+  <rect x="306" y="204" width="254" height="58" rx="11" fill="#0f1c1d" stroke="#2dd4bf" stroke-opacity=".4"/>
+  <text class="title" x="322" y="228" style="font-size:14px">No tool fits? It writes one,</text>
+  <text class="sub" x="322" y="248">tests it in the sandbox, uses it in the run.</text>
+
+  <!-- the chain -->
+  <text class="label" x="28" y="306">SIGNED LEDGER</text>
+  <g class="link">
+    <line x1="134" y1="340" x2="146" y2="340"/><line x1="252" y1="340" x2="264" y2="340"/>
+    <line x1="370" y1="340" x2="382" y2="340"/><line x1="488" y1="340" x2="500" y2="340"/>
+    <line x1="606" y1="340" x2="618" y2="340"/><line x1="724" y1="340" x2="736" y2="340"/>
+  </g>
+  <g>
+    <rect class="block" x="28" y="318" width="106" height="44" rx="8"/><text class="blocktext" x="81" y="345" text-anchor="middle">Plan</text>
+    <rect class="block" x="146" y="318" width="106" height="44" rx="8"/><text class="blocktext" x="199" y="345" text-anchor="middle">Grant</text>
+    <rect class="block" x="264" y="318" width="106" height="44" rx="8"/><text class="blocktext" x="317" y="345" text-anchor="middle">Thought</text>
+    <rect class="block" x="382" y="318" width="106" height="44" rx="8"/><text class="blocktext" x="435" y="345" text-anchor="middle">Observation</text>
+    <rect class="block" x="500" y="318" width="106" height="44" rx="8"/><text class="blocktext" x="553" y="345" text-anchor="middle">Hand-off</text>
+    <rect class="block" x="618" y="318" width="106" height="44" rx="8"/><text class="blocktext" x="671" y="345" text-anchor="middle">Review</text>
+    <rect class="block" x="736" y="318" width="196" height="44" rx="8"/><text class="blocktext" x="834" y="345" text-anchor="middle">Observation</text>
+  </g>
+  <!-- each block lights up as its step completes -->
+  <g fill="#818cf8" class="dot">
+    <rect x="28" y="318" width="106" height="44" rx="8" opacity="0"><animate attributeName="opacity" values="0;0;.42;0;0" keyTimes="0;.1;.13;.3;1" dur="10s" repeatCount="indefinite"/></rect>
+    <rect x="146" y="318" width="106" height="44" rx="8" opacity="0"><animate attributeName="opacity" values="0;0;.42;0;0" keyTimes="0;.15;.18;.35;1" dur="10s" repeatCount="indefinite"/></rect>
+    <rect x="264" y="318" width="106" height="44" rx="8" opacity="0"><animate attributeName="opacity" values="0;0;.42;0;0" keyTimes="0;.2;.23;.4;1" dur="10s" repeatCount="indefinite"/></rect>
+    <rect x="382" y="318" width="106" height="44" rx="8" opacity="0"><animate attributeName="opacity" values="0;0;.42;0;0" keyTimes="0;.25;.28;.45;1" dur="10s" repeatCount="indefinite"/></rect>
+    <rect x="500" y="318" width="106" height="44" rx="8" opacity="0"><animate attributeName="opacity" values="0;0;.42;0;0" keyTimes="0;.3;.33;.5;1" dur="10s" repeatCount="indefinite"/></rect>
+    <rect x="618" y="318" width="106" height="44" rx="8" opacity="0"><animate attributeName="opacity" values="0;0;.42;0;0" keyTimes="0;.35;.38;.55;1" dur="10s" repeatCount="indefinite"/></rect>
+    <rect x="736" y="318" width="196" height="44" rx="8" opacity="0"><animate attributeName="opacity" values="0;0;.42;0;0" keyTimes="0;.42;.45;.62;1" dur="10s" repeatCount="indefinite"/></rect>
+  </g>
+
+  <line x1="1" x2="959" y1="388" y2="388" stroke="#1c2230"/>
+  <text class="sub" x="28" y="416">Every step is signed with Ed25519 by the agent that took it, and hashes the block before it. Change one byte</text>
+  <text class="sub" x="28" y="436">and verification fails at that exact block. Check it offline, with no server: <tspan class="mono" fill="#e2e8f0">glaux verify --file ledger.jsonl</tspan></text>
+</svg>

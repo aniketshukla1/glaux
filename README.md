@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="docs/images/banner.png" alt="Glaux — a multi-agent swarm that proves its work" width="100%" />
+<img src="docs/images/hero.webp" alt="Glaux: a swarm of particles collapses from a galaxy into a glowing owl constellation, the logo of a multi-agent swarm that proves its work" width="100%" />
 
 Every reasoning step, tool call, and self-modification is signed onto a tamper-evident,
 hash-chained ledger — so you can *verify* what your agents did, not just read a trace.
@@ -13,8 +13,6 @@ hash-chained ledger — so you can *verify* what your agents did, not just read 
 `multi-agent swarm` · `signed ledger` · `runtime tool synthesis` · `self-improving` · `WASM sandbox` · `local-first`
 
 **[aniketshukla1.github.io/glaux](https://aniketshukla1.github.io/glaux/)** · [Documentation](https://aniketshukla1.github.io/glaux/docs/)
-
-<img src="docs/images/demo.gif" alt="Glaux running a task, then catching a forged block in the signed ledger" width="760" />
 
 </div>
 
@@ -39,6 +37,14 @@ git clone https://github.com/aniketshukla1/glaux && cd glaux
 <img src="docs/images/console.png" alt="The Glaux console: describe a goal, and a swarm of agents plans it, does it, and signs every step" width="860" />
 <br />
 <sub>Screenshots are from the built-in demo mode: no model connected, answers simulated, signatures real.</sub>
+</div>
+
+---
+
+## How a run works
+
+<div align="center">
+<img src="docs/images/how-a-run-works.svg" alt="A goal goes to a router, which plans a team of specialists working in parallel. They write and sandbox-test new tools when none fit. A reflector verifies the result and a lead synthesizes the answer. Every step is signed and chained onto a ledger." width="100%" />
 </div>
 
 ---
@@ -78,6 +84,10 @@ glaux verify --file ~/.glaux/ledger.jsonl
 #  ✗ CHAIN INVALID at block 1 — block hash mismatch
 ```
 
+<div align="center">
+<img src="docs/images/demo.gif" alt="Glaux running a task, then catching a forged block in the signed ledger" width="760" />
+</div>
+
 `verify --file` reads the chain straight off disk — no running server, and no trust in the
 app that wrote it. It exits `0`/`1`, so it drops into CI. Re-signing the forged block
 doesn't help: signatures are checked against the acting agent's key, and every later block
@@ -105,6 +115,8 @@ ship.
 
 <div align="center">
 <img src="docs/images/evolution.png" alt="The self-improvement tab: routing accuracy, learned budgets, and a signed evolution log" width="860" />
+<br />
+<sub>Insights → Self-improvement after 61 tasks on the demo model: routing accuracy up from 31% to 51%, with each change signed.</sub>
 </div>
 
 ### 4. It doesn't pay the full stack tax on every question
@@ -119,6 +131,21 @@ prior answer with zero LLM calls.
 Synthesized code runs in a WebAssembly guest with **no ambient authority** — it cannot
 syscall by default. File access is a separate, opt-in **jailed workspace** with per-file and
 total size caps. Glaux enforces this itself rather than delegating it to you.
+
+---
+
+## The console
+
+<table>
+<tr>
+<td width="50%" valign="top"><img src="docs/images/run.png" alt="A finished run: the answer, a structured canvas, the agents involved and the number of signed blocks" /><br /><strong>Every answer shows its proof.</strong> Who worked on it, and how many steps were signed.</td>
+<td width="50%" valign="top"><img src="docs/images/library.png" alt="The Library: synthesized skills, each marked quarantined until proven, with tabs for tools, memory, playbooks and more" /><br /><strong>Everything it can draw on.</strong> New skills start quarantined and earn promotion.</td>
+</tr>
+<tr>
+<td valign="top"><img src="docs/images/insights.png" alt="Insights: tasks dispatched, outcomes, model calls, tokens and estimated spend" /><br /><strong>What it costs.</strong> Tasks, model calls, tokens and spend, plus Prometheus metrics.</td>
+<td valign="top"><img src="docs/images/palette.png" alt="The command palette over a conversation, listing actions and pages" /><br /><strong>Keyboard first.</strong> <kbd>⌘K</kbd> reaches every action and page.</td>
+</tr>
+</table>
 
 ---
 
