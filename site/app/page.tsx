@@ -11,7 +11,7 @@ import {
   Check,
 } from "lucide-react";
 import { SwarmField } from "./components/SwarmField";
-import { Logo } from "./components/Logo";
+import { SwarmLogo } from "./components/SwarmLogo";
 import { asset } from "./config";
 
 const REPO = "https://github.com/aniketshukla1/glaux";
@@ -66,14 +66,39 @@ const docLinks = [
   ["Security model", "Sandbox, jail, ledger, trade-offs", "/docs/security"],
 ];
 
+const consoleShots = [
+  {
+    src: "/images/proof.png",
+    alt: "The Proof page: chain verified, every block with its signer and hash, and the command to check it offline",
+    title: "Proof.",
+    body: "The whole chain: every block, who signed it, and how to verify it yourself.",
+    wide: true,
+  },
+  {
+    src: "/images/run.png",
+    alt: "A finished run: the answer, a structured canvas, the agents involved and the number of signed blocks",
+    title: "Runs.",
+    body: "The answer, the agents behind it, and the signed steps it took.",
+    wide: false,
+  },
+  {
+    src: "/images/library.png",
+    alt: "The Library: synthesized skills, each marked quarantined until proven, with tabs for tools, memory and playbooks",
+    title: "Library.",
+    body: "Everything the swarm can draw on. New skills start quarantined.",
+    wide: false,
+  },
+];
+
 export default function Home() {
   return (
     <main>
       {/* Hero */}
-      <section className="relative flex min-h-[86vh] flex-col items-center justify-center overflow-hidden px-6 py-24 text-center">
+      <section className="relative overflow-hidden">
         <SwarmField className="absolute inset-0 h-full w-full" />
-        <div className="relative z-10 max-w-3xl animate-fade-up">
-          <div className="mb-7 flex justify-center">
+        <div className="relative mx-auto grid min-h-[86vh] max-w-content items-center gap-6 px-6 py-14 lg:grid-cols-[1.08fr_1fr] lg:gap-10">
+        <div className="order-2 animate-fade-up text-center lg:order-1 lg:text-left">
+          <div className="mb-7 flex justify-center lg:justify-start">
             <a
               href={REPO}
               className="inline-flex items-center gap-2 rounded-full border border-line/15 bg-surface/60 px-3.5 py-1.5 text-[13px] text-muted backdrop-blur transition hover:border-accent/40 hover:text-fg"
@@ -86,20 +111,17 @@ export default function Home() {
               <ArrowRight className="h-3.5 w-3.5" />
             </a>
           </div>
-          <div className="mx-auto mb-6 w-fit drop-shadow-[0_0_20px_rgb(var(--accent)/0.45)]">
-            <Logo size={72} />
-          </div>
-          <h1 className="text-[clamp(30px,7vw,62px)] font-semibold leading-[1.07] tracking-tight">
+          <h1 className="text-[clamp(30px,7vw,62px)] font-semibold leading-[1.07] tracking-tight lg:text-[clamp(40px,4.1vw,56px)]">
             A multi-agent swarm
             <br />
             that <span className="gradient-text">proves its work</span>
           </h1>
-          <p className="mx-auto mt-6 max-w-xl text-lg text-muted">
+          <p className="mx-auto mt-6 max-w-xl text-lg text-muted lg:mx-0">
             Glaux turns a goal into a team of agents that plan, execute in parallel, and verify each
             other — then signs every step onto a tamper-evident ledger. It writes its own tools when
             none exist, and improves itself without being able to get worse.
           </p>
-          <div className="mt-9 flex flex-wrap justify-center gap-3">
+          <div className="mt-9 flex flex-wrap justify-center gap-3 lg:justify-start">
             <a
               href={REPO}
               className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-accent to-accent2 px-5 py-3 text-sm font-medium text-[#04121a] transition hover:brightness-110"
@@ -113,7 +135,7 @@ export default function Home() {
               What makes it different
             </Link>
           </div>
-          <div className="mt-8 flex flex-wrap justify-center gap-2">
+          <div className="mt-8 flex flex-wrap justify-center gap-2 lg:justify-start">
             {["Proves every step", "Writes its own tools", "Can’t get worse", "WASM-sandboxed", "Runs offline"].map(
               (t) => (
                 <span
@@ -125,6 +147,10 @@ export default function Home() {
               ),
             )}
           </div>
+        </div>
+        <div className="order-1 mx-auto aspect-square w-full max-w-[320px] sm:max-w-[440px] lg:order-2 lg:max-w-none">
+          <SwarmLogo />
+        </div>
         </div>
       </section>
 
@@ -221,6 +247,33 @@ export default function Home() {
               </tbody>
             </table>
           </div>
+        </div>
+      </section>
+
+      {/* Console */}
+      <section className="border-t border-line/10">
+        <div className="mx-auto max-w-content px-6 py-24">
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">The console</p>
+          <h2 className="mt-3 text-[clamp(26px,3.6vw,34px)] font-semibold tracking-tight">Built around the proof</h2>
+          <p className="mt-4 max-w-2xl text-muted">
+            Every answer shows who worked on it and how many steps were signed. One click takes you
+            to the chain itself, with the command to check it offline, without trusting this app.
+          </p>
+          <div className="mt-10 grid gap-5 md:grid-cols-2">
+            {consoleShots.map(({ src, alt, title, body, wide }) => (
+              <figure key={src} className={wide ? "md:col-span-2" : ""}>
+                <div className="overflow-hidden rounded-2xl border border-line/12 shadow-xl shadow-black/30">
+                  <Image src={asset(src)} alt={alt} width={2560} height={1600} className="w-full" />
+                </div>
+                <figcaption className="mt-3 text-sm text-muted">
+                  <span className="font-medium text-fg">{title}</span> {body}
+                </figcaption>
+              </figure>
+            ))}
+          </div>
+          <p className="mt-6 text-xs text-faint">
+            Screenshots from the built-in demo mode: no model connected, answers simulated, signatures real.
+          </p>
         </div>
       </section>
 
