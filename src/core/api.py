@@ -29,6 +29,7 @@ from typing import Optional
 
 import urllib.parse
 
+import athenadb
 from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, PlainTextResponse, RedirectResponse, StreamingResponse
@@ -428,6 +429,8 @@ class _State:
         try:
             os.makedirs(self.memory_dir, exist_ok=True)
             self.memory = MemoryManager(self.memory_dir)
+        except athenadb.StoreLockedError:
+            raise  # Something else is writing it. A temp store would quietly lose what's learned.
         except Exception:  # noqa: BLE001 - corrupt store → fall back to a fresh one
             self.memory_dir = tempfile.mkdtemp(prefix="glaux-mem-")
             self.memory = MemoryManager(self.memory_dir)

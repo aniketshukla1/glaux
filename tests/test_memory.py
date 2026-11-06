@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import pytest
 
-pytest.importorskip("athenadb")
+athenadb = pytest.importorskip("athenadb")
 
 from memory import (  # noqa: E402
     HashingEmbedder,
@@ -187,3 +187,17 @@ def test_procedural_favors_higher_success_rate(tmp_path):
     )
     hits = mm.procedural.search("sort ascending", k=2)
     assert hits[0].id == "good"
+
+
+# --- one writer at a time ------------------------------------------------
+
+
+def test_a_locked_memory_store_stops_startup(tmp_path, monkeypatch):
+    """Falling back to a temp store here would quietly lose everything learned."""
+    from core.api import _State
+
+    monkeypatch.setenv("GLAUX_HOME", str(tmp_path))
+    _holder = MemoryManager(tmp_path / "memory")
+
+    with pytest.raises(athenadb.StoreLockedError):
+        _State()
