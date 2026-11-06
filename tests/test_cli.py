@@ -3,6 +3,10 @@
 from __future__ import annotations
 
 import os
+import signal
+import socket
+import sys
+import time
 
 import pytest
 
@@ -385,3 +389,82 @@ def test_verify_reports_the_bad_block_from_the_server(monkeypatch, capsys):
     assert rc == 1
     out = capsys.readouterr().out
     assert "block 4" in out and "block hash mismatch" in out
+
+
+# --- starting the daemon --------------------------------------------------
+
+
+def _free_port() -> int:
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        return s.getsockname()[1]
+
+
+@pytest.mark.parametrize(
+    "last_words, reason",
+    [
+        ("sys.exit('SomeError: the real reason')", "SomeError: the real reason"),
+        ("print('ERROR:    no bind'); print('INFO:     shutdown complete')", "ERROR:    no bind"),
+        ("sys.exit(1)", "without saying why"),  # not the earlier run's error
+    ],
+)
+def test_up_says_at_once_why_a_dying_daemon_did_not_start(
+    monkeypatch, tmp_path, capsys, last_words, reason
+):
+    monkeypatch.setenv("GLAUX_HOME", str(tmp_path))
+    (tmp_path / "glaux.log").write_text("ERROR:    from an earlier run\n")
+    daemon = [sys.executable, "-c", f"import sys; {last_words}"]
+    monkeypatch.setattr(cli, "_uvicorn_cmd", lambda host, port: daemon)
+
+    started = time.monotonic()
+    rc = cli._start_daemon("127.0.0.1", _free_port())
+
+    assert rc == 1
+    assert time.monotonic() - started < 10  # well short of the 20 s health timeout
+    err = capsys.readouterr().err
+    assert reason in err
+    assert "earlier run" not in err
+    assert cli.read_pid() is None  # nothing left pointing at a dead process
+
+
+def test_up_refuses_a_port_already_in_use(monkeypatch, tmp_path, capsys):
+    monkeypatch.setenv("GLAUX_HOME", str(tmp_path))
+    spawned = []
+    monkeypatch.setattr(
+        cli, "_uvicorn_cmd", lambda host, port: spawned.append(port) or [sys.executable, "-c", ""]
+    )
+
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        s.listen()
+        port = s.getsockname()[1]
+        rc = cli._start_daemon("127.0.0.1", port)
+
+    assert rc == 1 and not spawned
+    assert str(port) in capsys.readouterr().err
+
+
+HEALTHY_DAEMON = """
+import http.server, sys
+class Health(http.server.BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b'{"status": "ok"}')
+http.server.HTTPServer(("127.0.0.1", int(sys.argv[1])), Health).serve_forever()
+"""
+
+
+def test_up_reports_a_healthy_daemon_and_records_its_pid(monkeypatch, tmp_path, capsys):
+    monkeypatch.setenv("GLAUX_HOME", str(tmp_path))
+    monkeypatch.setattr(
+        cli, "_uvicorn_cmd", lambda host, port: [sys.executable, "-c", HEALTHY_DAEMON, str(port)]
+    )
+
+    rc = cli._start_daemon("127.0.0.1", _free_port())
+    try:
+        assert rc == 0
+        assert cli.process_alive(cli.read_pid())
+        assert "Glaux is up" in capsys.readouterr().out
+    finally:
+        os.kill(cli.read_pid(), signal.SIGKILL)

@@ -335,9 +335,10 @@ def _env_with_src() -> dict:
     return env
 
 
-def _wait_healthy(base_url: str, timeout: float = 20.0) -> bool:
+def _wait_healthy(base_url: str, proc, timeout: float = 20.0) -> bool:
+    """Wait for the server to answer, giving up at once if its process has died."""
     deadline = time.monotonic() + timeout
-    while time.monotonic() < deadline:
+    while time.monotonic() < deadline and proc.poll() is None:
         try:
             if _get_json(f"{base_url}/api/health").get("status") == "ok":
                 return True
@@ -393,25 +394,48 @@ def _stop_daemon() -> int | None:
     return pid
 
 
+def _exit_reason(log_start: int) -> str:
+    """The line saying why the daemon died, from what this run added to the log."""
+    with open(log_file(), "rb") as f:
+        f.seek(log_start)
+        lines = f.read().decode(errors="replace").splitlines()
+    # uvicorn logs its shutdown after the error, so skip that chatter.
+    lines = [line.strip() for line in lines if line.strip() and not line.startswith(("INFO", "WARNING"))]
+    return lines[-1] if lines else "it exited without saying why"
+
+
 def _start_daemon(host: str, port: int, *, open_browser: bool = False) -> int:
     """Spawn the uvicorn daemon, record its pid, and wait until it's healthy."""
     import subprocess
 
+    # Checked first: another server here would answer the health check for this one.
+    if _port_in_use(host, port):
+        print(
+            f"Port {port} is already in use, so Glaux can't start there. "
+            "Free it, or use: glaux --port <port> up",
+            file=sys.stderr,
+        )
+        return 1
     base_url = f"http://{host}:{port}"
     home_dir().mkdir(parents=True, exist_ok=True)
     logf = open(log_file(), "a")
+    log_start = logf.tell()
     proc = subprocess.Popen(
         _uvicorn_cmd(host, port), stdout=logf, stderr=subprocess.STDOUT,
         start_new_session=True, env=_env_with_src(),
     )
     write_pid(proc.pid)
-    if _wait_healthy(base_url):
+    if _wait_healthy(base_url, proc):
         print(f"Glaux is up at {base_url}  (pid {proc.pid}, logs: {log_file()})")
         if open_browser:
             import webbrowser
 
             webbrowser.open(base_url)
         return 0
+    if proc.poll() is not None:
+        pid_file().unlink(missing_ok=True)
+        print(f"Glaux didn't start: {_exit_reason(log_start)}\nFull log: {log_file()}", file=sys.stderr)
+        return 1
     print(f"Started (pid {proc.pid}) but it didn't become healthy — check {log_file()}", file=sys.stderr)
     return 1
 
